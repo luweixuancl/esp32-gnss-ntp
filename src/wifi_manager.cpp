@@ -352,12 +352,16 @@ bool WifiManager::pollAutoReconnect(AppSettings* outSettings) {
   }
 
   const uint32_t now = millis();
-  // Runtime link loss retries forever — the NTP server must not fall into
-  // setup SoftAP just because the upstream AP vanished for a while.
+  // Retry forever while credentials exist — boot join failure and runtime
+  // link loss are the same story for an NTP server: never fall into setup
+  // SoftAP on our own. Give-up fires only with non-zero limits configured.
   const bool retryForever = reconnectLinkLoss_ && WIFI_LINK_LOSS_RETRY_FOREVER;
   if (!retryForever &&
-      (static_cast<int32_t>(now - reconnectWindowStartMs_) >= static_cast<int32_t>(WIFI_RECONNECT_GIVEUP_MS) ||
-       reconnectAttempt_ >= WIFI_RECONNECT_MAX_ATTEMPTS)) {
+      ((WIFI_RECONNECT_GIVEUP_MS != 0 &&
+        static_cast<int32_t>(now - reconnectWindowStartMs_) >=
+            static_cast<int32_t>(WIFI_RECONNECT_GIVEUP_MS)) ||
+       (WIFI_RECONNECT_MAX_ATTEMPTS != 0 &&
+        reconnectAttempt_ >= WIFI_RECONNECT_MAX_ATTEMPTS))) {
     Serial.println("[wifi] auto-reconnect give up");
     cancelAutoReconnect();
     reconnectGaveUp_ = true;

@@ -280,8 +280,10 @@ static void finishConnect(WifiConnectState st) {
     postUiText("WiFi failed");
     // Boot: do not open SoftAP on the first 201 — schedule reconnect instead.
     if (gBootNeedApIfFail && !gPendingSta.wifiSsid.isEmpty()) {
-      gWifi.armReconnect(gPendingSta, WIFI_RECONNECT_BACKOFF_1_MS);
-      Serial.println("[wifi] boot join failed → scheduled reconnect (SoftAP after give-up)");
+      // Saved credentials exist: boot failure is link loss from power-on —
+      // retry forever (30s capped backoff), never auto-SoftAP.
+      gWifi.armReconnect(gPendingSta, WIFI_RECONNECT_BACKOFF_1_MS, /*linkLoss=*/true);
+      Serial.println("[wifi] boot join failed → retrying forever (no auto-SoftAP)");
       postUiText("WiFi retry...");
     } else if (gBootNeedApIfFail) {
       openSetupApIfNeeded("AP setup mode");
@@ -581,7 +583,7 @@ static void taskNet(void* /*arg*/) {
     gBootNeedApIfFail = true;
     if (!gWifi.beginConnect(boot)) {
       // Never open SoftAP just because begin was busy — keep trying saved WiFi.
-      gWifi.armReconnect(boot, WIFI_RECONNECT_BACKOFF_1_MS);
+      gWifi.armReconnect(boot, WIFI_RECONNECT_BACKOFF_1_MS, /*linkLoss=*/true);
       gPendingSta = boot;
       postUiText("WiFi retry...");
       Serial.println("[wifi] boot beginConnect deferred → reconnect armed (keep SoftAP off)");
