@@ -81,9 +81,12 @@ class WifiManager {
   // Auto-reconnect (credentials remembered from last beginConnect).
   void setAutoReconnect(bool enabled) { autoReconnect_ = enabled; }
   bool autoReconnectEnabled() const { return autoReconnect_; }
+  bool autoReconnectArmed() const { return reconnectArmed_; }
   void cancelAutoReconnect();
   // Schedule retries with saved credentials (boot fail / link loss).
-  void armReconnect(const AppSettings& settings, uint32_t firstDelayMs = 0);
+  // linkLoss=true arms the never-give-up runtime retry (no SoftAP on give-up).
+  void armReconnect(const AppSettings& settings, uint32_t firstDelayMs = 0,
+                    bool linkLoss = false);
   // Call from task-net when Idle: may start a reconnect beginConnect.
   bool pollAutoReconnect(AppSettings* outSettings);
   // True once if STA dropped while we considered ourselves connected.
@@ -130,4 +133,5 @@ class WifiManager {
   uint32_t reconnectWindowStartMs_ = 0;
   bool reconnectArmed_ = false;
   bool reconnectGaveUp_ = false;
+  bool reconnectLinkLoss_ = false;  // runtime link loss → retry forever (no SoftAP)
 };

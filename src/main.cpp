@@ -419,6 +419,21 @@ static void pollDisconnectAndReconnect() {
     return;
   }
 
+  // Safety net: encoder-scan abortJoin() (or any other cancel path) can
+  // silently drop the armed schedule while STA is down. With link-loss
+  // retry-forever there is no SoftAP fallback, so re-arm from saved creds.
+  if (!gWifi.isStaConnected() && !gIpc.setupAp && !gWifi.autoReconnectArmed() &&
+      !gWifi.isBusy()) {
+    if (settingsLock(pdMS_TO_TICKS(50))) {
+      AppSettings snap = gSettings;
+      settingsUnlock();
+      if (snap.autoReconnect && !snap.wifiSsid.isEmpty()) {
+        gWifi.armReconnect(snap, WIFI_RECONNECT_BACKOFF_1_MS, /*linkLoss=*/true);
+        Serial.println("[wifi] link-loss retry re-armed");
+      }
+    }
+  }
+
   AppSettings recon;
   if (gWifi.pollAutoReconnect(&recon)) {
     gPendingSta = recon;

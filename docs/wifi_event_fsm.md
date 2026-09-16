@@ -37,20 +37,26 @@ Connected ──DISC──► Idle（武装 Reconnect）
 ## 自动重连（NVS `arec`，默认开）
 
 ```
-Connected --DISC--> armed
+Connected --DISC--> armed（链接丢失，linkLoss）
   attempt 1: 立即 beginConnect（同一凭据）
-  attempt 2..N: 退避 2s / 5s / 10s / 30s，之后稳定 60s 一轮，无限重试
-  无放弃阈值：信号消失只周期性搜寻重连，绝不自动开 SoftAP
+  attempt 2..N: 退避 2s / 5s / 10s / 30s（上限 30s）
+  linkLoss 模式（WIFI_LINK_LOSS_RETRY_FOREVER=1，默认）→ **永久重试，绝不切 SoftAP**；
+    每 20 次尝试打一条 `[wifi] still retrying (N min)`（30s/次 ≈ 10min 一条）
+Boot 首次入网失败 → armed（非 linkLoss）：
+  连续失败 ≥5 或累计 >2min → SoftAP 逃生（`NTP-Setup-XXXX`，行为不变）
 ```
+
+- 链接丢失判定：`consumeDisconnect()` 仅在 FSM 处于 `Connected` 后收到 DISC 才视为运行中掉线（`reconnectLinkLoss_=true`）；Boot 失败走 `armReconnect(..., linkLoss=false)` 保留 SoftAP 逃生。
+- 安全网：编码器扫描 `abortJoin()` 等路径会静默 `cancelAutoReconnect()`。`task-net` 在 Idle + 无 STA + 非 SoftAP + `arec` 开 + 有保存 SSID 且未武装时，自动以 linkLoss 模式重新 `armReconnect`（main.cpp `pollDisconnectAndReconnect`），保证永久重试不会因取消路径而变砖。
 
 手动 Connect 会 `cancelAutoReconnect()`；Scan 不取消（扫描与 STA 重连可并行）。
 
-常量见 `config.h`：`WIFI_RECONNECT_*`。
+常量见 `config.h`：`WIFI_RECONNECT_*`、`WIFI_LINK_LOSS_RETRY_FOREVER`（置 0 恢复旧的放弃行为）、`WIFI_LINK_LOSS_LOG_EVERY`。
 
 ## 扫描
 
 - `startScan` 异步 `scanNetworks`；完成以 `SCAN_DONE` 为主，`scanComplete` 为双保险。
-- SoftAP 配网是纯 `WIFI_AP`，**没有 STA 接口时 `scanNetworks` 会失败或 0 个 AP**。编码器/网页扫描前若当前是 `WIFI_AP`/`OFF`，先切到 `WIFI_AP_STA`（或 `STA`）再扫。
+- SoftAP 逃生是纯 `WIFI_AP`，**没有 STA 接口时 `scanNetworks` 会失败或 0 个 AP**。编码器/网页扫描前若当前是 `WIFI_AP`/`OFF`，先切到 `WIFI_AP_STA`（或 `STA`）再扫。
 - 编码器扫网：STA 正在 `Connecting` 时**不** `abortJoin`（会立刻 OLED「失败」，随后才出现 `SCAN_DONE`）。保持 Scanning...，等 `GOT_IP` / heal 后再 `startScan`；仅超时才 `ScanFailed`。
 - 结果写入 `lastScan_`；`NetWork::Scanning`（OLED）与 Web `/scan` 都读同一缓存。空列表算成功（OLED 显示 No APs，可再点重试），不再当成 Scan failed。
 - ARP probe 期间 `startScan` 仍失败 → Web 返回 `busy`。
@@ -66,12 +72,11 @@ Connected --DISC--> armed
 | 15 | `4WAY_HANDSHAKE_TIMEOUT`（密码错误常见） |
 | 200+ | 无 AP / 信号丢失等（依 IDF 版本） |
 
-连接中对 reason 2/3/8 保持等待 GOT_IP；`healIfStaUp` 在 FSM 误判 Failed 但射频已拿到 IP 时收复链路，避免下一轮 reconnect 把好连接踢掉。
+连接中对 reason 2/3/8 保持等待 GOT_IP；`healIfStaUp` 在 FSM 误判 Failed 但射频已拿到 IP 时收复链路，避免下一轮 reconnect 把好连接踢掉后进 SoftAP。
 
-## SoftAP 配网（仅手动）
+## SoftAP 逃生
 
-- 进入条件只有两处：**开机时无已存 SSID**、**菜单 Web Setup 手动触发**。重连永不放弃，因此信号丢失/密码变化不再自动切 SoftAP（NTP 设备应始终留在原网段重试）。
-- 进入后为 **纯 `WIFI_AP`**（不是 `AP_STA`）。
+- STA 失败 / 重连放弃后进入 **纯 `WIFI_AP`**（不是 `AP_STA`）。
 - 原因：`AP_STA` 下残留 STA 扫描常导致 SoftAP **不发 beacon**，手机/电脑扫不到 SSID，但串口仍打印 `Setup AP`。
 - SoftAP 仅 **2.4 GHz**（ESP32-C3 无 5 GHz）。手机若只看 5G 列表会漏掉；请在 2.4G WiFi 列表中找 `NTP-Setup-XXXX`。
 - SoftAP 密码默认 **`NTP-`+模块 MAC 低 16 位十六进制**（串口打印 `MAC=` / `SoftAP default pass=`）；NVS `appw` 可覆盖。

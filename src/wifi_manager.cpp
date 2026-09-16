@@ -93,10 +93,8 @@ uint32_t WifiManager::backoffMsForAttempt(uint8_t attempt) {
       return WIFI_RECONNECT_BACKOFF_2_MS;
     case 3:
       return WIFI_RECONNECT_BACKOFF_3_MS;
-    case 4:
-      return WIFI_RECONNECT_BACKOFF_4_MS;
     default:
-      return WIFI_RECONNECT_BACKOFF_5_MS;
+      return WIFI_RECONNECT_BACKOFF_4_MS;
   }
 }
 
@@ -118,9 +116,10 @@ void WifiManager::cancelAutoReconnect() {
   reconnectAttempt_ = 0;
   reconnectNextMs_ = 0;
   reconnectWindowStartMs_ = 0;
+  reconnectLinkLoss_ = false;
 }
 
-void WifiManager::armReconnect(const AppSettings& settings, uint32_t firstDelayMs) {
+void WifiManager::armReconnect(const AppSettings& settings, uint32_t firstDelayMs, bool linkLoss) {
   if (settings.wifiSsid.isEmpty()) {
     return;
   }
@@ -129,8 +128,9 @@ void WifiManager::armReconnect(const AppSettings& settings, uint32_t firstDelayM
   reconnectAttempt_ = 0;
   reconnectWindowStartMs_ = millis();
   reconnectNextMs_ = millis() + firstDelayMs;
-  Serial.printf("[wifi] reconnect armed ssid=\"%s\" delay=%ums\n", settings.wifiSsid.c_str(),
-                static_cast<unsigned>(firstDelayMs));
+  reconnectLinkLoss_ = linkLoss;
+  Serial.printf("[wifi] reconnect armed ssid=\"%s\" delay=%ums%s\n", settings.wifiSsid.c_str(),
+                static_cast<unsigned>(firstDelayMs), linkLoss ? " (forever)" : "");
 }
 
 bool WifiManager::consumeReconnectGiveUp() {
@@ -328,7 +328,8 @@ bool WifiManager::consumeDisconnect(uint16_t* reasonOut) {
     reconnectAttempt_ = 0;
     reconnectWindowStartMs_ = millis();
     reconnectNextMs_ = millis();  // attempt 0 immediate
-    Serial.println("[wifi] disconnect → auto-reconnect armed");
+    reconnectLinkLoss_ = true;    // real link loss → never-give-up retry
+    Serial.println("[wifi] disconnect → auto-reconnect armed (forever)");
   }
   return true;
 }
@@ -351,12 +352,11 @@ bool WifiManager::pollAutoReconnect(AppSettings* outSettings) {
   }
 
   const uint32_t now = millis();
-  // Limits of 0 = unlimited: retry forever with capped backoff. SoftAP is
-  // manual-only (menu Web Setup), never an automatic escape from signal loss.
-  if ((WIFI_RECONNECT_GIVEUP_MS != 0 &&
-       static_cast<int32_t>(now - reconnectWindowStartMs_) >=
-           static_cast<int32_t>(WIFI_RECONNECT_GIVEUP_MS)) ||
-      (WIFI_RECONNECT_MAX_ATTEMPTS != 0 &&
+  // Runtime link loss retries forever — the NTP server must not fall into
+  // setup SoftAP just because the upstream AP vanished for a while.
+  const bool retryForever = reconnectLinkLoss_ && WIFI_LINK_LOSS_RETRY_FOREVER;
+  if (!retryForever &&
+      (static_cast<int32_t>(now - reconnectWindowStartMs_) >= static_cast<int32_t>(WIFI_RECONNECT_GIVEUP_MS) ||
        reconnectAttempt_ >= WIFI_RECONNECT_MAX_ATTEMPTS)) {
     Serial.println("[wifi] auto-reconnect give up");
     cancelAutoReconnect();
@@ -376,11 +376,24 @@ bool WifiManager::pollAutoReconnect(AppSettings* outSettings) {
   const uint8_t attempt = reconnectAttempt_;
   const AppSettings creds = reconnectSettings_;
   const uint32_t windowStart = reconnectWindowStartMs_;
+  const bool linkLoss = reconnectLinkLoss_;
   if (!beginConnect(creds)) {
     return false;
   }
   reconnectArmed_ = true;
-  reconnectAttempt_ = static_cast<uint8_t>(attempt + 1);
+  reconnectLinkLoss_ = linkLoss;  // beginConnect's cancelAutoReconnect cleared it
+  if (retryForever) {
+    // Saturate so backoffMsForAttempt stays at the 30s cap across wrap-around.
+    if (attempt < 255) {
+      reconnectAttempt_ = static_cast<uint8_t>(attempt + 1);
+    }
+    if ((attempt + 1) % WIFI_LINK_LOSS_LOG_EVERY == 0) {
+      Serial.printf("[wifi] still retrying (%lu min)\n",
+                    static_cast<unsigned long>((now - windowStart) / 60000UL));
+    }
+  } else {
+    reconnectAttempt_ = static_cast<uint8_t>(attempt + 1);
+  }
   reconnectWindowStartMs_ = windowStart;
   reconnectNextMs_ = now + backoffMsForAttempt(reconnectAttempt_);
   Serial.printf("[wifi] auto-reconnect attempt %u\n", attempt + 1);

@@ -216,7 +216,7 @@ uint16_t holdoverSec = 30;  // Refuse 时忽略；Short/Long 可覆盖预设
 3. ~~**LocalUtc**：锚定；Locked 时 `nowUtc` 切本地外推~~ ✅
 4. ~~**交叉检核状态机** + NTP/UI 字段~~ ✅
 5. ~~**按 `anomalyPolicy` 接 Holdover 分支~~ ✅
-6. **验收**：烧录 + 短监测回归已通过冒烟（LCK / LI=0 / stratum 1）；**≥10 min vs 阿里云已通过两次**（2026-09-11 / 2026-09-14）。拔天线 Holdover/Refuse 差异仍待现场补测。综合评价见 [clock_eval_two_ntp_cmp.md](clock_eval_two_ntp_cmp.md)。
+6. **验收**：烧录 + 短监测回归已通过冒烟（LCK / LI=0 / stratum 1）；**≥10 min vs 阿里云已通过两次**（2026-09-11 / 2026-09-14）。**拔 GPS 模块电源的 HoldoverLong 全链已于 2026-09-16 现场验收通过**（断电 1.5–2.5s 进 HLD / 色散爬升 / 300s 超时 UNS / 恢复无跳秒，见 [pps_pull_test_20260916.md](pps_pull_test_20260916.md)）；Refuse 变体与真·拔天线（带电失星）仍待现场补测。综合评价见 [clock_eval_two_ntp_cmp.md](clock_eval_two_ntp_cmp.md)。
 
 冒烟（2026-09-11）：冷启约 90 s → `clk=LCK`、`residualMs=0`、`freqPpm≈-0.4`；8 轮 vs aliyun 中位差 ≈ +46 ms，无整秒跳变。
 ## 9. 验收标准
@@ -226,7 +226,7 @@ uint16_t holdoverSec = 30;  // Refuse 时忽略；Short/Long 可覆盖预设
 | 正常锁定 | residual 中位 &lt; 20 ms；LI=0 stratum 1 |
 | Refuse + 拔天线 | 迅速 Unsynced（LI=3），无假 stratum 1 守时 |
 | HoldoverShort + 短暂遮挡 | 进入 Holdover，dispersion 上升，超时后 Unsynced |
-| HoldoverLong | 守时窗口明显长于 Short |
+| HoldoverLong | 守时窗口明显长于 Short；**300 s 超时链已于 2026-09-16 拔模块电源现场通过**（[pps_pull_test_20260916.md](pps_pull_test_20260916.md)） |
 | OLED/Web 改策略 | NVS 持久化，刷新/重启后保持；不需重编译 |
 | 回归 ≥10 min vs aliyun | \|diff\| &gt; 400 ms 仍为 ~0%；std 不明显恶化。**已通过**（9/11：0/60；9/14 锁定后：0/52） |
 | 实时性 | ISR 仍极短；time 任务 1 ms 级轮询不变 |

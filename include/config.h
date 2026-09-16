@@ -98,6 +98,10 @@
 #define WIFI_RECONNECT_BACKOFF_5_MS  60000
 // Boot: first STA fail arms reconnect; SoftAP only after give-up (not after 1x 201).
 #define WIFI_BOOT_SOFTAP_AFTER_GIVEUP 1
+// Runtime link loss (was Connected): retry forever, never SoftAP. 0 = legacy give-up.
+#define WIFI_LINK_LOSS_RETRY_FOREVER 1
+// Forever mode: "[wifi] still retrying" every N attempts (30s backoff each → N=20 ≈ 10min).
+#define WIFI_LINK_LOSS_LOG_EVERY     20
 #define GPS_NMEA_MAX_BYTES_PER_LOOP 256
 // TinyGPSPlus isValid() stays true after last sentence; require fresh age + sats>0.
 #define GPS_FIX_MAX_AGE_MS           5000
