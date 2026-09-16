@@ -13,7 +13,7 @@
 7. **网页配网**：开启 SoftAP（`NTP-Setup-XXXX` / 密码默认 **`NTP-`+MAC 后 4 位十六进制**，与串口打印的 MAC 对应；**仅 2.4 GHz**）。`/` 始终是只读状态页。打开 `/setup` 或 `/login` 先登录，通过后才进入 `/cfg` 设置；设置页不再出现写口令输入框。`/status` `/metrics` 只读开放。若手机仍显示旧设置页，请强制刷新（缓存了刷固件前的 `/`）。
 8. **网页状态**：访问 `http://<设备IP>/` 查看 NTP/GPS/PPS（JS 按 1 Hz 轮询 `/status`，无需整页刷新）；点「设置」进入登录后再到 `/cfg`
 9. **FreeRTOS 三任务**：`task-time`(5) 独占 GNSS/NTP，`task-net`(2) 管 WiFi/网页，`task-ui`(1) 管 OLED/编码器/LED；PPS 计数对齐避免 NMEA 迟到导致的整秒跳变
-10. **WiFi 事件 + 自动重连**：`GOT_IP`/`DISC`/`SCAN_DONE` 驱动状态机；掉线后无限退避重连（默认开，NVS `arec`；0s/2s/5s/10s/30s 后每 60s 一轮持续搜寻）。**信号消失绝不自动切 SoftAP 配网**——SoftAP 仅在开机无已存 SSID 或菜单 Web Setup 手动触发。本板为 **C3 单核**，不做双核拆分（详见 `docs/wifi_event_fsm.md`）
+10. **WiFi 事件 + 自动重连**：`GOT_IP`/`DISC`/`SCAN_DONE` 驱动状态机；掉线后无限退避重连（默认开，NVS `arec`；0s/2s/5s/10s 后 30s 封顶持续重试）。**信号消失绝不自动切 SoftAP 配网**——开机带已存 SSID 时连接失败同样永久重试，SoftAP 仅在开机无已存 SSID 或菜单 Web Setup 手动触发。本板为 **C3 单核**，不做双核拆分（详见 `docs/wifi_event_fsm.md`）
 
 ## 硬件连接
 
@@ -74,7 +74,7 @@
 - **Timezone**：设置 UTC 偏移（默认 +8）
 - **Anomaly Mode**：GPS 异常策略 — Refuse（拒授时）/ Holdover 30s / Holdover 300s（写入 NVS）
 - **NTP ACL**：Off / AllowList（默认 Off；名单在网页 `/cfg` 编辑）
-- **Temp Comp**：片上温度一阶 ppm 补偿（默认 Off；系数在 `/cfg` 改）
+- **Temp Comp**：片上温度一阶 ppm 补偿（默认 Off；系数在 `/cfg` 改。**默认系数 0**：实测片上温度↔晶振耦合仅 ≈ −0.05~−0.13 ppm/°C，未受控标定前大系数反而有害；修正量上限 ±2 ppm）
 - **Screen Off**：息屏时长选档 — Always / 1 / 5 / 10 / 30 分钟（默认 10 分钟，NVS `ooff`）
 - **NTP Stats**：served / RATE / DENY / ACL / drop / clients
 - **Restart**：重启
@@ -124,7 +124,7 @@ chronyc sources
 ```bash
 pkg install python
 curl -L -o ntp_cmp_termux.py \
-  https://ghproxy.net/https://raw.githubusercontent.com/luweixuancl/esp32c3-gnss-ntp/main/tools/ntp_cmp_termux.py
+  https://gh-proxy.com/https://raw.githubusercontent.com/luweixuancl/esp32c3-gnss-ntp/main/tools/ntp_cmp_termux.py
 python ntp_cmp_termux.py --gps 10.81.127.143
 # 冒烟约 1 分钟：
 python ntp_cmp_termux.py --quick
@@ -147,7 +147,9 @@ Windows 下若工程路径含非 ASCII 字符导致链接失败，可用 ASCII j
 ```
 include/     配置与头文件
 src/         固件源码
-docs/        设计方案（如本地时钟与 GPS 检核）
+docs/        设计方案与测试报告
+tools/       辅助脚本（NTP 比对、失效链/长时段监测）
+dist/        dist/firmware.bin 跟踪最新构建（烧 @0x10000 保 NVS）
 platformio.ini
 ```
 
@@ -156,3 +158,19 @@ platformio.ini
 WiFi 事件 FSM、自动重连与 C3 无双核说明见 [docs/wifi_event_fsm.md](docs/wifi_event_fsm.md)。
 
 NTP 比对测试见 [docs/ntp_cmp_test_20260911.md](docs/ntp_cmp_test_20260911.md)（2026-09-11，PC）与 [docs/ntp_cmp_test_20260914.md](docs/ntp_cmp_test_20260914.md)（2026-09-14，Termux；原始 CSV [`docs/cmp_20260914_102829.csv`](docs/cmp_20260914_102829.csv)）。两次结果结合时钟算法的评价见 [docs/clock_eval_two_ntp_cmp.md](docs/clock_eval_two_ntp_cmp.md)。
+
+2026-09-16 系列实测：
+
+- [docs/ppm_monitor_20260916.md](docs/ppm_monitor_20260916.md)：1 Hz `/status` 监测 10 min——伺服达硬件上限、温补 rebase 机制按设计工作
+- [docs/pps_pull_test_20260916.md](docs/pps_pull_test_20260916.md)：拔 GPS 模块电源失效链现场验收——HLD 色散爬升、300s 准时 UNS、恢复无跳秒
+- [docs/fw_flash_test_20260916.md](docs/fw_flash_test_20260916.md)：新固件烧录验收 + 失效链回归
+- [docs/clock_drift_20260916.md](docs/clock_drift_20260916.md)：6.7h 长测——LCK 100%、热平衡阶跃后无老化（±0.06 ppm/h）、`tcpc=0` 实证
+
+## 实测表现摘要
+
+| 场景 | 结果 |
+|---|---|
+| 锁定态 NTP 比对（局域网） | offset stdev 1.3–2.6 ms（两次 10 min 比对） |
+| Holdover 守时（拔模块电源 2 min） | 相位漂移 <0.5 ms，色散诚实保守 |
+| 失效链 | 断电 1.5–2.5s 进 HLD → 300s 准时 UNS 诚实拒绝 → 恢复 3–5s 重锁无跳秒 |
+| 6.7h 长测 | LCK 100%、residual 全 0、热平衡后无老化漂移 |
