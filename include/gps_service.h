@@ -26,6 +26,7 @@ struct GpsStatus {
   int32_t residualMs = 0;
   float freqPpm = 0;
   float tempC = NAN;
+  float tempRefC = NAN;
   float tempCorrPpm = 0;
   bool tempComp = false;
   uint32_t holdoverMs = 0;

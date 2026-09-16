@@ -127,8 +127,13 @@
 #define CLK_PPM_SPAN_SEC              8
 // Optional die-temp first-order ppm trim (NVS tcmp, default Off).
 #define CLK_TEMP_COMP_DEFAULT         0
-#define CLK_TEMP_COEFF_CENTI       (-50)  // -0.50 ppm/°C (coarse die↔XO proxy)
-#define CLK_TEMP_CORR_MAX_PPM      20.0f
+// Default 0 until calibrated: measured die↔XO coupling ≈ -0.10 ppm/°C
+// (docs/ppm_monitor_20260916.md), NOT the old guess of -0.50. Wrong k in
+// holdover adds error instead of removing it. Calibrate before enabling.
+#define CLK_TEMP_COEFF_CENTI          (0)
+// Bound the trim so a mis-calibrated k can never hurt more than ±2 ppm
+// (≈0.6 ms per 300 s of holdover).
+#define CLK_TEMP_CORR_MAX_PPM       2.0f
 #define CLK_TEMP_SAMPLE_MS         1000
 // Below this residual while Locked, keep PPS-only advance (no NMEA re-anchor).
 #define CLK_LOCKED_SLEW_MS            5

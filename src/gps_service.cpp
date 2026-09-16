@@ -160,6 +160,7 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
   work.residualMs = localClock_.residualMs();
   work.freqPpm = localClock_.freqPpm();
   work.tempC = localClock_.dieTempC();
+  work.tempRefC = localClock_.tempRefC();
   work.tempCorrPpm = localClock_.tempCorrPpm();
   work.tempComp = localClock_.tempCompEnabled();
   work.holdoverMs = localClock_.holdoverElapsedMs();

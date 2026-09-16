@@ -58,6 +58,8 @@ class LocalClock {
   float effectivePpm() const;
   float tempCorrPpm() const;
   float dieTempC() const { return haveTemp_ ? tempC_ : NAN; }
+  // Reference temp the trim is rebased against (rebases on each ppm estimate).
+  float tempRefC() const { return haveTempRef_ ? tempRefC_ : NAN; }
   bool tempCompEnabled() const { return tempComp_; }
   bool ppsStable() const { return ppsStable_; }
   uint32_t holdoverElapsedMs() const;

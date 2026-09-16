@@ -938,6 +938,7 @@ void WebPortal::handleStatus() {
   clock["residualMs"] = st.residualMs;
   clock["freqPpm"] = st.freqPpm;
   clock["tempC"] = st.tempC;
+  clock["tempRefC"] = st.tempRefC;
   clock["tempCorrPpm"] = st.tempCorrPpm;
   clock["tempComp"] = st.tempComp;
   clock["holdoverMs"] = st.holdoverMs;
