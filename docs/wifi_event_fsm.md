@@ -44,7 +44,9 @@ Connected --DISC--> armed（链接丢失，linkLoss）
     每 20 次尝试打一条 `[wifi] still retrying (N min)`（30s/次 ≈ 10min 一条）
 Boot 首次入网失败 → armed（**linkLoss**）：与运行中掉线同一策略——**永久重试，绝不自动切 SoftAP**
   （2026-09-16 修复：曾有版本在 Boot armed 非 linkLoss 分支丢失 `!=0` 守卫，
-  `GIVEUP_MS=0`/`MAX_ATTEMPTS=0` 使放弃判断恒真 → 复位后一次 join 失败即误入配网）
+  `GIVEUP_MS=0`/`MAX_ATTEMPTS=0` 使放弃判断恒真 → 复位后一次 join 失败即误入配网；
+  **现场验收通过**（固件 `da9417f`）：复位直连 ✔ / 断网永久重试后自动恢复 ✔ /
+  空 NVS 与手动菜单进配网 ✔）
 ```
 
 - SoftAP 进入条件（仅两种）：**手动**（编码器菜单 Web Setup → `StartWebSetup`）或 **NVS 无保存 SSID**（开机空配置）。重连放弃路径仅在 `WIFI_RECONNECT_GIVEUP_MS`/`WIFI_RECONNECT_MAX_ATTEMPTS` 配成非零时可达（当前均 0 = 无限）。
