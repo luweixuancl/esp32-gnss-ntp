@@ -1,6 +1,6 @@
 # ESP32-S3-DevKitC-1 硬件笔记与移植规划（N16R8）
 
-> 状态：硬件笔记 / 移植未开始（roadmap 项）
+> 状态：硬件笔记 + 移植实施方案已定稿（§6/§7，2026-09-17）；代码改动待 P1 启动
 > 日期：2026-09-17
 > 板卡：乐鑫 **ESP32-S3-DevKitC-1 V1.1**，模组 **ESP32-S3-WROOM-1 N16R8**（16MB QIO flash + 8MB OPI PSRAM）
 > 资料：[`芯片资料/ESP32S3/`](../芯片资料/ESP32S3/)（引脚图 / 原理图 / 数据手册；23MB 开发板全文档仅本地保留）
@@ -91,3 +91,71 @@ build_flags =
 4. [ ] 16MB 分区表落地（app 分区可放大或维持 1.5MB——OTA/双分区暂无需求，维持 default_16MB.csv）
 5. [ ] WS2812@38 是否纳入状态显示（当前结论：不用，保持与 C3 相同的双 LED 语义）
 6. [ ] 首块 S3 板建立 `docs/` 现场验收记录（烧录/锁星/NTP 比对三件套）
+
+## 6. 移植实施计划（2026-09-17 定稿，四阶段）
+
+### 触点清单（全量盘点，实测于代码）
+
+| 触点 | 位置 | S3 处理 |
+|---|---|---|
+| 引脚宏 | `config.h:10-38` | 按目标宏分支（C3 值逐字节不变） |
+| 任务绑核 | `main.cpp:686-688` 硬编码 core 0 | `TASK_TIME_CORE` 宏：C3=0 / S3=1，其余任务恒 0 |
+| 温度采样 | `gps_service.cpp:67` legacy `temp_sensor_read_celsius()` | ⚠️ 该 API 不支持 S3（新 tsens 硬件）→ 封装 `board_temp_celsius()`：C3 走现路径（已验证），S3 走 `temperatureRead()` HAL |
+| GNSS UART | `gps_service.cpp:42` `Serial1.begin(baud, 8N1, rx, tx)` | 宏驱动 ✔ 零改动 |
+| OLED I2C | `display_ui.cpp:118` `Wire.begin(sda, scl)` | 宏驱动 ✔ 零改动 |
+| TWDT/PPS ISR/esp_timer/WebServer/Preferences/app_ipc | — | 与芯片无关 ✔ 直接沿用 |
+
+### P1 代码/环境（无需 S3 板，本机可完成）
+
+| 改动 | 文件 | 内容 |
+|---|---|---|
+| env | `platformio.ini` | `[env:esp32-s3]`（§4 草案）+ **`[platformio] default_envs = esp32-c3`**（现无 default_envs，加了新 env 后裸 `pio run` 会双环境全编并拉 xtensa-s3 工具链） |
+| 引脚宏 | `include/config.h` | `#if CONFIG_IDF_TARGET_ESP32S3` 分支（§4 样例） |
+| 绑核 | `src/main.cpp:686-688` | `TASK_TIME_CORE`：C3=0 / S3=1 |
+| 温度 | `src/gps_service.cpp` | `board_temp_celsius()` 目标条件封装 |
+
+- 出口准则：**双环境本机编译通过**（c3 增量 + s3 全量；S3 首次构建拉 xtensa-s3 工具链 ~300MB，registry CDN 直连，预计全量 8–12 min）
+- 一律经 `piod` 构建（见 AGENTS.md 构装备忘）
+
+### P2 上板点亮（挪线 + 烧录）
+
+挪线对照表（DevKitC-1 V1.1 排针位置已按引脚图核对）：
+
+| 信号 | S3 GPIO | 板上位置 | 备注 |
+|---|---|---|---|
+| GNSS RX ← TXD | **1** | 右排针 | 非 strapping ✔ |
+| GNSS TX → RXD | **0** | 右排针（BOOT 位） | 仅输出驱动模块高阻输入，复位期不影响 strapping；**如遇启动异常备用 GPIO18**（一行改动） |
+| PPS | **4** | 左排针 | RTC 域 ✔ |
+| OLED SDA/SCL | **8/10** | 左排针 | 沿用 |
+| 编码器 A/B/SW | **2/9/5** | 2=右、9/5=左 | B 避 GPIO3 strapping ✔ |
+| LED D4/D5 | **12/13** | 左排针 | 沿用 |
+| 调试 RX/TX | **44/43** | 右排针（UART 座旁） | 烧录/监控走此口 |
+
+- 烧录：`piod start -e esp32-s3 -t upload --upload-port <口>`（piod 参数透传）；或你侧 esptool `write_flash 0x10000`（app-only 保 NVS）
+- 点亮顺序：串口（`MAC=` / SoftAP pass / `GPS UART` 行）→ OLED → 编码器 → WiFi 入网（用 `da9417f` 修复版行为验收：**复位不误入配网**）
+
+### P3 现场验收（单套外设，串行策略）
+
+- 外设仅一套（挪线制）：S3 独立测，对照**已冻结的 C3 基线**（配对差 −23.5 ms / 守时 2 min <0.5 ms / 长测零老化，见 docs）；精比用白天阿里云窗口（夜间拥堵不可作参照，见 clock_drift 文档）
+- 测试项与复用工具：
+  1. 锁星 + PPS → `ntpdate -q <ip>`：stratum 1 / `GPSS`
+  2. 10 min NTP 比对：`tools/ntp_cmp_termux.py`
+  3. 拔模块电源失效链：`tools/pps_failover_monitor.py`（复用 2026-09-16 流程）
+  4. tempC 合理性（S3 tsens 量程/精度与 C3 不同；tcmp 关，无实害）
+  5. PPS ISR→打戳延迟粗测（日志时间差；双核预期优于 C3）
+- 如需 A/B：线挪回 C3 重烧即可（固件在仓库、配置在各自 NVS，互换 ~10 分钟）
+
+### P4 转正决策
+
+- 准入：P3 全绿 + 一次 ≥6.7h 级长测干净（`tools/clock_drift_monitor.py` 复用）
+- 达标前 `default_envs` 保持 esp32-c3；C3 仍是产品主环境，S3 为双核增强路线
+
+## 7. 风险表
+
+| 风险 | 缓解 |
+|---|---|
+| S3 tsens 量程/精度与 C3 不同 | tcmp 默认关；tempC 仅展示/日志用途 |
+| GPIO0 作 GNSS TX 的 strapping 顾虑 | 输出-only 高阻安全；备用 GPIO18 一行改动 |
+| 首次 s3 构建工具链下载失败 | registry CDN 已验证可用（库直连成功）；失败重试 |
+| 双 USB 座烧录口混淆 | 烧录/监控固定 = UART 座（43/44 板载桥）；OTG 口暂不用 |
+| 双核下 PPS ISR 延迟/亲和性 | P3 专项粗测；预期双核更优 |
