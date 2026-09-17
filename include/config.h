@@ -65,7 +65,7 @@
 
 // On-board LEDs (合宙 CORE D4/D5 on C3; S3 merges both onto the onboard RGB @38)
 // Active HIGH on C3. RGB brightness cap: WS2812-class @3V3 is very bright.
-#define LED_RGB_BRIGHTNESS  30   // 0-255 per channel on S3 RGB
+#define LED_RGB_BRIGHTNESS  12   // 0-255 per channel on S3 RGB
 
 // SoftAP for web WiFi setup (SSID prefix). Password default: NTP-<MAC low 16-bit hex>.
 #define AP_SSID_PREFIX      "NTP-Setup"

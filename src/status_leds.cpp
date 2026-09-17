@@ -4,15 +4,17 @@
 #include "config.h"
 
 #if defined(ARDUINO_ESP32S3_DEV)
-// Both logical LEDs share the onboard SK6812-mini (GPIO38): D4 pattern -> R
-// channel, D5 pattern -> G channel. Patterns below stay byte-identical to the
-// C3 discrete-LED version; only the output sink differs.
+// Three logical channels share the onboard SK6812-mini (GPIO48): R = network
+// (D4 semantics), G = clock/GNSS (D5 semantics), B = NTP serving-ready
+// (steady while Locked/Degraded/Holdover, off otherwise). The C3 discrete-
+// LED version keeps byte-identical patterns on GPIO12/13.
 static bool rgbD4On_ = false;
 static bool rgbD5On_ = false;
+static bool rgbBOn_ = false;
 
 static void flushRgb() {
   const uint8_t v = LED_RGB_BRIGHTNESS;
-  neopixelWrite(PIN_LED_RGB, rgbD4On_ ? v : 0, rgbD5On_ ? v : 0, 0);
+  neopixelWrite(PIN_LED_RGB, rgbD4On_ ? v : 0, rgbD5On_ ? v : 0, rgbBOn_ ? v : 0);
 }
 #else
 static void flushRgb() {
@@ -87,6 +89,9 @@ void StatusLeds::loop(bool apMode, bool wifiStaOk, const GpsStatus& st) {
     const bool phase = ((now / LED_PANIC_HALF_PERIOD_MS) % 2) == 0;
     setLed(PIN_LED_D4, phase);
     setLed(PIN_LED_D5, !phase);
+#if defined(ARDUINO_ESP32S3_DEV)
+    rgbBOn_ = false;
+#endif
     flushRgb();
     return;
   }
@@ -111,5 +116,13 @@ void StatusLeds::loop(bool apMode, bool wifiStaOk, const GpsStatus& st) {
   } else {
     setLed(PIN_LED_D5, false);
   }
+
+#if defined(ARDUINO_ESP32S3_DEV)
+  // B = NTP serving-ready: steady while the server answers stratum 1
+  // (Locked/Degraded/Holdover), off while acquiring or refusing (UNS).
+  rgbBOn_ = (st.clockState == ClockState::Locked ||
+             st.clockState == ClockState::Degraded ||
+             st.clockState == ClockState::Holdover);
+#endif
   flushRgb();
 }
