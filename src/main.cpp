@@ -103,7 +103,7 @@ static void checkFactoryReset() {
     delay(10);
   }
   Serial.println("[reset] released early - normal boot");
-  gUi.bootMessage("ESP32-C3 NTP", "Booting...");
+  gUi.bootMessage("GNSS NTP Server", "Booting...");
 }
 
 static void openSetupApIfNeeded(const char* uiMsg) {
@@ -651,7 +651,7 @@ static void taskUi(void* /*arg*/) {
 void setup() {
   Serial.begin(115200);
   delay(200);
-  Serial.println("\nESP32-C3 GNSS NTP Server (RTOS)");
+  Serial.println("\nGNSS NTP Server (RTOS)");
 
   if (!ipcInit()) {
     Serial.println("IPC init failed — halt/restart");

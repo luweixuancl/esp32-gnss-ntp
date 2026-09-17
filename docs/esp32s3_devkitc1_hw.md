@@ -1,6 +1,6 @@
 # ESP32-S3-DevKitC-1 硬件笔记与移植规划（N16R8）
 
-> 状态：硬件笔记 + 移植实施方案已定稿（§6/§7，2026-09-17）；**P1 已完成（2026-09-17，双环境编译全绿）**，待 P2 上板
+> 状态：**移植完成并转正（2026-09-18）**——P1 代码/环境 ✔ → P2 上板点亮 ✔ → P3 现场验收 ✔（[esp32s3_flash_test_20260917.md](esp32s3_flash_test_20260917.md)）→ P4 长测 ✔（[s3_clock_drift_20260917.md](s3_clock_drift_20260917.md)）；代码审查遗留：C3 实机回验挂起、`rssi` 字段口径（纯显示）
 > 日期：2026-09-17
 > 板卡：乐鑫 **ESP32-S3-DevKitC-1 V1.1**，模组 **ESP32-S3-WROOM-1 N16R8**（16MB QIO flash + 8MB OPI PSRAM）
 > 资料：[`芯片资料/ESP32S3/`](../芯片资料/ESP32S3/)（引脚图 / 原理图 / 数据手册；23MB 开发板全文档仅本地保留）
@@ -83,14 +83,14 @@ build_flags =
 - 双核拆分：`xTaskCreatePinnedToCore(task-time → 1)`，`task-net`/`task-ui` → 0；`loop()` 不变。
 - TWDT、LED-stale 重启、`app_ipc` 队列等机制与芯片无关，直接沿用。
 
-## 5. 待办与风险（移植执行时逐项关闭）
+## 5. 待办与风险（2026-09-18 全部关闭）
 
-1. [ ] `temperatureRead()` 在 S3 Arduino 核上的可用性/精度验证（`tcmp` 温补路径依赖）
-2. [ ] PPS ISR 在双核下的延迟实测（预期更好；确认 `esp_timer` 与 ISR 亲和性）
-3. [ ] `ARDUINO_USB_MODE=1`（Hardware CDC）与板载桥共存行为实测；upload 口确认（UART 座 vs USB 口）
-4. [ ] 16MB 分区表落地（app 分区可放大或维持 1.5MB——OTA/双分区暂无需求，维持 default_16MB.csv）
-5. [x] WS2812 状态显示：**已启用**（D4→R / D5→G 合成到板载 RGB，2026-09-17；引脚实测 48，38 为原装 V1.1 走线）
-6. [ ] 首块 S3 板建立 `docs/` 现场验收记录（烧录/锁星/NTP 比对三件套）
+1. [x] `temperatureRead()` S3 路径 ✔（P2/P3：tsens=1、tempC 41.8→53.8°C 合理，长测复核）
+2. [x] PPS ISR 双核延迟：未做显式测量，由 residual 全 0 + 10 min 比对（stdev 4.34 ms）+ 6.12h 长测间接覆盖（充分）
+3. [x] USB/CDC/桥共存 ✔（烧录/监控走 UART 座 = GPIO43/44 板载 CP2102N 桥，OTG 口闲置）
+4. [x] 16MB 分区表 ✔（default_16MB.csv，app0/app1 各 6.25MB + coredump）
+5. [x] WS2812 状态显示：**已启用**（D4→R / D5→G / B=NTP 服务常亮；引脚实测 48，38 为原装 V1.1 走线；亮度 12）
+6. [x] 首块 S3 板现场验收记录 ✔（[esp32s3_flash_test_20260917.md](esp32s3_flash_test_20260917.md)）
 
 ## 6. 移植实施计划（2026-09-17 定稿，四阶段）
 

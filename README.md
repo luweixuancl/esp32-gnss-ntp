@@ -142,6 +142,32 @@ ACL 白名单（阶段 B3）：默认 **Off**。开启 AllowList 后仅列出的
 
 Windows 下若工程路径含非 ASCII 字符导致链接失败，可用 ASCII junction（如 `C:\acode_leds`）再 `pio run`。
 
+## ESP32-S3 支持
+
+同一份源码通过 PlatformIO 多环境支持 **ESP32-S3-DevKitC-1（WROOM-1 N16R8，16MB flash/8MB PSRAM）**，已完成 P1–P4 全阶段验收（见 [docs/esp32s3_flash_test_20260917.md](docs/esp32s3_flash_test_20260917.md) 与 [docs/s3_clock_drift_20260917.md](docs/s3_clock_drift_20260917.md)）。默认环境仍为 esp32-c3：
+
+```bash
+pio run -e esp32-s3                 # 只编 S3
+pio run -e esp32-s3 -t upload       # 烧录（UART 座）
+pio run                             # 默认只编 C3
+```
+
+**S3 接线差异**（其余与 C3 相同）：
+
+| 功能 | C3 | S3 (DevKitC-1) | 备注 |
+|------|----|----------------|------|
+| GNSS UART RX/TX | 1 / 0 | 1 / 0 | GPIO0 为 strapping，仅输出驱动安全；异常可改 GPIO18 |
+| PPS | 4 | 4 | RTC 域 |
+| OLED I2C | 8 / 10 | 8 / 10 | |
+| 编码器 A/B/SW | 2 / 3 / 5 | 2 / **9** / 5 | GPIO3 在 S3 是 strapping |
+| 调试串口 | 20 / 21 | **44 / 43**（UART 座） | 20/21 在 S3 是原生 USB |
+| 状态灯 | D4/D5 = GPIO12/13 | 板载 RGB **@48** | 见下 |
+
+**S3 状态灯语义**（板载 SK6812 RGB，单灯三色合成，亮度 `LED_RGB_BRIGHTNESS=12`）：
+**R = 网络**（心跳/快闪），**G = 时钟**（锁定心跳，HLD 快闪），**B = NTP 正在授时**（常亮；ACQ/UNS 灭）——三眼看全网络/时钟/服务。任务卡死时 R/G 交替狂闪。
+
+**S3 固件产物**：`dist/firmware_esp32s3.bin`（app @0x10000，升级用）与 `dist/merged_firmware_esp32s3_n16r8_0x0.bin`（整片 @0x0，首烧用，会清 NVS）。
+
 ## 目录结构
 
 ```

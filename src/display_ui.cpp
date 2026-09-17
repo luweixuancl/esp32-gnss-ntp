@@ -122,7 +122,7 @@ void DisplayUi::begin() {
     Serial.println("SH1107 init failed");
   }
   display_.setRotation(OLED_ROTATION);
-  bootMessage("ESP32-C3 NTP", "Booting...");
+  bootMessage("GNSS NTP Server", "Booting...");
   lastInputMs_ = millis();
   Serial.printf("[ui] OLED menu FreeMono9pt rows=%u rowH=%u mark=%s\n",
                 static_cast<unsigned>(OLED_MENU_ROWS),
