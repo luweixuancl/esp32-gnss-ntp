@@ -22,7 +22,9 @@
 #define PIN_ENC_SW           5
 #define PIN_LED_D4          12   // D4 RUN / WiFi
 #define PIN_LED_D5          13   // D5 GPS / PPS / NTP ready
-#define PIN_LED_RGB         38   // S3 onboard SK6812-mini RGB (D6, 3V3): D4->R / D5->G
+#define PIN_LED_RGB         48   // S3 onboard SK6812-mini RGB (D6, 3V3): D4->R / D5->G
+                                 // NOTE: field-measured @48 on this board; original
+                                 // V1.1 schematic routes it to 38 (clone/older wiring)
 #define TASK_TIME_CORE       1   // dual-core: task-time alone on core 1
 
 #else

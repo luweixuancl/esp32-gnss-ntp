@@ -18,7 +18,7 @@
 |---|---|
 | 调试串口 | UART0 = **GPIO43(TXD0)/44(RXD0)**，板载 USB-UART 桥（板上 UART 座） |
 | 原生 USB | **GPIO19(D-)/20(D+)**，USB-OTG + JTAG |
-| RGB LED | WS2812 @ **GPIO38**（V1.1 实测丝印 `RGB@IO38`；老版资料写 48，以原理图为准） |
+| RGB LED | WS2812-class RGB @ **GPIO48（本板实测）**——原装 V1.1 原理图走 GPIO38，本板为兼容走线（2026-09-17 现场确认：38 不亮/48 亮） |
 | 按键 | BOOT=GPIO0（strapping），RESET（EN） |
 | **Strapping 禁区** | **GPIO0 / GPIO3 / GPIO45 / GPIO46**——启动期有采样用途，外设尽量避开 |
 | 32K 晶振脚 | GPIO15/16（未接外部 32k 时可当普通 GPIO） |
@@ -32,7 +32,7 @@
 | GNSS PPS | 4 | **4 沿用** | RTC 域 + `INPUT_PULLDOWN`，理想 |
 | OLED I2C SDA/SCL | 8 / 10 | **8 / 10 沿用** | Wire 可任意脚 |
 | 编码器 A/B/SW | 2 / 3 / 5 | 2 / **9** / 5 | ⚠️ GPIO3 是 strapping，B 脚必须挪 |
-| 状态 LED D4/D5 | 12 / 13 | **12 / 13 沿用** | 或改用板载 WS2812@38（需 LEDC/RMT 驱动，暂不采用） |
+| 状态 LED D4/D5 | 12 / 13 | 12 / 13 排针保留；**状态显示走板载 RGB@48**（D4→R、D5→G 合成，`status_leds.cpp` S3 分支 + `LED_RGB_BRIGHTNESS=30`） |
 | 调试串口 RX/TX | 20 / 21 | **44 / 43** | ⚠️ C3 的 20/21 在 S3 是 USB D-/D+，不可复用 |
 
 ## 4. 双芯片同存策略（多 env，不开分支）
@@ -89,7 +89,7 @@ build_flags =
 2. [ ] PPS ISR 在双核下的延迟实测（预期更好；确认 `esp_timer` 与 ISR 亲和性）
 3. [ ] `ARDUINO_USB_MODE=1`（Hardware CDC）与板载桥共存行为实测；upload 口确认（UART 座 vs USB 口）
 4. [ ] 16MB 分区表落地（app 分区可放大或维持 1.5MB——OTA/双分区暂无需求，维持 default_16MB.csv）
-5. [ ] WS2812@38 是否纳入状态显示（当前结论：不用，保持与 C3 相同的双 LED 语义）
+5. [x] WS2812 状态显示：**已启用**（D4→R / D5→G 合成到板载 RGB，2026-09-17；引脚实测 48，38 为原装 V1.1 走线）
 6. [ ] 首块 S3 板建立 `docs/` 现场验收记录（烧录/锁星/NTP 比对三件套）
 
 ## 6. 移植实施计划（2026-09-17 定稿，四阶段）
