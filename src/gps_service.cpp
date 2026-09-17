@@ -1,6 +1,11 @@
 #include "gps_service.h"
 #include <esp_timer.h>
+#if defined(ARDUINO_ESP32S3_DEV)
+// S3 has the newer tsens hardware; the legacy driver below does not exist
+// for it. Arduino's temperatureRead() HAL picks the per-target API.
+#else
 #include "driver/temp_sensor.h"
+#endif
 
 portMUX_TYPE GpsService::ppsMux_ = portMUX_INITIALIZER_UNLOCKED;
 volatile uint32_t GpsService::ppsCount_ = 0;
@@ -9,6 +14,34 @@ volatile uint8_t GpsService::ppsQHead_ = 0;
 volatile uint8_t GpsService::ppsQTail_ = 0;
 volatile GpsService::PpsIsrEdge GpsService::ppsQ_[GPS_PPS_ISR_QUEUE] = {};
 TaskHandle_t GpsService::timeTask_ = nullptr;
+
+#if defined(ARDUINO_ESP32S3_DEV)
+static bool boardTempBegin() {
+  // temperatureRead() lazily initialises the new tsens driver; gate on a
+  // plausible first reading instead of a driver return code.
+  float c = temperatureRead();
+  const bool ok = !isnan(c) && c > -20.0f && c < 85.0f;
+  return ok;
+}
+static bool boardTempRead(float* out) {
+  float c = temperatureRead();
+  if (isnan(c) || c <= -20.0f || c >= 85.0f) {
+    return false;
+  }
+  *out = c;
+  return true;
+}
+#else
+static bool boardTempBegin() {
+  temp_sensor_config_t tsens = TSENS_CONFIG_DEFAULT();
+  temp_sensor_set_config(tsens);
+  const esp_err_t err = temp_sensor_start();
+  return (err == ESP_OK || err == ESP_ERR_INVALID_STATE);
+}
+static bool boardTempRead(float* out) {
+  return temp_sensor_read_celsius(out) == ESP_OK;
+}
+#endif
 
 void IRAM_ATTR GpsService::onPpsIsr() {
   const uint64_t edgeUs = esp_timer_get_time();
@@ -41,20 +74,16 @@ void GpsService::begin() {
   gpsSerial_.setRxBufferSize(2048);
   gpsSerial_.begin(GPS_UART_BAUD, SERIAL_8N1, PIN_GPS_RX, PIN_GPS_TX);
   attachInterrupt(digitalPinToInterrupt(PIN_GPS_PPS), onPpsIsr, RISING);
-  {
-    temp_sensor_config_t tsens = TSENS_CONFIG_DEFAULT();
-    temp_sensor_set_config(tsens);
-    const esp_err_t err = temp_sensor_start();
-    tempSensorOk_ = (err == ESP_OK || err == ESP_ERR_INVALID_STATE);
-    Serial.printf("GPS UART%d RX=%d TX=%d baud=%d buf=2048 local-clock=on ppsQ=%d tsens=%d\n",
-                  GPS_UART_NUM, PIN_GPS_RX, PIN_GPS_TX, GPS_UART_BAUD, GPS_PPS_ISR_QUEUE,
-                  tempSensorOk_ ? 1 : 0);
-  }
+  tempSensorOk_ = boardTempBegin();
+  Serial.printf("GPS UART%d RX=%d TX=%d baud=%d buf=2048 local-clock=on ppsQ=%d tsens=%d\n",
+                GPS_UART_NUM, PIN_GPS_RX, PIN_GPS_TX, GPS_UART_BAUD, GPS_PPS_ISR_QUEUE,
+                tempSensorOk_ ? 1 : 0);
 }
 
 void GpsService::setTempComp(bool enabled, int16_t coeffCenti) {
   localClock_.setTempComp(enabled, coeffCenti);
 }
+
 
 void GpsService::sampleDieTemp() {
   if (!tempSensorOk_) {
@@ -66,7 +95,7 @@ void GpsService::sampleDieTemp() {
   }
   lastTempMs_ = now;
   float c = NAN;
-  if (temp_sensor_read_celsius(&c) == ESP_OK) {
+  if (boardTempRead(&c)) {
     localClock_.updateDieTemp(c);
   }
 }

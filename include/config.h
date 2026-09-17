@@ -1,41 +1,66 @@
 #pragma once
 
 // ---------------------------------------------------------------------------
-// Hardware wiring (合宙 CORE ESP32-C3 + DX-GP22 + SH1107/SSD1107 OLED + KY-040)
-// Adjust these pins if your carrier board differs.
+// Hardware wiring — target-conditional (合宙 CORE ESP32-C3 default, ESP32-S3
+// DevKitC-1 + WROOM-1 N16R8 opt-in). Adjust these pins if your board differs.
+// Target detection uses ARDUINO_ESP32S3_DEV: injected by the build (-D), so it
+// is valid regardless of header include order (docs/esp32s3_devkitc1_hw.md).
 // ---------------------------------------------------------------------------
+
+#if defined(ARDUINO_ESP32S3_DEV)
+
+// ESP32-S3-DevKitC-1: UART0 debug = GPIO43/44 via onboard bridge (Serial
+// default pins, no macros needed). Native USB on GPIO19/20 — keep free.
+// GPIO0/3/45/46 are strapping pins: encoder B moved off C3's GPIO3.
+#define PIN_GPS_RX           1   // ESP32 RX <- GP22 TXD
+#define PIN_GPS_TX           0   // ESP32 TX -> GP22 RXD (output-only, BOOT strap safe; fallback GPIO18)
+#define PIN_GPS_PPS          4   // 1PPS input (RTC-domain)
+#define PIN_OLED_SDA         8
+#define PIN_OLED_SCL        10
+#define PIN_ENC_A            2
+#define PIN_ENC_B            9   // C3 uses 3 — strapping on S3
+#define PIN_ENC_SW           5
+#define PIN_LED_D4          12   // D4 RUN / WiFi
+#define PIN_LED_D5          13   // D5 GPS / PPS / NTP ready
+#define TASK_TIME_CORE       1   // dual-core: task-time alone on core 1
+
+#else
 
 // UART0 (合宙 CORE / CH343): GPIO20 RX, GPIO21 TX — debug via Serial @ 115200
 // DX-GP22 GNSS on UART1 (board UART1_RX=GPIO1, UART1_TX=GPIO0; 9600 8N1; 1PPS after fix)
 #define PIN_GPS_RX           1   // ESP32 RX <- GP22 TXD  (UART1_RX)
 #define PIN_GPS_TX           0   // ESP32 TX -> GP22 RXD  (UART1_TX)
 #define PIN_GPS_PPS          4   // 1PPS input
+#define PIN_OLED_SDA         8
+#define PIN_OLED_SCL        10
+#define PIN_ENC_A            2
+#define PIN_ENC_B            3
+#define PIN_ENC_SW           5
+#define PIN_LED_D4          12   // D4 RUN / WiFi
+#define PIN_LED_D5          13   // D5 GPS / PPS / NTP ready
+#define TASK_TIME_CORE       0   // C3 single-core: everything on core 0
+
+#endif
+
 #define GPS_UART_BAUD     9600
 #define GPS_UART_NUM         1
 #define GPS_DEBUG            0   // 1 = 每秒向 UART0 打印定位/PPS（time 任务内，默认关）
 #define GPS_DEBUG_NMEA       0   // 1 = 把 NMEA 原文转发到 UART0
 
-// SH1107 / SSD1107 0.96" 64x128 OLED over I2C (native portrait; setRotation(1) → 128x64 UI)
-#define PIN_OLED_SDA         8
-#define PIN_OLED_SCL        10
+// SH1107 / SSD1107 0.96" 64x128 OLED over I2C (pins above; native portrait, setRotation(1) → 128x64 UI)
 #define OLED_I2C_ADDR     0x3C
 #define OLED_WIDTH          64
 #define OLED_HEIGHT        128
 #define OLED_ROTATION        1   // 1 = landscape UI on portrait panel
 
-// KY-040 rotary encoder
-#define PIN_ENC_A            2
-#define PIN_ENC_B            3
-#define PIN_ENC_SW           5
+// KY-040 rotary encoder (pins above)
 // Soft layer (task-ui): one detent ≈ 4 quadrature edges; leftover bounce is dropped.
 #define ENC_DETENT_STEPS            4
 #define ENC_IDLE_CLEAR_MS          80   // rest this long → clear sub-detent remainder
 #define ENC_MIN_STEP_MS            50   // min gap between UI ticks (smooth, not bursty)
 #define ENC_ISR_DEBOUNCE_US       250   // ISR edge floor; Gray table rejects 2-bit jumps
 
-// On-board LEDs on 合宙 CORE ESP32 (datasheet 表4-1): D4=IO12, D5=IO13, active HIGH
-#define PIN_LED_D4          12   // D4 RUN / WiFi
-#define PIN_LED_D5          13   // D5 GPS / PPS / NTP ready
+// On-board LEDs (合宙 CORE D4/D5 on C3; same pins wired on S3): active HIGH
 
 // SoftAP for web WiFi setup (SSID prefix). Password default: NTP-<MAC low 16-bit hex>.
 #define AP_SSID_PREFIX      "NTP-Setup"

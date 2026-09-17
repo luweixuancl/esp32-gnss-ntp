@@ -682,8 +682,10 @@ void setup() {
   Serial.printf("SoftAP default pass=%s (NVS appw overrides if set)\n",
                 derivedSoftApPassword().c_str());
 
-  // Priority: time=5 > net=2 > ui=1 (all below WiFi/lwIP ~18+)
-  xTaskCreatePinnedToCore(taskTime, "task-time", 6144, nullptr, 5, &gTaskTime, 0);
+  // Priority: time=5 > net=2 > ui=1 (all below WiFi/lwIP ~18+).
+  // TASK_TIME_CORE: 0 on C3 (single core), 1 on S3 (dual-core: GNSS/NTP/PPS
+  // alone on core 1 for deterministic timestamping, net/ui on core 0).
+  xTaskCreatePinnedToCore(taskTime, "task-time", 6144, nullptr, 5, &gTaskTime, TASK_TIME_CORE);
   xTaskCreatePinnedToCore(taskNet, "task-net", 8192, nullptr, 2, &gTaskNet, 0);
   xTaskCreatePinnedToCore(taskUi, "task-ui", 4096, nullptr, 1, &gTaskUi, 0);
 

@@ -1,6 +1,6 @@
 # ESP32-S3-DevKitC-1 硬件笔记与移植规划（N16R8）
 
-> 状态：硬件笔记 + 移植实施方案已定稿（§6/§7，2026-09-17）；代码改动待 P1 启动
+> 状态：硬件笔记 + 移植实施方案已定稿（§6/§7，2026-09-17）；**P1 已完成（2026-09-17，双环境编译全绿）**，待 P2 上板
 > 日期：2026-09-17
 > 板卡：乐鑫 **ESP32-S3-DevKitC-1 V1.1**，模组 **ESP32-S3-WROOM-1 N16R8**（16MB QIO flash + 8MB OPI PSRAM）
 > 资料：[`芯片资料/ESP32S3/`](../芯片资料/ESP32S3/)（引脚图 / 原理图 / 数据手册；23MB 开发板全文档仅本地保留）
@@ -105,17 +105,22 @@ build_flags =
 | OLED I2C | `display_ui.cpp:118` `Wire.begin(sda, scl)` | 宏驱动 ✔ 零改动 |
 | TWDT/PPS ISR/esp_timer/WebServer/Preferences/app_ipc | — | 与芯片无关 ✔ 直接沿用 |
 
-### P1 代码/环境（无需 S3 板，本机可完成）
+### P1 代码/环境 ✅ 已完成（2026-09-17）
 
 | 改动 | 文件 | 内容 |
 |---|---|---|
-| env | `platformio.ini` | `[env:esp32-s3]`（§4 草案）+ **`[platformio] default_envs = esp32-c3`**（现无 default_envs，加了新 env 后裸 `pio run` 会双环境全编并拉 xtensa-s3 工具链） |
-| 引脚宏 | `include/config.h` | `#if CONFIG_IDF_TARGET_ESP32S3` 分支（§4 样例） |
-| 绑核 | `src/main.cpp:686-688` | `TASK_TIME_CORE`：C3=0 / S3=1 |
-| 温度 | `src/gps_service.cpp` | `board_temp_celsius()` 目标条件封装 |
+| env | `platformio.ini` | `[platformio] default_envs = esp32-c3` + `[env:esp32-s3]`（`${env:esp32-c3.build_flags}` / `lib_deps` 跨 env 继承实测可用） |
+| 引脚宏 | `include/config.h` | `#if defined(ARDUINO_ESP32S3_DEV)` 分支 + `TASK_TIME_CORE`（S3=1/C3=0） |
+| 绑核 | `src/main.cpp` | task-time → `TASK_TIME_CORE`，net/ui 恒 0 |
+| 温度 | `src/gps_service.cpp` | `boardTempBegin()/boardTempRead()` 目标条件封装；legacy 头文件条件包含 |
 
-- 出口准则：**双环境本机编译通过**（c3 增量 + s3 全量；S3 首次构建拉 xtensa-s3 工具链 ~300MB，registry CDN 直连，预计全量 8–12 min）
-- 一律经 `piod` 构建（见 AGENTS.md 构装备忘）
+P1 实施修正与实测记录：
+
+- **调试串口零改动**：`Serial.begin()` 走各目标默认 UART0 引脚（C3=20/21，S3=43/44），无需任何 DBG 宏（草案中的 `DBG_RX/TX` 取消）
+- **目标宏选 `ARDUINO_ESP32S3_DEV`**（PlatformIO 按 board 注入的编译器 `-D`，不依赖 sdkconfig.h 包含顺序），非 `CONFIG_IDF_TARGET_*`
+- **S3 工具链**：registry 无 `linux_aarch64`（404 同 riscv），已按 riscv 同款流程手动安装——espressif/crosstool-NG `esp-2021r2-patch5` 的 `xtensa-esp32s3-elf-gcc8_4_0-linux-arm64.tar.gz`（61MB，gh-proxy 直连 release 资产 8s 下载）→ 解压平铺至 `~/.platformio/packages/toolchain-xtensa-esp32s3` + 手写 `package.json`/`.piopm`（pio 即认，不触发重装）；重 IO 一律后台守护跑（前台复合命令会拖死控制台，本日两次实证）
+- **构建实测**：c3 回归守卫 SUCCESS 3m09s（增量）；`piod start -e esp32-s3` 全量 SUCCESS 4m58s；partitions.bin = default_16MB 布局（app0/app1 各 6.25MB @0x10000/0x650000 + coredump）
+- 出口准则达成：**双环境全绿**，C3 路径零行为变化（条件分支对 C3 编译恒等），S3 固件 866KB 就绪待 P2 烧录
 
 ### P2 上板点亮（挪线 + 烧录）
 
