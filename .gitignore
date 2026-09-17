@@ -12,3 +12,4 @@ monitor_ntp.py
 AGENTS.md
 .memory.git/
 芯片资料/ESP32S3/esp-dev-kits-zh_CN-master-esp32s3.pdf
+!dist/merged_*.bin
