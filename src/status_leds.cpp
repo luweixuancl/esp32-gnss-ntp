@@ -1,24 +1,57 @@
 #include "status_leds.h"
+#include <Arduino.h>
 #include "app_ipc.h"
 #include "config.h"
 
+#if defined(ARDUINO_ESP32S3_DEV)
+// Both logical LEDs share the onboard SK6812-mini (GPIO38): D4 pattern -> R
+// channel, D5 pattern -> G channel. Patterns below stay byte-identical to the
+// C3 discrete-LED version; only the output sink differs.
+static bool rgbD4On_ = false;
+static bool rgbD5On_ = false;
+
+static void flushRgb() {
+  const uint8_t v = LED_RGB_BRIGHTNESS;
+  neopixelWrite(PIN_LED_RGB, rgbD4On_ ? v : 0, rgbD5On_ ? v : 0, 0);
+}
+#else
+static void flushRgb() {
+}
+#endif
+
+static void setLed(uint8_t pin, bool on) {
+#if defined(ARDUINO_ESP32S3_DEV)
+  if (pin == PIN_LED_D4) {
+    rgbD4On_ = on;
+  } else {
+    rgbD5On_ = on;
+  }
+#else
+  digitalWrite(pin, on ? HIGH : LOW);
+#endif
+}
+
 void StatusLeds::begin() {
+#if defined(ARDUINO_ESP32S3_DEV)
+  flushRgb();  // RGB off (boot default is off; be explicit)
+#else
   pinMode(PIN_LED_D4, OUTPUT);
   pinMode(PIN_LED_D5, OUTPUT);
   digitalWrite(PIN_LED_D4, LOW);
   digitalWrite(PIN_LED_D5, LOW);
+#endif
   // Leave kicks at 0 until each task actually runs (see tasksStale).
 }
 
 void StatusLeds::writeBlink(uint8_t pin, uint32_t nowMs, uint32_t halfPeriodMs) {
   const bool on = ((nowMs / halfPeriodMs) % 2) == 0;
-  digitalWrite(pin, on ? HIGH : LOW);
+  setLed(pin, on);
 }
 
 void StatusLeds::writeHeartbeat(uint8_t pin, uint32_t nowMs) {
   const uint32_t period = LED_HEARTBEAT_ON_MS + LED_HEARTBEAT_OFF_MS;
   const bool on = (nowMs % period) < LED_HEARTBEAT_ON_MS;
-  digitalWrite(pin, on ? HIGH : LOW);
+  setLed(pin, on);
 }
 
 bool StatusLeds::tasksStale(uint32_t nowMs) {
@@ -52,8 +85,9 @@ void StatusLeds::loop(bool apMode, bool wifiStaOk, const GpsStatus& st) {
       ESP.restart();
     }
     const bool phase = ((now / LED_PANIC_HALF_PERIOD_MS) % 2) == 0;
-    digitalWrite(PIN_LED_D4, phase ? HIGH : LOW);
-    digitalWrite(PIN_LED_D5, phase ? LOW : HIGH);
+    setLed(PIN_LED_D4, phase);
+    setLed(PIN_LED_D5, !phase);
+    flushRgb();
     return;
   }
   panicSinceMs_ = 0;
@@ -75,6 +109,7 @@ void StatusLeds::loop(bool apMode, bool wifiStaOk, const GpsStatus& st) {
   } else if (st.validFix || st.satellites > 0 || st.clockState == ClockState::Acquiring) {
     writeBlink(PIN_LED_D5, now, 400);
   } else {
-    digitalWrite(PIN_LED_D5, LOW);
+    setLed(PIN_LED_D5, false);
   }
+  flushRgb();
 }

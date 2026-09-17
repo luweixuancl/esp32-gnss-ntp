@@ -22,6 +22,7 @@
 #define PIN_ENC_SW           5
 #define PIN_LED_D4          12   // D4 RUN / WiFi
 #define PIN_LED_D5          13   // D5 GPS / PPS / NTP ready
+#define PIN_LED_RGB         38   // S3 onboard SK6812-mini RGB (D6, 3V3): D4->R / D5->G
 #define TASK_TIME_CORE       1   // dual-core: task-time alone on core 1
 
 #else
@@ -60,7 +61,9 @@
 #define ENC_MIN_STEP_MS            50   // min gap between UI ticks (smooth, not bursty)
 #define ENC_ISR_DEBOUNCE_US       250   // ISR edge floor; Gray table rejects 2-bit jumps
 
-// On-board LEDs (合宙 CORE D4/D5 on C3; same pins wired on S3): active HIGH
+// On-board LEDs (合宙 CORE D4/D5 on C3; S3 merges both onto the onboard RGB @38)
+// Active HIGH on C3. RGB brightness cap: WS2812-class @3V3 is very bright.
+#define LED_RGB_BRIGHTNESS  30   // 0-255 per channel on S3 RGB
 
 // SoftAP for web WiFi setup (SSID prefix). Password default: NTP-<MAC low 16-bit hex>.
 #define AP_SSID_PREFIX      "NTP-Setup"
