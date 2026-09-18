@@ -347,7 +347,7 @@ void DisplayUi::loop(EncoderInput& enc, GpsService& gps, WifiManager& wifi, NtpS
 }
 
 void DisplayUi::drawHome(const GpsStatus& st, const WifiManager& wifi, const AppSettings& settings) {
-  // Scheme A (128×64): top status chips · large time · SSID · IP+SYNC
+  // Scheme A (128×64): top status chips · large time · SSID · IP+S1/HLD/WAIT
   // Built-in font: size1 = 6×8, size2 = 12×16.
 
   static const uint8_t kIconSat[] PROGMEM = {
@@ -400,7 +400,7 @@ void DisplayUi::drawHome(const GpsStatus& st, const WifiManager& wifi, const App
   clockLine(display_, 12, timeBuf);
 
   // --- SSID (left) + firmware mark (right) ---
-  // Mark is short ("v1.1.18") so a glance after flash/OTA confirms the build.
+  // Mark is short ("v1.1.19") so a glance after flash/OTA confirms the build.
   display_.setTextSize(1);
   String ssid;
   if (sta) {
@@ -435,7 +435,7 @@ void DisplayUi::drawHome(const GpsStatus& st, const WifiManager& wifi, const App
   display_.setCursor(128 - markW, 38);
   display_.print(mark);
 
-  // --- IP + SYNC ---
+  // --- IP + sync chip (same S1/HLD/WAIT vocabulary as web badge) ---
   display_.setCursor(0, 52);
   if (sta) {
     display_.print(link.staIp);
@@ -445,7 +445,13 @@ void DisplayUi::drawHome(const GpsStatus& st, const WifiManager& wifi, const App
     display_.print("--.--.--.--");
   }
 
-  const char* sync = st.timeValid ? "SYNC" : "WAIT";
+  const bool otaBusy = ipcOtaBusy();
+  const bool s1 = !otaBusy && st.timeValid && st.clockState == ClockState::Locked && st.ppsFresh;
+  const bool serving =
+      !otaBusy && st.timeValid &&
+      (st.clockState == ClockState::Locked || st.clockState == ClockState::Degraded ||
+       st.clockState == ClockState::Holdover);
+  const char* sync = s1 ? "S1" : (serving ? "HLD" : "WAIT");
   display_.setCursor(128 - static_cast<int16_t>(strlen(sync) * 6), 52);
   display_.print(sync);
 }

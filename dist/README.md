@@ -9,7 +9,7 @@
 
 ## Current app build
 
-- Mark: **v1.1.18** (`FW_MARK`)
+- Mark: **v1.1.19** (`FW_MARK`)
 - Branch tip when refreshed: see git history on `dist/firmware*.bin`
 
 ## Verify before Web OTA

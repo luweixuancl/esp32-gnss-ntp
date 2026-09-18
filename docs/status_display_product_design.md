@@ -1,6 +1,6 @@
 # 正式产品状态显示调研与本项目方案
 
-> 状态：**P0 已落地（v1.1.17）** · 2026-09-18  
+> 状态：**P0–P2 已落地（v1.1.19）** · 2026-09-18  
 > 范围：网页状态页 / OLED / 状态灯 / 观测接口的信息架构与刷新策略  
 > 相关：[status_json_1hz_cadence_20260918.md](status_json_1hz_cadence_20260918.md)、[ext_clock_design.md](ext_clock_design.md)、[s3_deep_dive_roadmap.md](s3_deep_dive_roadmap.md)
 
@@ -94,15 +94,15 @@ OLED 的 SYNC/WAIT、网页主徽章、灯语 B 通道语义应共用这一张�
 - 文案中文化统一；去掉首屏 Residual/LI/RefID 等  
 - 保持 `/status` `/metrics` 不变（调试与监控入口放页脚）
 
-### P1 — API 可选瘦身（可选）
+### P1 — API 可选瘦身——**已合入 v1.1.19**
 
-- 增加 `GET /status?view=ui`：仅徽章所需字段 + `utcEpoch/utcFracMs` + 身份 + 少量参考  
-- 全量 `/status` 留给工具；减小弱网下校准包体积  
+- `GET /status?view=ui`：徽章字段 + `utcEpoch/utcFracMs` + 身份 + 少量参考  
+- 全量 `/status` 留给工具；首页默认拉瘦包，展开「工程细节」时拉全量  
 
-### P2 — OLED/灯语文案对齐（可选）
+### P2 — OLED/灯语文案对齐——**已合入 v1.1.19**
 
-- Home 底栏与网页徽章同一套 S1/HLD/WAIT 词表  
-- README 状态灯表与网页色一致引用  
+- Home 底栏与网页徽章同一套 **S1 / HLD / WAIT** 词表  
+- README 状态灯表与网页色语义一致（绿=S1 · 黄=HLD · 红=WAIT）
 
 ### 明确不做（本方案）
 

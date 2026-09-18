@@ -15,7 +15,7 @@ GNSS：大夏龙雀 DX-GP22（GPS/北斗/GLONASS 多模，9600 8N1，定位后 1
 2. **本地时钟**：PPS 驯服 + NMEA 交叉检核（residual 告警）+ EMA 频偏估计 + Holdover 守时外推；异常策略可选 Refuse / Holdover 30s / 300s（NVS 持久化）
 3. **OLED 状态页**：大字体本地时间、WiFi SSID/IP、星数·时钟态 / RSSI·AP 角标、SYNC/WAIT；无操作自动息屏防烧屏（档位可调，旋钮唤醒）
 4. **旋转编码器菜单**：扫 WiFi、网页配网、静态 IP（ARP 冲突探测）、时区、异常策略、NTP ACL、温度补偿、息屏、NTP 统计、重启
-5. **网页门户**：`/` 只读状态页（1 Hz 刷新）；`/setup` `/login` 登录后进 `/cfg` 设置（会话 Cookie ~30 min）；`/status` `/metrics` 只读开放
+5. **网页门户**：`/` 产品态状态页（徽章 S1/HLD/WAIT + 大时间外推；工程细节折叠）；`/setup` `/login` 登录后进 `/cfg`；`/status?view=ui` 瘦包 / `/status` 全量 / `/metrics` 只读开放
 6. **WiFi 永久重连**：掉线后 30s 封顶退避无限重试；**绝不自动切 SoftAP**——配网仅在「开机无已存 SSID」或「菜单 Web Setup 手动触发」时开启
 7. **NTP B1 限流 + B3 ACL**：每 IP 4 req/s 超限 KoD `RATE`、持续超限 `DENY` 冷却、全局 32 pkt/s 静默丢弃；ACL AllowList（默认 Off，最多 8 条）
 8. **状态灯**：C3 双色 LED（D4 网络/D5 GNSS）；S3 板载 RGB 三通道（R=网络 / G=时钟 / B=NTP 授时中），语义见下
@@ -60,9 +60,9 @@ GNSS：大夏龙雀 DX-GP22（GPS/北斗/GLONASS 多模，9600 8N1，定位后 1
 | 配网 AP | 快闪 ~4 Hz | — | R 快闪 |
 | 未连任何网 | 慢闪 ~1 Hz | — | R 慢闪 |
 | ACQ 搜星 | — | 慢闪 | G 慢闪 |
-| **LCK/DEG 锁定** | — | 心跳（与 D4 反相） | G 心跳 + **B 常亮（NTP 授时中）** |
-| HLD 守时 | — | 快闪 | G 快闪 + B 常亮（降级仍授时） |
-| UNS/无星 | — | 灭 | 灭 |
+| **LCK/DEG 锁定** | — | 心跳（与 D4 反相） | G 心跳 + **B 常亮（NTP 授时中）**；OLED/网页徽章 **S1**（纯 LCK+PPS）或 **HLD**（DEG） |
+| HLD 守时 | — | 快闪 | G 快闪 + B 常亮（降级仍授时）；徽章 **HLD** |
+| UNS/无星 | — | 灭 | 灭；徽章 **WAIT** |
 | **OTA 上传中** | 同步快闪 | 同步快闪 | **琥珀（R+G）快闪**；NTP 拒绝授时 |
 | **OTA 成功待重启** | 灭 | 常亮 | **绿灯常亮** |
 | **OTA 失败** | 红闪 ~2s | 灭 | **红闪 ~2s** |

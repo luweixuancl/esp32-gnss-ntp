@@ -103,7 +103,7 @@ void WebPortal::begin(WifiManager* wifi, GpsService* gps, NtpServer* ntp) {
   });
   server_.begin();
   started_ = true;
-  Serial.println("HTTP on :80  (/ /status /metrics open; /cfg+/ota need login)");
+  Serial.println("HTTP on :80  (/ /status|/status?view=ui /metrics open; /cfg+/ota need login)");
 }
 
 void WebPortal::loop() {
@@ -353,8 +353,9 @@ void WebPortal::handleRoot() {
       "<div class='row'><span class='k'>内存</span><span class='v' id='heap'>--</span></div>"
       "<div class='row'><span class='k'>温度</span><span class='v' id='temp'>--</span></div>"
       "</details>"
-      "<p class='foot'>时间本地外推 · 状态约 2 s 校准<br>"
-      "JSON <a href='/status'>/status</a> · 指标 <a href='/metrics'>/metrics</a></p>"
+      "<p class='foot'>时间本地外推 · 状态约 2 s 校准（UI 瘦包）<br>"
+      "JSON <a href='/status?view=ui'>/status?view=ui</a> · "
+      "<a href='/status'>/status</a> · 指标 <a href='/metrics'>/metrics</a></p>"
       "<script>"
       "function pad(n){return n<10?'0'+n:''+n}"
       "function fmtFull(epoch,tz){"
@@ -374,6 +375,10 @@ void WebPortal::handleRoot() {
       "function setBadge(cls,text){"
       " const el=document.getElementById('badge');"
       " el.className='badge '+(cls||''); el.textContent=text}"
+      "function applyBadge(s1,have){"
+      " if(s1)setBadge('ok','S1');"
+      " else if(have)setBadge('warn','HLD');"
+      " else setBadge('bad','WAIT')}"
       "let tickBusy=false, tickStarted=0, tickTimer=0, baseEpoch=0, baseMono=0, tzHours=0;"
       "function paintedEpoch(){"
       " if(!baseEpoch)return 0;"
@@ -399,6 +404,75 @@ void WebPortal::handleRoot() {
       " if(tickTimer)clearTimeout(tickTimer);"
       " tickTimer=setTimeout(tick,Math.max(400,afterMs|0))"
       "}"
+      "function statusUrl(){"
+      " const d=document.querySelector('details.adv');"
+      " return (d&&d.open)?'/status':'/status?view=ui'}"
+      "function applyHero(j){"
+      " const g=j.gps||{}, n=j.ntp||{};"
+      " const have=!!n.synced, s1=!!n.stratum1Ready;"
+      " applyBadge(s1,have);"
+      " tzHours=j.tzHours||0;"
+      " applyUtc(g.utcEpoch, g.utcFracMs);"
+      " paintTime();"
+      " const ip=j.ip||'--', ssid=j.ssid||'--';"
+      " const rssi=(j.rssi!=null)?(j.rssi+' dBm'):'--';"
+      " document.getElementById('ident').textContent=ip+' · '+ssid+' · '+rssi;"
+      "}"
+      "function applyDetails(j){"
+      " const g=j.gps||{}, n=j.ntp||{}, c=j.clock||{};"
+      " const have=!!n.synced, pps=!!g.ppsFresh, s1=!!n.stratum1Ready;"
+      " const st=document.getElementById('ntpState');"
+      " if(!st)return;"
+      " st.textContent=s1?'S1 就绪':(have?'HLD 降级/守时':'WAIT 未同步');"
+      " setCls(st,s1?'ok':(have?'warn':'bad'));"
+      " document.getElementById('clk').textContent=c.state||'--';"
+      " document.getElementById('res').textContent=(c.residualMs!=null)?(c.residualMs+' ms'):'--';"
+      " document.getElementById('freq').textContent=(c.freqPpm!=null)"
+      "  ?(Number(c.freqPpm).toFixed(2)+' ppm'):'--';"
+      " document.getElementById('qual').textContent=(g.qualityMs!=null)?(g.qualityMs+' ms'):'--';"
+      " document.getElementById('apol').textContent=j.anomalyLabel||'--';"
+      " document.getElementById('hold').textContent=(j.holdoverSec!=null)?(j.holdoverSec+' s'):'--';"
+      " const hm=document.getElementById('holdms');"
+      " hm.textContent=(c.holdoverMs>0)?(Math.round(c.holdoverMs/1000)+' s'):'-';"
+      " setCls(hm,c.holdoverMs>0?'warn':'');"
+      " document.getElementById('stratum').textContent=(n.stratum!=null)?n.stratum:'--';"
+      " const li=document.getElementById('li');"
+      " li.textContent=(n.li!=null)?('LI='+n.li):'--'; setCls(li,n.li===0?'ok':'warn');"
+      " document.getElementById('refId').textContent=n.refId||'GPSS';"
+      " document.getElementById('ntpReq').textContent=(n.requests!=null)?n.requests:'--';"
+      " const fx=document.getElementById('fix');"
+      " fx.textContent=g.fix?'是':'否'; setCls(fx,g.fix?'ok':'bad');"
+      " document.getElementById('sats').textContent=(g.satellites!=null)?g.satellites:'--';"
+      " document.getElementById('hdop').textContent=(g.hdop!=null)?Number(g.hdop).toFixed(1):'--';"
+      " const pp=document.getElementById('pps');"
+      " pp.textContent=(pps?'正常':'无')+' ('+(g.ppsCount||0)+')'; setCls(pp,pps?'ok':'bad');"
+      " document.getElementById('age').textContent=(g.ageMs!=null)?(g.ageMs+' ms'):'--';"
+      " const tv=document.getElementById('tvalid');"
+      " tv.textContent=g.timeValid?'有效':'无效'; setCls(tv,g.timeValid?'ok':'bad');"
+      " document.getElementById('ll').textContent=g.fix"
+      "  ?(Number(g.lat).toFixed(5)+', '+Number(g.lon).toFixed(5)):'--';"
+      " document.getElementById('served').textContent=(n.served!=null)?n.served:'--';"
+      " document.getElementById('rate').textContent=(n.rateLimited!=null)?n.rateLimited:'--';"
+      " document.getElementById('deny').textContent=(n.denied!=null)?n.denied:'--';"
+      " document.getElementById('drop').textContent=(n.dropped!=null)?n.dropped:'--';"
+      " document.getElementById('adny').textContent=(n.aclDenied!=null)?n.aclDenied:'--';"
+      " document.getElementById('clients').textContent=(n.clients!=null)?n.clients:'--';"
+      " document.getElementById('aclm').textContent=(j.ntpAclLabel||'--')"
+      "  +' ('+((j.ntpAcl&&j.ntpAcl.length)||0)+')';"
+      " document.getElementById('ip').textContent=j.ip||'--';"
+      " document.getElementById('ssid').textContent=j.ssid||'--';"
+      " document.getElementById('rssi').textContent=(j.rssi!=null)?(j.rssi+' dBm'):'--';"
+      " document.getElementById('mac').textContent=j.mac||'--';"
+      " document.getElementById('up').textContent=fmtUp(j.uptimeSec);"
+      " document.getElementById('fw').textContent=(j.fwMark||j.fwVersion||'--')"
+      "  +' · '+(j.otaRunning||'?')+'/'+(j.otaState||'?');"
+      " const hb=Math.round((j.freeHeap||0)/1024), hmn=Math.round((j.minFreeHeap||0)/1024);"
+      " const he=document.getElementById('heap');"
+      " he.textContent=hb+' KB (min '+hmn+')'; setCls(he,hb<20480?'bad':'');"
+      " const tp=document.getElementById('temp');"
+      " tp.textContent=(c.tempC!=null)?(Number(c.tempC).toFixed(1)+'°C · '"
+      "  +(c.tempComp?('补偿 '+Number(c.tempCorrPpm||0).toFixed(2)+' ppm'):'补偿关')):'--';"
+      "}"
       "async function tick(){"
       " if(tickBusy){"
       "  if(Date.now()-tickStarted < 3000){scheduleTick(400);return;}"
@@ -406,72 +480,15 @@ void WebPortal::handleRoot() {
       " tickBusy=true; tickStarted=Date.now();"
       " const t0=Date.now();"
       " try{"
-      "  const r=await fetch('/status'); const j=await r.json();"
-      "  const g=j.gps||{}, n=j.ntp||{}, c=j.clock||{};"
-      "  const have=!!n.synced, pps=!!g.ppsFresh, s1=!!n.stratum1Ready;"
-      "  if(s1)setBadge('ok','Stratum 1');"
-      "  else if(have)setBadge('warn','降级 / 守时');"
-      "  else setBadge('bad','未同步');"
-      "  const st=document.getElementById('ntpState');"
-      "  st.textContent=s1?'Stratum 1 就绪':(have?'降级/守时':'未同步');"
-      "  setCls(st,s1?'ok':(have?'warn':'bad'));"
-      "  document.getElementById('clk').textContent=c.state||'--';"
-      "  document.getElementById('res').textContent=(c.residualMs!=null)?(c.residualMs+' ms'):'--';"
-      "  document.getElementById('freq').textContent=(c.freqPpm!=null)"
-      "    ?(Number(c.freqPpm).toFixed(2)+' ppm'):'--';"
-      "  document.getElementById('qual').textContent=(g.qualityMs!=null)?(g.qualityMs+' ms'):'--';"
-      "  document.getElementById('apol').textContent=j.anomalyLabel||'--';"
-      "  document.getElementById('hold').textContent=(j.holdoverSec!=null)?(j.holdoverSec+' s'):'--';"
-      "  const hm=document.getElementById('holdms');"
-      "  hm.textContent=(c.holdoverMs>0)?(Math.round(c.holdoverMs/1000)+' s'):'-';"
-      "  setCls(hm,c.holdoverMs>0?'warn':'');"
-      "  document.getElementById('stratum').textContent=(n.stratum!=null)?n.stratum:'--';"
-      "  const li=document.getElementById('li');"
-      "  li.textContent=(n.li!=null)?('LI='+n.li):'--'; setCls(li,n.li===0?'ok':'warn');"
-      "  document.getElementById('refId').textContent=n.refId||'GPSS';"
-      "  document.getElementById('ntpReq').textContent=(n.requests!=null)?n.requests:'--';"
-      "  tzHours=j.tzHours||0;"
-      "  applyUtc(g.utcEpoch, g.utcFracMs);"
-      "  paintTime();"
-      "  const fx=document.getElementById('fix');"
-      "  fx.textContent=g.fix?'是':'否'; setCls(fx,g.fix?'ok':'bad');"
-      "  document.getElementById('sats').textContent=(g.satellites!=null)?g.satellites:'--';"
-      "  document.getElementById('hdop').textContent=(g.hdop!=null)?Number(g.hdop).toFixed(1):'--';"
-      "  const pp=document.getElementById('pps');"
-      "  pp.textContent=(pps?'正常':'无')+' ('+(g.ppsCount||0)+')'; setCls(pp,pps?'ok':'bad');"
-      "  document.getElementById('age').textContent=(g.ageMs!=null)?(g.ageMs+' ms'):'--';"
-      "  const tv=document.getElementById('tvalid');"
-      "  tv.textContent=g.timeValid?'有效':'无效'; setCls(tv,g.timeValid?'ok':'bad');"
-      "  document.getElementById('ll').textContent=g.fix"
-      "    ?(Number(g.lat).toFixed(5)+', '+Number(g.lon).toFixed(5)):'--';"
-      "  document.getElementById('served').textContent=(n.served!=null)?n.served:'--';"
-      "  document.getElementById('rate').textContent=(n.rateLimited!=null)?n.rateLimited:'--';"
-      "  document.getElementById('deny').textContent=(n.denied!=null)?n.denied:'--';"
-      "  document.getElementById('drop').textContent=(n.dropped!=null)?n.dropped:'--';"
-      "  document.getElementById('adny').textContent=(n.aclDenied!=null)?n.aclDenied:'--';"
-      "  document.getElementById('clients').textContent=(n.clients!=null)?n.clients:'--';"
-      "  document.getElementById('aclm').textContent=(j.ntpAclLabel||'--')"
-      "    +' ('+((j.ntpAcl&&j.ntpAcl.length)||0)+')';"
-      "  const ip=j.ip||'--', ssid=j.ssid||'--';"
-      "  const rssi=(j.rssi!=null)?(j.rssi+' dBm'):'--';"
-      "  document.getElementById('ip').textContent=ip;"
-      "  document.getElementById('ssid').textContent=ssid;"
-      "  document.getElementById('rssi').textContent=rssi;"
-      "  document.getElementById('ident').textContent=ip+' · '+ssid+' · '+rssi;"
-      "  document.getElementById('mac').textContent=j.mac||'--';"
-      "  document.getElementById('up').textContent=fmtUp(j.uptimeSec);"
-      "  document.getElementById('fw').textContent=(j.fwMark||j.fwVersion||'--')"
-      "    +' · '+(j.otaRunning||'?')+'/'+(j.otaState||'?');"
-      "  const hb=Math.round((j.freeHeap||0)/1024), hmn=Math.round((j.minFreeHeap||0)/1024);"
-      "  const he=document.getElementById('heap');"
-      "  he.textContent=hb+' KB (min '+hmn+')'; setCls(he,hb<20480?'bad':'');"
-      "  const tp=document.getElementById('temp');"
-      "  tp.textContent=(c.tempC!=null)?(Number(c.tempC).toFixed(1)+'°C · '"
-      "    +(c.tempComp?('补偿 '+Number(c.tempCorrPpm||0).toFixed(2)+' ppm'):'补偿关')):'--';"
+      "  const r=await fetch(statusUrl()); const j=await r.json();"
+      "  applyHero(j);"
+      "  if(j.view!=='ui')applyDetails(j);"
       " }catch(e){}"
       " tickBusy=false;"
       " scheduleTick(2000-(Date.now()-t0));"
       "}"
+      "const adv=document.querySelector('details.adv');"
+      " if(adv){adv.addEventListener('toggle',function(){if(adv.open)tick();});}"
       "tick(); setInterval(paintTime,250);"
       "</script>");
 
@@ -1104,6 +1121,66 @@ void WebPortal::handleOtaDone() {
 }
 
 void WebPortal::handleStatus() {
+  const bool uiView =
+      server_.hasArg("view") && server_.arg("view").equalsIgnoreCase("ui");
+
+  const WifiLinkSnapshot link = wifi_ ? wifi_->linkSnapshot() : WifiLinkSnapshot{};
+  const GpsStatus st = gps_ ? gps_->snapshot() : GpsStatus{};
+  const bool otaBusy = ipcOtaBusy();
+  const bool syncOk = !otaBusy && st.timeValid &&
+                      (st.clockState == ClockState::Locked || st.clockState == ClockState::Degraded ||
+                       st.clockState == ClockState::Holdover);
+  const bool s1 =
+      !otaBusy && st.timeValid && st.clockState == ClockState::Locked && st.ppsFresh;
+
+  uint32_t utcEpoch = st.utcEpoch;
+  uint32_t utcFracMs = 0;
+  {
+    uint32_t liveSec = 0;
+    uint32_t liveFrac = 0;
+    if (gps_ && gps_->nowUtc(liveSec, liveFrac)) {
+      utcEpoch = liveSec;
+      utcFracMs =
+          static_cast<uint32_t>((static_cast<double>(liveFrac) / 4294967296.0) * 1000.0);
+    }
+  }
+
+  int tzHours = 8;
+  AppSettings s;
+  const bool haveSettings = settingsCopy(pdMS_TO_TICKS(20), &s);
+  if (haveSettings) {
+    tzHours = s.timezoneHours;
+  }
+
+  // Product UI poll: badge + clock calibrate + identity + light reference.
+  if (uiView) {
+    JsonDocument doc;
+    doc["view"] = "ui";
+    doc["fwMark"] = FW_MARK;
+    doc["tzHours"] = tzHours;
+    doc["ip"] = (link.staUp ? link.staIp : link.apIp).toString();
+    doc["ssid"] = link.staUp ? link.staSsid : "";
+    doc["rssi"] = link.staUp ? link.rssi : 0;
+    doc["badge"] = s1 ? "S1" : (syncOk ? "HLD" : "WAIT");
+    JsonObject gps = doc["gps"].to<JsonObject>();
+    gps["utcEpoch"] = utcEpoch;
+    gps["utcFracMs"] = utcFracMs;
+    gps["satellites"] = st.satellites;
+    gps["ppsFresh"] = st.ppsFresh;
+    gps["ppsCount"] = st.ppsCount;
+    JsonObject clock = doc["clock"].to<JsonObject>();
+    clock["state"] = clockStateLabel(st.clockState);
+    clock["freqPpm"] = st.freqPpm;
+    JsonObject ntp = doc["ntp"].to<JsonObject>();
+    ntp["synced"] = syncOk;
+    ntp["stratum1Ready"] = s1;
+    String out;
+    serializeJson(doc, out);
+    sendNoCache();
+    server_.send(200, "application/json", out);
+    return;
+  }
+
   JsonDocument doc;
   doc["fwVersion"] = FW_VERSION;
   doc["fwMark"] = FW_MARK;
@@ -1111,11 +1188,10 @@ void WebPortal::handleStatus() {
   doc["otaNext"] = gOta.nextLabel();
   doc["otaNextSize"] = gOta.nextSlotSize();
   doc["otaState"] = gOta.imageStateLabel();
-  doc["otaBusy"] = ipcOtaBusy();
+  doc["otaBusy"] = otaBusy;
   doc["otaPhase"] = ipcOtaPhaseLabel();
   doc["otaChip"] = gOta.expectedChipName();
-  doc["ntpServing"] = !ipcOtaBusy();
-  const WifiLinkSnapshot link = wifi_ ? wifi_->linkSnapshot() : WifiLinkSnapshot{};
+  doc["ntpServing"] = !otaBusy;
   doc["sta"] = link.staUp;
   doc["ip"] = (link.staUp ? link.staIp : link.apIp).toString();
   doc["ssid"] = link.staUp ? link.staSsid : "";
@@ -1133,8 +1209,7 @@ void WebPortal::handleStatus() {
   bool tcmp = false;
   int16_t tcpc = CLK_TEMP_COEFF_CENTI;
   IPAddress aclIps[NTP_ACL_MAX_ENTRIES];
-  AppSettings s;
-  if (settingsCopy(pdMS_TO_TICKS(20), &s)) {
+  if (haveSettings) {
     doc["tzHours"] = s.timezoneHours;
     apol = s.anomalyPolicy;
     hold = s.holdoverSec;
@@ -1150,7 +1225,7 @@ void WebPortal::handleStatus() {
       aclIps[i] = s.ntpAcl[i];
     }
   } else {
-    doc["tzHours"] = 8;
+    doc["tzHours"] = tzHours;
   }
   doc["anomalyPolicy"] = static_cast<uint8_t>(apol);
   doc["anomalyLabel"] = anomalyPolicyMenuLabel(apol);
@@ -1168,7 +1243,6 @@ void WebPortal::handleStatus() {
     }
   }
 
-  const GpsStatus st = gps_ ? gps_->snapshot() : GpsStatus{};
   JsonObject gps = doc["gps"].to<JsonObject>();
   gps["fix"] = st.validFix;
   gps["satellites"] = st.satellites;
@@ -1202,18 +1276,8 @@ void WebPortal::handleStatus() {
   ppsRmt["idfStage"] = st.ppsRmt.idfStage;
   ppsRmt["idfErr"] = st.ppsRmt.idfErr;
 #endif
-  {
-    uint32_t liveSec = 0;
-    uint32_t liveFrac = 0;
-    if (gps_ && gps_->nowUtc(liveSec, liveFrac)) {
-      gps["utcEpoch"] = liveSec;
-      gps["utcFracMs"] =
-          static_cast<uint32_t>((static_cast<double>(liveFrac) / 4294967296.0) * 1000.0);
-    } else {
-      gps["utcEpoch"] = st.utcEpoch;
-      gps["utcFracMs"] = 0;
-    }
-  }
+  gps["utcEpoch"] = utcEpoch;
+  gps["utcFracMs"] = utcFracMs;
   gps["ageMs"] = st.ageMs;
   gps["timeValid"] = st.timeValid;
   gps["qualityMs"] = st.qualityMs;
@@ -1240,14 +1304,9 @@ void WebPortal::handleStatus() {
   }
 
   JsonObject ntp = doc["ntp"].to<JsonObject>();
-  const bool otaBusy = ipcOtaBusy();
-  const bool syncOk = !otaBusy && st.timeValid &&
-                      (st.clockState == ClockState::Locked || st.clockState == ClockState::Degraded ||
-                       st.clockState == ClockState::Holdover);
   ntp["synced"] = syncOk;
   ntp["stratum"] = syncOk ? 1 : 16;
-  ntp["stratum1Ready"] =
-      !otaBusy && st.timeValid && st.clockState == ClockState::Locked && st.ppsFresh;
+  ntp["stratum1Ready"] = s1;
   ntp["refId"] = otaBusy ? "RSTR" : (syncOk ? "GPSS" : "INIT");
   // LI is leap-second indicator only; holdover stays LI=0 with rising dispersion.
   ntp["li"] = syncOk ? 0 : 3;
