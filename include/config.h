@@ -183,6 +183,8 @@
 #define GPS_PPS_RMT_WINDOW_MS        20   // capture window after the edge
 #define GPS_PPS_RMT_FILTER_NS      1000   // hw-glitch filter: drop <1 µs pulses
 #define GPS_PPS_RMT_STALE_MS        2100   // no RMT edges for this long -> fall back to GPIO
+#define GPS_PPS_RMT_HOLD_MS         700    // hold a GPIO edge for its refinement: pulse(<=500ms)
+                                           // + 20 ms window + margin; refined edges arrive sooner
 // Missed PPS seconds ≥ this → Unsynced (not silent catch-up only).
 #define CLK_PPS_MISS_UNSYNC           3
 // Holdover dispersion: floor crystal error (ppm) when EMA is still small.

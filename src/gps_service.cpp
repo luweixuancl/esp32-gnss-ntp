@@ -57,6 +57,9 @@ struct IdfPpsState {
   uint8_t stage = 0;  // 1=config 2=install 4=ringbuf 8=task
   uint32_t frames = 0;
   uint32_t firstSyms = 0;
+  uint32_t lastSyms = 0;
+  uint32_t lastD0Us = 0;  // first symbol of the last frame: low-level length
+  uint32_t lastD1Us = 0;  // first symbol of the last frame: high-level length
   RingbufHandle_t rb = nullptr;
 };
 static IdfPpsState gIdf;
@@ -223,6 +226,12 @@ void GpsService::rmtIdfTask(void* arg) {
     if (gIdf.firstSyms == 0) {
       gIdf.firstSyms = static_cast<uint32_t>(len / sizeof(rmt_item32_t));
     }
+    gIdf.lastSyms = static_cast<uint32_t>(len / sizeof(rmt_item32_t));
+    if (len >= sizeof(rmt_item32_t)) {
+      const uint32_t sym = *static_cast<const uint32_t*>(item);
+      gIdf.lastD0Us = (sym & 0x7FFF) * (GPS_PPS_RMT_TICK_NS / 1000);
+      gIdf.lastD1Us = ((sym >> 16) & 0x7FFF) * (GPS_PPS_RMT_TICK_NS / 1000);
+    }
     rmtProcessSymbols(static_cast<const uint32_t*>(item),
                       len / sizeof(rmt_item32_t));
     vRingbufferReturnItem(gIdf.rb, item);
@@ -384,7 +393,7 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
 #if GPS_PPS_RMT_EN
   if (gRmt.armed && npend != 0) {
     const uint64_t nowUs = esp_timer_get_time();
-    const uint64_t holdNs = static_cast<uint64_t>(GPS_PPS_RMT_WINDOW_MS + 5) * 1000000ULL;
+    const uint64_t holdNs = static_cast<uint64_t>(GPS_PPS_RMT_HOLD_MS) * 1000000ULL;
     size_t out = 0;
     for (size_t i = 0; i < npend; ++i) {
       int64_t refined = -1;
@@ -478,6 +487,9 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
   work.ppsRmt.idfOk = gIdf.ok;
   work.ppsRmt.idfFrames = gIdf.frames;
   work.ppsRmt.idfFirstSyms = gIdf.firstSyms;
+  work.ppsRmt.idfLastSyms = gIdf.lastSyms;
+  work.ppsRmt.idfLastD0Us = gIdf.lastD0Us;
+  work.ppsRmt.idfLastD1Us = gIdf.lastD1Us;
 #endif
 
   if (gps_.date.isValid() && gps_.time.isValid()) {

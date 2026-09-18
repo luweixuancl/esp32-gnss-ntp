@@ -45,6 +45,9 @@ struct GpsStatus {
     bool idfOk = false;
     uint32_t idfFrames = 0;
     uint32_t idfFirstSyms = 0;
+    uint32_t idfLastSyms = 0;
+    uint32_t idfLastD0Us = 0;
+    uint32_t idfLastD1Us = 0;
   };
   PpsRmtStats ppsRmt;
 };
