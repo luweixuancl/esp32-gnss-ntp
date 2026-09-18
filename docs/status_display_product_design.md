@@ -1,6 +1,6 @@
 # 正式产品状态显示调研与本项目方案
 
-> 状态：**方案（未改 UI 代码）** · 2026-09-18  
+> 状态：**P0 已落地（v1.1.17）** · 2026-09-18  
 > 范围：网页状态页 / OLED / 状态灯 / 观测接口的信息架构与刷新策略  
 > 相关：[status_json_1hz_cadence_20260918.md](status_json_1hz_cadence_20260918.md)、[ext_clock_design.md](ext_clock_design.md)、[s3_deep_dive_roadmap.md](s3_deep_dive_roadmap.md)
 
@@ -88,7 +88,7 @@ OLED 的 SYNC/WAIT、网页主徽章、灯语 B 通道语义应共用这一张�
 
 ## 4. 分阶段落地（实施时按此序）
 
-### P0 — 信息架构（纯前端 HTML/JS，风险低）
+### P0 — 信息架构（纯前端 HTML/JS）——**已合入 v1.1.17**
 
 - `/` 改为：大时间 + 三色徽章 + 身份行；原四卡片细节收入 `<details>` 或「高级」折叠  
 - 文案中文化统一；去掉首屏 Residual/LI/RefID 等  
