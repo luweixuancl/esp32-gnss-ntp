@@ -1,10 +1,10 @@
-# PSRAM `/history` 板测执行单（v1.1.10+）
+# PSRAM `/history` 板测执行单（v1.1.12+）
 
-> 目的：验收 S3 自录环 + C3 关闭路径。只读 HTTP，不改设备配置。
+> 目的：验收 S3 自录环 + C3 关闭路径 + 状态页不停秒。只读 HTTP，不改设备配置。
 
 ## 0. 刷机
 
-- 目标 OLED：**`v1.1.10`**（或更新）
+- 目标 OLED：**`v1.1.12`**（或更新）
 - S3 app：`dist/firmware_esp32s3.bin` @ `0x10000`（勿全片擦除）
 - 镜像示例：
 
@@ -12,7 +12,7 @@
 https://gh-proxy.com/https://raw.githubusercontent.com/luweixuancl/esp32-gnss-ntp/cursor/web-ota-a05e/dist/firmware_esp32s3.bin
 ```
 
-串口应见：`[history] enabled capacity=86400 bytes=2073600 (SPIRAM)`
+串口应见：`[history] enabled capacity=86400 bytes=2073600 (SPIRAM, mutex)`
 
 ## 1. 冒烟（上电 ≥ 2 min）
 
@@ -35,6 +35,18 @@ python3 tools/history_pull.py --host <IP> --last 60
 | `count` | 随时间增加（约 1/s） |
 | CSV 表头 | 含 `utcEpoch,state,...,gap` |
 | C3 `/history` | `enabled:false`，`reason` 含 `no PSRAM` |
+
+## 1b. 状态页不停秒（必测）
+
+打开 `http://<IP>/`，盯 **UTC / 本地** 秒位 ≥ 60 s：
+
+| 检查 | 期望 |
+|------|------|
+| 秒位 | 连续递增，无卡住 1–2 s 再跳秒 |
+| `fwMark`（页底） | `v1.1.12` |
+| 同窗拉 CSV | `curl -s 'http://<IP>/history.csv?last=3600' -o /dev/null` 时秒位仍平滑 |
+
+云侧无法访问家庭局域网 `192.168.1.x`，此项需板侧目视或本机浏览器验收。
 
 ## 2. OTA 停采
 

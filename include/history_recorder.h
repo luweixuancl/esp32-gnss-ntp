@@ -79,11 +79,12 @@ class HistoryRecorder {
   size_t copyLogical(const HistoryExportCursor& cur, uint32_t i0, HistorySample* dst,
                      size_t n) const;
 
-  uint32_t count() const;
+  // Lock-free approx reads for /status + /metrics (never block net/WiFi).
+  uint32_t count() const { return count_; }
   uint32_t capacity() const { return capacity_; }
-  uint32_t seq() const;
+  uint32_t seq() const { return seq_; }
   uint32_t otaSkipped() const { return otaSkipped_; }
-  uint32_t gaps() const;
+  uint32_t gaps() const { return gaps_; }
 
  private:
   static int16_t clampI16(int32_t v);
@@ -101,14 +102,15 @@ class HistoryRecorder {
   bool enabled_ = false;
   const char* reason_ = "not started";
   uint32_t capacity_ = 0;
-  uint32_t count_ = 0;
+  // Written under mu_; plain 32-bit reads are lock-free for telemetry.
+  volatile uint32_t count_ = 0;
   uint32_t head_ = 0;
-  uint32_t seq_ = 0;
+  volatile uint32_t seq_ = 0;
   uint32_t lastPushMs_ = 0;
   uint32_t lastPpsCount_ = 0;
   bool haveLastPps_ = false;
-  uint32_t otaSkipped_ = 0;
-  uint32_t gaps_ = 0;
+  volatile uint32_t otaSkipped_ = 0;
+  volatile uint32_t gaps_ = 0;
 
   // Incremental rolling stats (exact mean / state histogram).
   uint32_t stateCounts_[5] = {};

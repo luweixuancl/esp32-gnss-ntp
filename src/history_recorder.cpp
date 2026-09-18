@@ -223,41 +223,12 @@ void HistoryRecorder::push(const GpsStatus& st, int8_t rssi) {
   if (s.flags & HistGap) {
     gaps_++;
   }
-  if (freqExtDirty_) {
-    refreshFreqExtLocked();
-  }
+  // Leave freqExtDirty_ for summary()/export — never scan PSRAM on the 1 Hz path.
   unlock();
 
   lastPushMs_ = now;
   lastPpsCount_ = st.ppsCount;
   haveLastPps_ = true;
-}
-
-uint32_t HistoryRecorder::count() const {
-  if (!lock(pdMS_TO_TICKS(20))) {
-    return 0;
-  }
-  const uint32_t c = count_;
-  unlock();
-  return c;
-}
-
-uint32_t HistoryRecorder::seq() const {
-  if (!lock(pdMS_TO_TICKS(20))) {
-    return 0;
-  }
-  const uint32_t s = seq_;
-  unlock();
-  return s;
-}
-
-uint32_t HistoryRecorder::gaps() const {
-  if (!lock(pdMS_TO_TICKS(20))) {
-    return 0;
-  }
-  const uint32_t g = gaps_;
-  unlock();
-  return g;
 }
 
 HistorySummary HistoryRecorder::summary() const {
