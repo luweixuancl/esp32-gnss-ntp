@@ -328,7 +328,7 @@ void WebPortal::handleRoot() {
       "<div class='row'><span class='k'>内存</span><span class='v' id='heap'>--</span></div>"
       "<div class='row'><span class='k'>温度</span><span class='v' id='temp'>--</span></div>"
       "</div>"
-      "<p style='color:#64748b'>自动更新 1 Hz · JSON: <a href='/status'>/status</a> · "
+      "<p style='color:#64748b'>自动更新 ~1 Hz · JSON: <a href='/status'>/status</a> · "
       "指标: <a href='/metrics'>/metrics</a></p>"
       "<script>"
       "function pad(n){return n<10?'0'+n:''+n}"
@@ -342,16 +342,36 @@ void WebPortal::handleRoot() {
       " const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60),x=s%60;"
       " return (d?d+'d ':'')+pad(h)+':'+pad(m)+':'+pad(x)}"
       "function setCls(el,c){el.className='v '+(c||'')}"
-      "let tickBusy=false, baseEpoch=0, baseMono=0, tzHours=0;"
+      "let tickBusy=false, tickStarted=0, tickTimer=0, baseEpoch=0, baseMono=0, tzHours=0;"
+      "function paintedEpoch(){"
+      " if(!baseEpoch)return 0;"
+      " return baseEpoch+Math.floor((Date.now()-baseMono)/1000)}"
+      "function applyUtc(ep,fracMs){"
+      " if(!ep)return;"
+      " const fm=(fracMs!=null&&isFinite(fracMs))?Math.max(0,Math.min(999,fracMs|0)):0;"
+      " const painted=paintedEpoch();"
+      " /* Late /status replies must not yank the clock backward. */"
+      " if(baseEpoch && ep < painted-1)return;"
+      " baseEpoch=ep; baseMono=Date.now()-fm;"
+      "}"
       "function paintTime(){"
       " if(!baseEpoch)return;"
-      " const ep=baseEpoch+Math.floor((Date.now()-baseMono)/1000);"
+      " const ep=paintedEpoch();"
       " document.getElementById('utc').textContent=fmt(ep,0);"
       " document.getElementById('local').textContent=fmt(ep,tzHours)"
       "  +' (UTC'+(tzHours>=0?'+':'')+tzHours+')';"
       "}"
+      "function scheduleTick(afterMs){"
+      " if(tickTimer)clearTimeout(tickTimer);"
+      " tickTimer=setTimeout(tick,Math.max(200,afterMs|0))"
+      "}"
       "async function tick(){"
-      " if(tickBusy)return; tickBusy=true;"
+      " if(tickBusy){"
+      "  if(Date.now()-tickStarted < 3000){scheduleTick(250);return;}"
+      "  /* Stuck fetch: allow a fresh attempt. */"
+      " }"
+      " tickBusy=true; tickStarted=Date.now();"
+      " const t0=Date.now();"
       " try{"
       "  const r=await fetch('/status'); const j=await r.json();"
       "  const g=j.gps||{}, n=j.ntp||{}, c=j.clock||{};"
@@ -375,7 +395,7 @@ void WebPortal::handleRoot() {
       "  document.getElementById('refId').textContent=n.refId||'GPSS';"
       "  document.getElementById('ntpReq').textContent=(n.requests!=null)?n.requests:'--';"
       "  tzHours=j.tzHours||0;"
-      "  if(g.utcEpoch){baseEpoch=g.utcEpoch; baseMono=Date.now();}"
+      "  applyUtc(g.utcEpoch, g.utcFracMs);"
       "  paintTime();"
       "  const fx=document.getElementById('fix');"
       "  fx.textContent=g.fix?'是':'否'; setCls(fx,g.fix?'ok':'bad');"
@@ -411,8 +431,9 @@ void WebPortal::handleRoot() {
       "    +(c.tempComp?('补偿 '+Number(c.tempCorrPpm||0).toFixed(2)+' ppm'):'补偿关')):'--';"
       " }catch(e){}"
       " tickBusy=false;"
+      " scheduleTick(1000-(Date.now()-t0));"
       "}"
-      "tick(); setInterval(tick,1000); setInterval(paintTime,250);"
+      "tick(); setInterval(paintTime,250);"
       "</script>");
 
   server_.send(200, "text/html", buildPage("NTP 状态", body, false));
@@ -1092,7 +1113,7 @@ void WebPortal::handleStatus() {
   gps["lon"] = st.lon;
   gps["ppsFresh"] = st.ppsFresh;
   gps["ppsCount"] = st.ppsCount;
-#if 1  // RMT capture diagnostics (present in both builds; armed only when supported)
+#if GPS_PPS_RMT_EN
   JsonObject ppsRmt = gps["ppsRmt"].to<JsonObject>();
   ppsRmt["armed"] = st.ppsRmt.ok;
   ppsRmt["active"] = st.ppsRmt.active;
@@ -1117,7 +1138,18 @@ void WebPortal::handleStatus() {
   ppsRmt["idfStage"] = st.ppsRmt.idfStage;
   ppsRmt["idfErr"] = st.ppsRmt.idfErr;
 #endif
-  gps["utcEpoch"] = st.utcEpoch;
+  {
+    uint32_t liveSec = 0;
+    uint32_t liveFrac = 0;
+    if (gps_ && gps_->nowUtc(liveSec, liveFrac)) {
+      gps["utcEpoch"] = liveSec;
+      gps["utcFracMs"] =
+          static_cast<uint32_t>((static_cast<double>(liveFrac) / 4294967296.0) * 1000.0);
+    } else {
+      gps["utcEpoch"] = st.utcEpoch;
+      gps["utcFracMs"] = 0;
+    }
+  }
   gps["ageMs"] = st.ageMs;
   gps["timeValid"] = st.timeValid;
   gps["qualityMs"] = st.qualityMs;

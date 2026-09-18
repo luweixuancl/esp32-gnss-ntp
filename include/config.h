@@ -4,11 +4,11 @@
 // OLED mark is unambiguous after OTA / serial upgrade.
 #define FW_VER_MAJOR         1
 #define FW_VER_MINOR         1
-#define FW_VER_PATCH         15
-// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.15").
-#define FW_MARK              "v1.1.15"
+#define FW_VER_PATCH         16
+// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.16").
+#define FW_MARK              "v1.1.16"
 // Full string for /status, /cfg, serial, OTA pages.
-#define FW_VERSION           "1.1.15"
+#define FW_VERSION           "1.1.16"
 // After a pending-verify OTA boot, wait until tasks are alive this long before
 // cancelling rollback — catches crash-loops in GPS/WiFi/task bring-up.
 #define OTA_MARK_VALID_AFTER_MS  30000
