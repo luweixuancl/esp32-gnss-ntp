@@ -7,7 +7,7 @@
 | **esp32-c3**（默认） | 合宙 CORE ESP32-C3 | 单核，三任务同核分优先级 | 产品线（v1.0.0 起量产验证） |
 | **esp32-s3** | 乐鑫 ESP32-S3-DevKitC-1（WROOM-1 N16R8） | 双核，`task-time` 独占 core 1 | 已完成 P1–P4 全阶段验收 |
 
-GNSS：大夏龙雀 DX-GP22（GPS/北斗/GLONASS 多模，9600 8N1，定位后 1PPS）。
+GNSS：大夏龙雀 DX-GP22（GPS/北斗/GLONASS 多模，9600 8N1，定位后 1PPS）。启动时探测 NMEA 后经 `$PCAS03` 仅保留 **GGA + ZDA**（坐标/星数/HDOP + 时间日期），减轻 UART 负载。
 
 ## 功能
 

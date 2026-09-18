@@ -400,7 +400,7 @@ void DisplayUi::drawHome(const GpsStatus& st, const WifiManager& wifi, const App
   clockLine(display_, 12, timeBuf);
 
   // --- SSID (left) + firmware mark (right) ---
-  // Mark is short ("v1.1.19") so a glance after flash/OTA confirms the build.
+  // Mark is short ("v1.1.20") so a glance after flash/OTA confirms the build.
   display_.setTextSize(1);
   String ssid;
   if (sta) {

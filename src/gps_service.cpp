@@ -1,6 +1,8 @@
 #include "gps_service.h"
 #include "ext_clock.h"
 #include <esp_timer.h>
+#include <stdlib.h>
+#include <string.h>
 #if defined(ARDUINO_ESP32S3_DEV)
 // S3 has the newer tsens hardware; the legacy driver below does not exist
 // for it. Arduino's temperatureRead() HAL picks the per-target API.
@@ -330,6 +332,197 @@ void GpsService::begin() {
   Serial.printf("GPS UART%d RX=%d TX=%d baud=%d buf=2048 local-clock=on ppsQ=%d tsens=%d\n",
                 GPS_UART_NUM, PIN_GPS_RX, PIN_GPS_TX, GPS_UART_BAUD, GPS_PPS_ISR_QUEUE,
                 tempSensorOk_ ? 1 : 0);
+#if GPS_NMEA_FILTER_EN
+  probeAndFilterNmea();
+#endif
+}
+
+uint8_t GpsService::nmeaChecksum(const char* body) {
+  uint8_t cs = 0;
+  for (const char* p = body; p && *p; ++p) {
+    cs ^= static_cast<uint8_t>(*p);
+  }
+  return cs;
+}
+
+void GpsService::sendPcas(const char* bodyNoDollar) {
+  if (bodyNoDollar == nullptr) {
+    return;
+  }
+  const uint8_t cs = nmeaChecksum(bodyNoDollar);
+  char frame[96];
+  snprintf(frame, sizeof(frame), "$%s*%02X\r\n", bodyNoDollar, cs);
+  gpsSerial_.print(frame);
+  Serial.printf("[gps] TX %s", frame);
+}
+
+uint32_t GpsService::civilToEpoch(int year, int month, int day, int hour, int minute, int second) {
+  int y = year;
+  int m = month;
+  if (m <= 2) {
+    y -= 1;
+    m += 12;
+  }
+  const int64_t a = y / 100;
+  const int64_t b = 2 - a + a / 4;
+  const int64_t jd = static_cast<int64_t>(365.25 * (y + 4716)) +
+                     static_cast<int64_t>(30.6001 * (m + 1)) + day + b - 1524;
+  const int64_t daysSinceUnix = jd - 2440588;
+  return static_cast<uint32_t>(daysSinceUnix * 86400LL + hour * 3600L + minute * 60L + second);
+}
+
+void GpsService::feedNmeaChar(char c) {
+  gps_.encode(c);
+  if (c == '$') {
+    nmeaLineLen_ = 0;
+    nmeaLine_[nmeaLineLen_++] = c;
+    return;
+  }
+  if (c == '\r' || c == '\n') {
+    if (nmeaLineLen_ >= 6) {
+      nmeaLine_[nmeaLineLen_] = '\0';
+      onNmeaLine(nmeaLine_);
+    }
+    nmeaLineLen_ = 0;
+    return;
+  }
+  if (nmeaLineLen_ > 0 && nmeaLineLen_ + 1 < sizeof(nmeaLine_)) {
+    nmeaLine_[nmeaLineLen_++] = c;
+  } else if (nmeaLineLen_ + 1 >= sizeof(nmeaLine_)) {
+    nmeaLineLen_ = 0;
+  }
+}
+
+void GpsService::onNmeaLine(const char* line) {
+  if (line == nullptr || line[0] != '$' || strlen(line) < 6) {
+    return;
+  }
+  // "$xxTTT,..." → sentence type at [3..5]
+  const char t0 = line[3];
+  const char t1 = line[4];
+  const char t2 = line[5];
+  if (t0 == 'G' && t1 == 'G' && t2 == 'A') {
+    nmeaSeenMask_ |= 1u << 0;
+  } else if (t0 == 'G' && t1 == 'L' && t2 == 'L') {
+    nmeaSeenMask_ |= 1u << 1;
+  } else if (t0 == 'G' && t1 == 'S' && t2 == 'A') {
+    nmeaSeenMask_ |= 1u << 2;
+  } else if (t0 == 'G' && t1 == 'S' && t2 == 'V') {
+    nmeaSeenMask_ |= 1u << 3;
+  } else if (t0 == 'R' && t1 == 'M' && t2 == 'C') {
+    nmeaSeenMask_ |= 1u << 4;
+  } else if (t0 == 'V' && t1 == 'T' && t2 == 'G') {
+    nmeaSeenMask_ |= 1u << 5;
+  } else if (t0 == 'Z' && t1 == 'D' && t2 == 'A') {
+    nmeaSeenMask_ |= 1u << 6;
+    parseZdaLine(line);
+  }
+}
+
+bool GpsService::parseZdaLine(const char* line) {
+  // $--ZDA,hhmmss.ss,dd,mm,yyyy,ltzh,ltzm*CS
+  char buf[96];
+  strncpy(buf, line, sizeof(buf) - 1);
+  buf[sizeof(buf) - 1] = '\0';
+  char* star = strchr(buf, '*');
+  if (star) {
+    *star = '\0';
+  }
+
+  char* save = nullptr;
+  char* tok = strtok_r(buf, ",", &save);  // $xxZDA
+  if (tok == nullptr) {
+    return false;
+  }
+  tok = strtok_r(nullptr, ",", &save);  // time
+  if (tok == nullptr || strlen(tok) < 6) {
+    return false;
+  }
+  const int hour = (tok[0] - '0') * 10 + (tok[1] - '0');
+  const int minute = (tok[2] - '0') * 10 + (tok[3] - '0');
+  const int second = (tok[4] - '0') * 10 + (tok[5] - '0');
+  tok = strtok_r(nullptr, ",", &save);  // day
+  if (tok == nullptr || *tok == '\0') {
+    return false;
+  }
+  const int day = atoi(tok);
+  tok = strtok_r(nullptr, ",", &save);  // month
+  if (tok == nullptr || *tok == '\0') {
+    return false;
+  }
+  const int month = atoi(tok);
+  tok = strtok_r(nullptr, ",", &save);  // year
+  if (tok == nullptr || *tok == '\0') {
+    return false;
+  }
+  const int year = atoi(tok);
+  if (year < 2000 || month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 ||
+      minute > 59 || second > 60) {
+    return false;
+  }
+  zdaEpoch_ = civilToEpoch(year, month, day, hour, minute, second);
+  zdaMs_ = millis();
+  zdaValid_ = true;
+  return true;
+}
+
+void GpsService::probeAndFilterNmea() {
+  nmeaSeenMask_ = 0;
+  nmeaLineLen_ = 0;
+  const uint32_t start = millis();
+  Serial.printf("[gps] probing NMEA ≤%u ms...\n", static_cast<unsigned>(GPS_NMEA_PROBE_MS));
+  while ((millis() - start) < GPS_NMEA_PROBE_MS) {
+    while (gpsSerial_.available() > 0) {
+      feedNmeaChar(static_cast<char>(gpsSerial_.read()));
+    }
+    delay(5);
+  }
+
+  char seen[48] = {};
+  size_t n = 0;
+  auto append = [&](const char* s) {
+    if (n > 0 && n + 1 < sizeof(seen)) {
+      seen[n++] = ',';
+    }
+    while (*s && n + 1 < sizeof(seen)) {
+      seen[n++] = *s++;
+    }
+    seen[n] = '\0';
+  };
+  if (nmeaSeenMask_ & (1u << 0)) {
+    append("GGA");
+  }
+  if (nmeaSeenMask_ & (1u << 1)) {
+    append("GLL");
+  }
+  if (nmeaSeenMask_ & (1u << 2)) {
+    append("GSA");
+  }
+  if (nmeaSeenMask_ & (1u << 3)) {
+    append("GSV");
+  }
+  if (nmeaSeenMask_ & (1u << 4)) {
+    append("RMC");
+  }
+  if (nmeaSeenMask_ & (1u << 5)) {
+    append("VTG");
+  }
+  if (nmeaSeenMask_ & (1u << 6)) {
+    append("ZDA");
+  }
+  if (n == 0) {
+    Serial.println("[gps] probe: no NMEA yet (module waking?) — still applying filter");
+  } else {
+    Serial.printf("[gps] probe saw: %s\n", seen);
+  }
+
+  // CASIC PCAS03: GGA,GLL,GSA,GSV,RMC,VTG,ZDA,... → only GGA + ZDA @ 1× rate.
+  sendPcas("PCAS03,1,0,0,0,0,0,1,0,0,0,,,0,0");
+  delay(GPS_NMEA_CMD_GAP_MS);
+  sendPcas("PCAS00");  // persist to FLASH
+  delay(GPS_NMEA_CMD_GAP_MS);
+  nmeaFilterApplied_ = true;
+  Serial.println("[gps] NMEA filter: GGA + ZDA only (saved)");
 }
 
 void GpsService::setTempComp(bool enabled, int16_t coeffCenti) {
@@ -492,8 +685,10 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
   // antenna-loss (0 sats / stale NMEA) clears "GPS 锁定" on OLED/Web.
   const bool locFresh =
       gps_.location.isValid() && gps_.location.age() <= GPS_FIX_MAX_AGE_MS;
-  const bool timeFresh = gps_.date.isValid() && gps_.time.isValid() &&
-                         gps_.time.age() <= GPS_FIX_MAX_AGE_MS;
+  const bool zdaFresh = zdaValid_ && (millis() - zdaMs_) <= GPS_FIX_MAX_AGE_MS;
+  const bool rmcTimeFresh = gps_.date.isValid() && gps_.time.isValid() &&
+                            gps_.time.age() <= GPS_FIX_MAX_AGE_MS;
+  const bool timeFresh = zdaFresh || rmcTimeFresh;
   const bool satsOk = gps_.satellites.isValid() &&
                       gps_.satellites.age() <= GPS_FIX_MAX_AGE_MS && work.satellites > 0;
   work.validFix = locFresh && timeFresh && satsOk;
@@ -531,23 +726,17 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
   work.ppsRmt.idfErr = gIdf.err;
 #endif
 
-  if (gps_.date.isValid() && gps_.time.isValid()) {
+  if (zdaFresh) {
+    work.ageMs = millis() - zdaMs_;
+    if (zdaEpoch_ != lastCommittedSecond_) {
+      commitNmeaTime(zdaEpoch_, policy, holdoverSec);
+      lastCommittedSecond_ = zdaEpoch_;
+    }
+  } else if (gps_.date.isValid() && gps_.time.isValid()) {
     TinyGPSDate d = gps_.date;
     TinyGPSTime t = gps_.time;
-    int y = d.year();
-    int m = d.month();
-    int day = d.day();
-    if (m <= 2) {
-      y -= 1;
-      m += 12;
-    }
-    int64_t a = y / 100;
-    int64_t b = 2 - a + a / 4;
-    int64_t jd = static_cast<int64_t>(365.25 * (y + 4716)) +
-                 static_cast<int64_t>(30.6001 * (m + 1)) + day + b - 1524;
-    int64_t daysSinceUnix = jd - 2440588;
-    const uint32_t epoch = static_cast<uint32_t>(daysSinceUnix * 86400LL + t.hour() * 3600L +
-                                                 t.minute() * 60L + t.second());
+    const uint32_t epoch =
+        civilToEpoch(d.year(), d.month(), d.day(), t.hour(), t.minute(), t.second());
     work.ageMs = gps_.time.age();
     if (epoch != lastCommittedSecond_) {
       commitNmeaTime(epoch, policy, holdoverSec);
@@ -619,7 +808,7 @@ void GpsService::parseNmea() {
 #if GPS_DEBUG_NMEA
     Serial.write(c);
 #endif
-    gps_.encode(c);
+    feedNmeaChar(c);
   }
 }
 
