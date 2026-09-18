@@ -389,7 +389,7 @@ void WebPortal::handleRoot() {
       "  document.getElementById('rssi').textContent=(j.rssi!=null)?(j.rssi+' dBm'):'--';"
       "  document.getElementById('mac').textContent=j.mac||'--';"
       "  document.getElementById('up').textContent=fmtUp(j.uptimeSec);"
-      "  document.getElementById('fw').textContent=(j.fwVersion||'--')"
+      "  document.getElementById('fw').textContent=(j.fwMark||j.fwVersion||'--')"
       "    +' · '+(j.otaRunning||'?')+'/'+(j.otaState||'?');"
       "  const hb=Math.round((j.freeHeap||0)/1024), hmn=Math.round((j.minFreeHeap||0)/1024);"
       "  const he=document.getElementById('heap');"
