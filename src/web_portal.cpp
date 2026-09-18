@@ -502,7 +502,10 @@ void WebPortal::handleSetup() {
   body += F("<div class='card'><h2 style='font-size:1rem;margin:0 0 8px'>固件 OTA</h2>"
             "<p style='color:#64748b;font-size:.85rem'>上传 PlatformIO 产出的 "
             "<code>firmware.bin</code>（仅 app，勿用 merged 整片镜像）。"
-            "需登录会话；成功后自动重启，NVS 配置保留。串口烧录仍可用作兜底。</p>"
+            "升级期间<strong>停止 NTP 授时</strong>（KoD <code>RSTR</code>），并让出 CPU/Flash 以尽快完成；"
+            "成功后自动重启，NVS 配置保留。状态灯："
+            "上传中<strong>琥珀快闪</strong> → 成功<strong>绿灯常亮</strong> → 失败<strong>红闪</strong>。"
+            "串口烧录仍可用作兜底。</p>"
             "<p>当前 <b>");
   body += FW_VERSION;
   body += F("</b> · 目标 <code>");
@@ -919,7 +922,7 @@ void WebPortal::handleOtaUpload() {
     }
     otaStarted_ = false;
     otaSuccess_ = false;
-    otaSetBusy(false);
+    otaEnterFailed();
     Serial.printf("[ota] fail: %s\n", otaError_);
   };
 
@@ -930,7 +933,7 @@ void WebPortal::handleOtaUpload() {
     otaHeaderChecked_ = false;
     otaLastLogBytes_ = 0;
     otaError_[0] = '\0';
-    otaSetBusy(false);
+    otaClear();
 
     if (!otaAuthOk_) {
       strncpy(otaError_, "Unauthorized", sizeof(otaError_) - 1);
@@ -976,7 +979,7 @@ void WebPortal::handleOtaUpload() {
       return;
     }
     otaStarted_ = true;
-    otaSetBusy(true);
+    otaEnterUploading();
     postUiText("OTA uploading...");
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (!otaAuthOk_ || !otaStarted_) {
@@ -1023,7 +1026,7 @@ void WebPortal::handleOtaUpload() {
       if (otaError_[0] == '\0') {
         strncpy(otaError_, "Upload aborted", sizeof(otaError_) - 1);
       }
-      otaSetBusy(false);
+      otaEnterFailed();
       return;
     }
     otaKickWatchdogs();
@@ -1033,9 +1036,9 @@ void WebPortal::handleOtaUpload() {
     }
     if (Update.end(true)) {
       otaSuccess_ = true;
+      otaEnterRebooting();
       Serial.printf("[ota] success %u bytes → reboot\n", static_cast<unsigned>(upload.totalSize));
       postUiText("OTA OK reboot");
-      // Stay busy until restart so LED panic cannot race the delay.
     } else {
       char buf[96];
       snprintf(buf, sizeof(buf), "Update.end failed: %s", Update.errorString());
@@ -1050,7 +1053,7 @@ void WebPortal::handleOtaUpload() {
     if (otaError_[0] == '\0') {
       strncpy(otaError_, "Upload aborted", sizeof(otaError_) - 1);
     }
-    otaSetBusy(false);
+    otaEnterFailed();
     Serial.println("[ota] client aborted");
   }
 }
@@ -1063,7 +1066,6 @@ void WebPortal::handleOtaDone() {
     otaAuthOk_ = false;
     otaStarted_ = false;
     otaSuccess_ = false;
-    otaSetBusy(false);
     return;
   }
   if (!otaSuccess_) {
@@ -1074,7 +1076,9 @@ void WebPortal::handleOtaDone() {
     otaAuthOk_ = false;
     otaStarted_ = false;
     otaSuccess_ = false;
-    otaSetBusy(false);
+    if (otaUiPhase() != OtaUiPhase::Failed) {
+      otaEnterFailed();
+    }
     return;
   }
   server_.send(200, "text/plain", "OK — rebooting into new firmware");
@@ -1092,7 +1096,9 @@ void WebPortal::handleStatus() {
   doc["otaNextSize"] = otaNextPartitionSize();
   doc["otaState"] = otaImageStateLabel();
   doc["otaBusy"] = otaIsBusy();
+  doc["otaPhase"] = otaUiPhaseLabel();
   doc["otaChip"] = otaExpectedChipName();
+  doc["ntpServing"] = !otaIsBusy();
   doc["sta"] = wifi_->isStaConnected();
   doc["ip"] = wifi_->localIp().toString();
   doc["ssid"] = WiFi.SSID();
@@ -1196,21 +1202,25 @@ void WebPortal::handleStatus() {
   clock["holdoverMs"] = st.holdoverMs;
 
   JsonObject ntp = doc["ntp"].to<JsonObject>();
-  const bool syncOk = st.timeValid && (st.clockState == ClockState::Locked ||
-                                       st.clockState == ClockState::Degraded ||
-                                       st.clockState == ClockState::Holdover);
+  const bool otaBusy = otaIsBusy();
+  const bool syncOk = !otaBusy && st.timeValid &&
+                      (st.clockState == ClockState::Locked || st.clockState == ClockState::Degraded ||
+                       st.clockState == ClockState::Holdover);
   ntp["synced"] = syncOk;
   ntp["stratum"] = syncOk ? 1 : 16;
-  ntp["stratum1Ready"] = st.timeValid && st.clockState == ClockState::Locked && st.ppsFresh;
-  ntp["refId"] = syncOk ? "GPSS" : "INIT";
+  ntp["stratum1Ready"] =
+      !otaBusy && st.timeValid && st.clockState == ClockState::Locked && st.ppsFresh;
+  ntp["refId"] = otaBusy ? "RSTR" : (syncOk ? "GPSS" : "INIT");
   // LI is leap-second indicator only; holdover stays LI=0 with rising dispersion.
   ntp["li"] = syncOk ? 0 : 3;
+  ntp["otaRefuse"] = otaBusy;
   ntp["requests"] = ntp_ ? ntp_->requestCount() : 0;
   ntp["served"] = ntp_ ? ntp_->servedCount() : 0;
   ntp["rateLimited"] = ntp_ ? ntp_->rateLimitedCount() : 0;
   ntp["denied"] = ntp_ ? ntp_->deniedCount() : 0;
   ntp["dropped"] = ntp_ ? ntp_->droppedCount() : 0;
   ntp["aclDenied"] = ntp_ ? ntp_->aclDeniedCount() : 0;
+  ntp["otaRefused"] = ntp_ ? ntp_->otaRefuseCount() : 0;
   ntp["clients"] = ntp_ ? ntp_->activeClientCount() : 0;
 
   String out;
@@ -1221,17 +1231,19 @@ void WebPortal::handleStatus() {
 
 void WebPortal::handleMetrics() {
   // Prometheus-ish text; no auth (read-only, same as /status).
-  char buf[640];
+  char buf[768];
   const uint32_t served = ntp_ ? ntp_->servedCount() : 0;
   const uint32_t rate = ntp_ ? ntp_->rateLimitedCount() : 0;
   const uint32_t denied = ntp_ ? ntp_->deniedCount() : 0;
   const uint32_t dropped = ntp_ ? ntp_->droppedCount() : 0;
   const uint32_t aclDenied = ntp_ ? ntp_->aclDeniedCount() : 0;
+  const uint32_t otaRefused = ntp_ ? ntp_->otaRefuseCount() : 0;
   const uint32_t reqs = ntp_ ? ntp_->requestCount() : 0;
   const uint8_t clients = ntp_ ? ntp_->activeClientCount() : 0;
   const unsigned heap = ESP.getFreeHeap();
   const unsigned aclMode = ntp_ ? static_cast<unsigned>(ntp_->aclMode()) : 0;
   const unsigned aclCount = ntp_ ? ntp_->aclCount() : 0;
+  const unsigned otaBusy = otaIsBusy() ? 1 : 0;
   snprintf(buf, sizeof(buf),
            "# TYPE ntp_requests_total counter\n"
            "ntp_requests_total %lu\n"
@@ -1245,17 +1257,22 @@ void WebPortal::handleMetrics() {
            "ntp_dropped_total %lu\n"
            "# TYPE ntp_acl_denied_total counter\n"
            "ntp_acl_denied_total %lu\n"
+           "# TYPE ntp_ota_refused_total counter\n"
+           "ntp_ota_refused_total %lu\n"
            "# TYPE ntp_acl_mode gauge\n"
            "ntp_acl_mode %u\n"
            "# TYPE ntp_acl_entries gauge\n"
            "ntp_acl_entries %u\n"
            "# TYPE ntp_clients gauge\n"
            "ntp_clients %u\n"
+           "# TYPE ota_busy gauge\n"
+           "ota_busy %u\n"
            "# TYPE esp_free_heap_bytes gauge\n"
            "esp_free_heap_bytes %u\n",
            static_cast<unsigned long>(reqs), static_cast<unsigned long>(served),
            static_cast<unsigned long>(rate), static_cast<unsigned long>(denied),
-           static_cast<unsigned long>(dropped), static_cast<unsigned long>(aclDenied), aclMode,
-           aclCount, static_cast<unsigned>(clients), heap);
+           static_cast<unsigned long>(dropped), static_cast<unsigned long>(aclDenied),
+           static_cast<unsigned long>(otaRefused), aclMode, aclCount,
+           static_cast<unsigned>(clients), otaBusy, heap);
   server_.send(200, "text/plain; charset=utf-8", buf);
 }

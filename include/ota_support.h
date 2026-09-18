@@ -1,13 +1,27 @@
 #pragma once
 
-// Boot-time OTA helpers (deferred rollback confirm + partition labels + busy gate).
-// Implementation in src/ota_support.cpp.
+// OTA helpers: busy gate (shed NTP/work), UI phase for LEDs, deferred rollback
+// confirm, image header validation. Implementation in src/ota_support.cpp.
 
 #include <stddef.h>
 #include <stdint.h>
 
-void otaSetBusy(bool busy);
-bool otaIsBusy();
+// LED / status UI phase (orthogonal to busy: Failed clears busy but keeps LED).
+enum class OtaUiPhase : uint8_t {
+  Idle = 0,
+  Uploading = 1,  // flash write in progress — NTP refused, work shed
+  Rebooting = 2,  // image accepted — solid success LED until restart
+  Failed = 3,     // brief error LED, then auto-clears to Idle
+};
+
+void otaEnterUploading();
+void otaEnterRebooting();
+void otaEnterFailed();
+void otaClear();  // force Idle (tests / abort edge)
+
+bool otaIsBusy();  // Uploading or Rebooting — block NTP & shed background work
+OtaUiPhase otaUiPhase();
+const char* otaUiPhaseLabel();
 
 // Feed task-net TWDT + ipcKickNet so LED panic / TWDT cannot fire mid-upload.
 void otaKickWatchdogs();

@@ -21,7 +21,7 @@ GNSS：大夏龙雀 DX-GP22（GPS/北斗/GLONASS 多模，9600 8N1，定位后 1
 8. **状态灯**：C3 双色 LED（D4 网络/D5 GNSS）；S3 板载 RGB 三通道（R=网络 / G=时钟 / B=NTP 授时中），语义见下
 9. **B4 可观测**：OLED NTP Stats、串口 60s 摘要、`/metrics` Prometheus 文本
 10. **多目标构建**：PlatformIO 多环境，源码 100% 共享，引脚差异集中在 `include/config.h` 目标条件宏
-11. **Web OTA**：登录 `/cfg` 后上传 `firmware.bin` 写下一 app 槽并重启；启动后确认有效取消回滚；NVS 配置保留；串口升级仍为兜底
+11. **Web OTA**：登录 `/cfg` 上传 `firmware.bin`；升级期间拒绝 NTP（KoD `RSTR`）并让出 CPU/Flash；琥珀/绿/红状态灯；启动确认后取消回滚；NVS 保留；串口升级仍为兜底
 
 ## 硬件连接
 
@@ -62,6 +62,9 @@ GNSS：大夏龙雀 DX-GP22（GPS/北斗/GLONASS 多模，9600 8N1，定位后 1
 | **LCK/DEG 锁定** | — | 心跳（与 D4 反相） | G 心跳 + **B 常亮（NTP 授时中）** |
 | HLD 守时 | — | 快闪 | G 快闪 + B 常亮（降级仍授时） |
 | UNS/无星 | — | 灭 | 灭 |
+| **OTA 上传中** | 同步快闪 | 同步快闪 | **琥珀（R+G）快闪**；NTP 拒绝授时 |
+| **OTA 成功待重启** | 灭 | 常亮 | **绿灯常亮** |
+| **OTA 失败** | 红闪 ~2s | 灭 | **红闪 ~2s** |
 | 任务卡死 | D4/D5 交替狂闪 ~5 Hz（→自动重启） | 〃 | R/G 交替狂闪 |
 
 ## 快速开始

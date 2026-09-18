@@ -243,6 +243,29 @@ void NtpServer::loop(const GpsService& gps) {
   }
 }
 
+void NtpServer::loopRefuseOta() {
+  // Minimal path while flash/WiFi serve OTA: empty the socket, tell clients
+  // the server is restarting (KoD RSTR). First packet gets a kiss; the rest
+  // are silent drops to keep CPU off the upload path.
+  bool kissed = false;
+  for (int i = 0; i < NTP_MAX_PACKETS_PER_LOOP; ++i) {
+    if (!udp_.parsePacket()) {
+      break;
+    }
+    const int len = udp_.read(packet_, sizeof(packet_));
+    requestCount_++;
+    otaRefuseCount_++;
+    if (!kissed && len >= 48) {
+      const uint8_t vn = (packet_[0] >> 3) & 0x07;
+      const uint8_t poll = packet_[2];
+      sendKiss("RSTR", vn, poll);
+      kissed = true;
+    } else {
+      droppedCount_++;
+    }
+  }
+}
+
 void NtpServer::handlePacket(const GpsService& gps) {
   uint32_t recvSec = 0;
   uint32_t recvFrac = 0;

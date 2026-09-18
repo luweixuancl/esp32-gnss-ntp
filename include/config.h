@@ -1,12 +1,18 @@
 #pragma once
 
 // Firmware identity (shown on /cfg /status; bump on releases that ship via OTA).
-#define FW_VERSION           "1.1.1-ota"
+#define FW_VERSION           "1.1.2-ota"
 // After a pending-verify OTA boot, wait until tasks are alive this long before
 // cancelling rollback — catches crash-loops in GPS/WiFi/task bring-up.
 #define OTA_MARK_VALID_AFTER_MS  30000
 // Progress log cadence during Web OTA (bytes).
 #define OTA_PROGRESS_LOG_BYTES   (64 * 1024)
+// Failed-OTA LED linger before returning to normal status colours.
+#define OTA_FAIL_LED_MS          2000
+// While OTA busy: task-time yields this long so flash/WiFi serve the upload.
+#define OTA_TIME_TASK_YIELD_MS     50
+// S3 RGB / C3 dual-LED OTA blink half-period (amber upload ~4 Hz).
+#define OTA_LED_BLINK_HALF_MS     120
 
 // ---------------------------------------------------------------------------
 // Hardware wiring — target-conditional (合宙 CORE ESP32-C3 default, ESP32-S3

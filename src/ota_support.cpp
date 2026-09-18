@@ -12,6 +12,8 @@
 namespace {
 
 volatile bool gOtaBusy = false;
+volatile OtaUiPhase gOtaPhase = OtaUiPhase::Idle;
+uint32_t gOtaFailUntilMs = 0;
 bool gOtaConfirmDone = false;
 
 void markValidNow() {
@@ -22,7 +24,6 @@ void markValidNow() {
   esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
   const esp_err_t err = esp_ota_get_state_partition(running, &state);
   if (err != ESP_OK) {
-    // Older bootloader / no otadata — nothing to confirm.
     Serial.printf("[ota] get_state skipped (%s)\n", esp_err_to_name(err));
     return;
   }
@@ -38,17 +39,66 @@ void markValidNow() {
   }
 }
 
+void refreshFailPhase() {
+  if (gOtaPhase == OtaUiPhase::Failed &&
+      static_cast<int32_t>(millis() - gOtaFailUntilMs) >= 0) {
+    gOtaPhase = OtaUiPhase::Idle;
+    gOtaFailUntilMs = 0;
+  }
+}
+
 }  // namespace
 
-void otaSetBusy(bool busy) {
-  gOtaBusy = busy;
-  if (busy) {
-    otaKickWatchdogs();
-  }
+void otaEnterUploading() {
+  gOtaPhase = OtaUiPhase::Uploading;
+  gOtaBusy = true;
+  gOtaFailUntilMs = 0;
+  otaKickWatchdogs();
+  Serial.println("[ota] phase=uploading (NTP refused, work shed)");
+}
+
+void otaEnterRebooting() {
+  gOtaPhase = OtaUiPhase::Rebooting;
+  gOtaBusy = true;  // keep shed until ESP.restart()
+  gOtaFailUntilMs = 0;
+  otaKickWatchdogs();
+  Serial.println("[ota] phase=rebooting");
+}
+
+void otaEnterFailed() {
+  gOtaPhase = OtaUiPhase::Failed;
+  gOtaBusy = false;
+  gOtaFailUntilMs = millis() + OTA_FAIL_LED_MS;
+  Serial.println("[ota] phase=failed");
+}
+
+void otaClear() {
+  gOtaPhase = OtaUiPhase::Idle;
+  gOtaBusy = false;
+  gOtaFailUntilMs = 0;
 }
 
 bool otaIsBusy() {
   return gOtaBusy;
+}
+
+OtaUiPhase otaUiPhase() {
+  refreshFailPhase();
+  return gOtaPhase;
+}
+
+const char* otaUiPhaseLabel() {
+  switch (otaUiPhase()) {
+    case OtaUiPhase::Uploading:
+      return "uploading";
+    case OtaUiPhase::Rebooting:
+      return "rebooting";
+    case OtaUiPhase::Failed:
+      return "failed";
+    case OtaUiPhase::Idle:
+    default:
+      return "idle";
+  }
 }
 
 void otaKickWatchdogs() {
@@ -63,7 +113,6 @@ void otaPollConfirmValid() {
   if (millis() < OTA_MARK_VALID_AFTER_MS) {
     return;
   }
-  // Require all three tasks to have kicked at least once (system actually running).
   if (gIpc.kickTimeMs == 0 || gIpc.kickNetMs == 0 || gIpc.kickUiMs == 0) {
     return;
   }

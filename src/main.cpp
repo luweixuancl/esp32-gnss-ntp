@@ -513,6 +513,16 @@ static void taskTime(void* /*arg*/) {
   gGps.setTempComp(cachedTempComp, cachedTempCoeff);
 
   for (;;) {
+    // OTA window: refuse NTP, skip GPS/settings work, yield CPU/Flash to the
+    // upload on task-net (especially critical on single-core C3).
+    if (otaIsBusy()) {
+      gNtp.loopRefuseOta();
+      ipcKickTime();
+      esp_task_wdt_reset();
+      vTaskDelay(pdMS_TO_TICKS(OTA_TIME_TASK_YIELD_MS));
+      continue;
+    }
+
     ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1));
 
     if (settingsLock(0)) {
@@ -545,13 +555,14 @@ static void taskTime(void* /*arg*/) {
         const GpsStatus st = gGps.snapshot();
         Serial.printf(
             "[ntp] req=%lu served=%lu RATE=%lu DENY=%lu drop=%lu aclDeny=%lu "
-            "clients=%u acl=%s/%u clk=%s T=%.1f dppm=%.2f\n",
+            "otaRefuse=%lu clients=%u acl=%s/%u clk=%s T=%.1f dppm=%.2f\n",
             static_cast<unsigned long>(gNtp.requestCount()),
             static_cast<unsigned long>(gNtp.servedCount()),
             static_cast<unsigned long>(gNtp.rateLimitedCount()),
             static_cast<unsigned long>(gNtp.deniedCount()),
             static_cast<unsigned long>(gNtp.droppedCount()),
             static_cast<unsigned long>(gNtp.aclDeniedCount()),
+            static_cast<unsigned long>(gNtp.otaRefuseCount()),
             static_cast<unsigned>(gNtp.activeClientCount()),
             ntpAclModeMenuLabel(gNtp.aclMode()), static_cast<unsigned>(gNtp.aclCount()),
             clockStateLabel(st.clockState), static_cast<double>(st.tempC),
@@ -602,21 +613,24 @@ static void taskNet(void* /*arg*/) {
   }
 
   for (;;) {
-    // Harvest SCAN_DONE before any new scanNetworks() (which scanDelete()s).
-    driveScan();
+    // During OTA, skip WiFi scan/reconnect churn so the HTTP upload owns the radio.
+    if (!otaIsBusy()) {
+      driveScan();
 
-    NetRequest req;
-    while (xQueueReceive(gIpc.netReq, &req, 0) == pdTRUE) {
-      handleNetRequest(req);
+      NetRequest req;
+      while (xQueueReceive(gIpc.netReq, &req, 0) == pdTRUE) {
+        handleNetRequest(req);
+      }
+
+      String ssid, pass;
+      if (gPortal.consumeConnectRequest(ssid, pass)) {
+        handleConnect(ssid.c_str(), pass.c_str());
+      }
+
+      driveScan();
+      pollNetWork();
     }
 
-    String ssid, pass;
-    if (gPortal.consumeConnectRequest(ssid, pass)) {
-      handleConnect(ssid.c_str(), pass.c_str());
-    }
-
-    driveScan();
-    pollNetWork();
     gPortal.loop();
     otaPollConfirmValid();
     static uint8_t heapLowStreak = 0;
@@ -641,13 +655,20 @@ static void taskUi(void* /*arg*/) {
   esp_task_wdt_add(nullptr);
   ipcKickUi();
   for (;;) {
-    gEnc.loop();
     const GpsStatus st = gGps.snapshot();
     ipcKickUi();
+    // LEDs always run (OTA amber/green/red). Skip encoder/OLED work while
+    // uploading so I2C and UI CPU do not contend with flash writes.
     gLeds.loop(gIpc.setupAp, gWifi.isStaConnected(), st);
-    gUi.loop(gEnc, gGps, gWifi, gNtp);
-    esp_task_wdt_reset();
-    vTaskDelay(pdMS_TO_TICKS(10));
+    if (!otaIsBusy()) {
+      gEnc.loop();
+      gUi.loop(gEnc, gGps, gWifi, gNtp);
+      esp_task_wdt_reset();
+      vTaskDelay(pdMS_TO_TICKS(10));
+    } else {
+      esp_task_wdt_reset();
+      vTaskDelay(pdMS_TO_TICKS(OTA_TIME_TASK_YIELD_MS));
+    }
   }
 }
 
