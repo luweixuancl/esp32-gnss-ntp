@@ -72,7 +72,8 @@ static IdfPpsState gIdf;
 #if defined(ARDUINO_ESP32S3_DEV)
 static bool boardTempBegin() {
   // temperatureRead() lazily initialises the new tsens driver; gate on a
-  // plausible first reading instead of a driver return code.
+  // plausible reading. sampleDieTemp() retries this probe every 5 s when it
+  // fails, so a transiently bad first read no longer disables temperature.
   float c = temperatureRead();
   const bool ok = !isnan(c) && c > -20.0f && c < 85.0f;
   return ok;
@@ -331,6 +332,18 @@ void GpsService::setTempComp(bool enabled, int16_t coeffCenti) {
 
 void GpsService::sampleDieTemp() {
   if (!tempSensorOk_) {
+    // Lazy re-arm: the first temperatureRead() after boot can transiently
+    // return a bad value on S3; retry the probe every 5 s instead of
+    // killing temperature for the whole power cycle.
+    const uint32_t nowMs = millis();
+    if (lastTempTryMs_ != 0 && (nowMs - lastTempTryMs_) < 5000) {
+      return;
+    }
+    lastTempTryMs_ = nowMs;
+    tempSensorOk_ = boardTempBegin();
+    if (tempSensorOk_) {
+      Serial.println("[gps] tsens probe recovered");
+    }
     return;
   }
   const uint32_t now = millis();

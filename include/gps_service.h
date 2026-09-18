@@ -99,6 +99,7 @@ class GpsService {
   uint32_t lastDrainedPpsCount_ = 0;
   bool tempSensorOk_ = false;
   uint32_t lastTempMs_ = 0;
+  uint32_t lastTempTryMs_ = 0;
 
   mutable portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
 
