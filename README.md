@@ -22,6 +22,7 @@ GNSS：大夏龙雀 DX-GP22（GPS/北斗/GLONASS 多模，9600 8N1，定位后 1
 9. **B4 可观测**：OLED NTP Stats、串口 60s 摘要、`/metrics` Prometheus 文本
 10. **多目标构建**：PlatformIO 多环境，源码 100% 共享，引脚差异集中在 `include/config.h` 目标条件宏
 11. **Web OTA**：登录 `/cfg` 上传 `firmware.bin`；升级期间拒绝 NTP（KoD `RSTR`）并让出 CPU/Flash；琥珀/绿/红状态灯；启动确认后取消回滚；NVS 保留；串口升级仍为兜底
+12. **外部时钟接口（可选）**：`ExtClock`（DS3231）；默认 `EXT_RTC_EN=0`；使能后改善 Holdover 色散地板；见 [ext_clock_design.md](docs/ext_clock_design.md)
 
 ## 硬件连接
 
@@ -128,7 +129,7 @@ esptool --chip esp32s3 --port COM5 --baud 921600 write_flash 0x0 merged_firmware
 | 失效链（两芯） | 断电 1.5–2.5s 进 HLD → 300s 准时 UNS 诚实拒绝 → 恢复 3–20s 无跳秒 |
 | C3 6.7h / S3 6.1h 长测 | LCK ≈100%、residual 零漏、无老化漂移 |
 
-详细数据：[docs/](docs/)——模块边界 [module_boundaries.md](docs/module_boundaries.md)、外部时钟草案 [ext_clock_design.md](docs/ext_clock_design.md)、时钟设计 [local_clock_gps_check.md](docs/local_clock_gps_check.md)、WiFi FSM [wifi_event_fsm.md](docs/wifi_event_fsm.md)、两次 NTP 比对评价 [clock_eval_two_ntp_cmp.md](docs/clock_eval_two_ntp_cmp.md)、C3 长测 [clock_drift_20260916.md](docs/clock_drift_20260916.md)、S3 验收 [esp32s3_flash_test_20260917.md](docs/esp32s3_flash_test_20260917.md)、S3 长测 [s3_clock_drift_20260917.md](docs/s3_clock_drift_20260917.md)。
+详细数据：[docs/](docs/)——模块边界 [module_boundaries.md](docs/module_boundaries.md)、外部时钟 [ext_clock_design.md](docs/ext_clock_design.md)、时钟设计 [local_clock_gps_check.md](docs/local_clock_gps_check.md)、WiFi FSM [wifi_event_fsm.md](docs/wifi_event_fsm.md)、两次 NTP 比对评价 [clock_eval_two_ntp_cmp.md](docs/clock_eval_two_ntp_cmp.md)、C3 长测 [clock_drift_20260916.md](docs/clock_drift_20260916.md)、S3 验收 [esp32s3_flash_test_20260917.md](docs/esp32s3_flash_test_20260917.md)、S3 长测 [s3_clock_drift_20260917.md](docs/s3_clock_drift_20260917.md)。
 
 ## 客户端测试
 

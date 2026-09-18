@@ -1,6 +1,6 @@
 # 外部高品质时钟源（方案草案）
 
-> 状态：**草案 / 未立项采购**（2026-09-18）  
+> 状态：**接口已合入 v1.1.15（`EXT_RTC_EN=0` 默认）；待采购后开使能**  
 > 路线图项：④（① RMT 封存 · ② OTA 验收 · ③ PSRAM history 已取消 → 本项）  
 > 相关：[s3_deep_dive_roadmap.md](s3_deep_dive_roadmap.md)、[local_clock_gps_check.md](local_clock_gps_check.md)
 
@@ -49,7 +49,7 @@ LocalClock
 | SDA/SCL | 空闲 I2C（避开 OLED 总线或共享 + 地址） | DS3231 默认 `0x68`；OLED `0x3C` |
 | SQW（可选） | GPIO 输入 | 1 Hz 方波作辅 PPS；首版可不接 |
 
-引脚进 `config.h` 目标宏；默认可 `#define EXT_RTC_EN 0`。
+默认同 OLED 总线（`PIN_OLED_SDA/SCL`）；`#define EXT_RTC_EN 0`（出厂关）。
 
 ## 5. 验收（采购后）
 
@@ -64,9 +64,10 @@ LocalClock
 - NTS / 公网授时。  
 - 未选型前写死某品牌驱动进主干（先接口 + 一种参考实现）。
 
-## 7. 下一步（需你确认采购后再写代码）
+## 7. 下一步（购件后）
 
-1. 选定模块（推荐 DS3231 模块带电池）。  
-2. 定 S3/C3 的 I2C 引脚与是否用 SQW。  
-3. 实现 `ExtClock` + `LocalClock` Holdover 挂钩 + `/status` 字段。  
-4. 拔天线对比长测。
+1. 焊接 DS3231 到 OLED 同 I2C（SDA/SCL，地址 `0x68`）。  
+2. `include/config.h` 置 `#define EXT_RTC_EN 1`，重编 OTA。  
+3. 确认 `/status.extClock.healthy=true`。  
+4. 拔天线 Holdover 长测对比板载基线。  
+5.（可选）接 SQW 作辅 PPS——尚未实现。

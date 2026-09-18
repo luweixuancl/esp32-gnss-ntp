@@ -15,6 +15,7 @@
 #include "display_ui.h"
 #include "status_leds.h"
 #include "ota_service.h"
+#include "ext_clock.h"
 
 SettingsStore gStore;
 AppSettings gSettings;
@@ -696,6 +697,7 @@ void setup() {
   gEnc.begin();
   gLeds.begin();
   gUi.begin();
+  gExtClock.begin();  // after Wire (OLED); no-op when EXT_RTC_EN=0
   checkFactoryReset();  // hold SW 3s at power-on → wipe all settings, reboot
 
   gSettings = gStore.load();

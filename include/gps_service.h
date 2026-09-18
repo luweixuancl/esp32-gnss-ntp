@@ -30,6 +30,11 @@ struct GpsStatus {
   float tempCorrPpm = 0;
   bool tempComp = false;
   uint32_t holdoverMs = 0;
+  bool extClockEnabled = false;
+  bool extClockHealthy = false;
+  float extClockPpmFloor = NAN;
+  float extClockTempC = NAN;
+  const char* extClockDriver = "none";
   // RMT RX hardware capture diagnostics (docs/s3_deep_dive_roadmap.md #1).
   struct PpsRmtStats {
     bool ok = false;        // capture armed

@@ -1132,6 +1132,16 @@ void WebPortal::handleStatus() {
   clock["tempCorrPpm"] = st.tempCorrPpm;
   clock["tempComp"] = st.tempComp;
   clock["holdoverMs"] = st.holdoverMs;
+  JsonObject ext = doc["extClock"].to<JsonObject>();
+  ext["enabled"] = st.extClockEnabled;
+  ext["healthy"] = st.extClockHealthy;
+  ext["driver"] = st.extClockDriver ? st.extClockDriver : "none";
+  if (isfinite(st.extClockPpmFloor)) {
+    ext["ppmFloor"] = st.extClockPpmFloor;
+  }
+  if (isfinite(st.extClockTempC)) {
+    ext["tempC"] = st.extClockTempC;
+  }
 
   JsonObject ntp = doc["ntp"].to<JsonObject>();
   const bool otaBusy = ipcOtaBusy();

@@ -160,6 +160,11 @@ void LocalClock::updateDieTemp(float tempC) {
   haveTemp_ = true;
 }
 
+void LocalClock::setExtAssist(bool healthy, float ppmFloorHint) {
+  extHealthy_ = healthy;
+  extPpmFloor_ = ppmFloorHint;
+}
+
 float LocalClock::tempCorrPpm() const {
   if (!tempComp_ || !haveTemp_ || !haveTempRef_) {
     return 0.0f;
@@ -406,10 +411,15 @@ uint32_t LocalClock::qualityMs() const {
     }
   }
   if (state_ == ClockState::Holdover) {
-    // Free-run bound: max(|EMA|, crystal floor, PHI) × age, plus entry uncertainty.
+    // Free-run bound: max(|EMA|, crystal floor [, PHI]) × age + entry uncertainty.
+    // With a healthy ExtClock (TCXO-class), use its ppm floor and skip PHI pad.
     const float ap = fabsf(effectivePpm());
-    float usePpm = ap > CLK_HOLDOVER_PPM_FLOOR ? ap : CLK_HOLDOVER_PPM_FLOOR;
-    if (usePpm < CLK_HOLDOVER_PHI_PPM) {
+    float floorPpm = CLK_HOLDOVER_PPM_FLOOR;
+    if (extHealthy_ && isfinite(extPpmFloor_) && extPpmFloor_ > 0.0f) {
+      floorPpm = extPpmFloor_;
+    }
+    float usePpm = ap > floorPpm ? ap : floorPpm;
+    if (!extHealthy_ && usePpm < CLK_HOLDOVER_PHI_PPM) {
       usePpm = CLK_HOLDOVER_PHI_PPM;
     }
     const float elapsedSec = static_cast<float>(holdoverElapsedMs()) / 1000.0f;

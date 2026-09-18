@@ -1,4 +1,5 @@
 #include "gps_service.h"
+#include "ext_clock.h"
 #include <esp_timer.h>
 #if defined(ARDUINO_ESP32S3_DEV)
 // S3 has the newer tsens hardware; the legacy driver below does not exist
@@ -557,6 +558,8 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
   }
 
   const bool nmeaFresh = haveCommit_ && (millis() - commitMs_) <= 3000;
+  gExtClock.poll();
+  localClock_.setExtAssist(gExtClock.healthy(), gExtClock.ppmFloorHint());
   localClock_.tick(nmeaFresh, work.ppsFresh, policy, holdoverSec);
 
   work.qualityMs = qualityMs();
@@ -572,6 +575,11 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
   work.tempCorrPpm = localClock_.tempCorrPpm();
   work.tempComp = localClock_.tempCompEnabled();
   work.holdoverMs = localClock_.holdoverElapsedMs();
+  work.extClockEnabled = gExtClock.enabled();
+  work.extClockHealthy = gExtClock.healthy();
+  work.extClockPpmFloor = gExtClock.ppmFloorHint();
+  work.extClockTempC = gExtClock.dieTempC();
+  work.extClockDriver = gExtClock.driver();
 
   publishStatus(work);
 

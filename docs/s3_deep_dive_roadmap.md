@@ -1,8 +1,8 @@
 # S3 特性深挖路线图（PPS 硬件捕获 / PSRAM 历史 / OTA / 外部时钟）
 
-> 状态：立项排序已定（2026-09-18：**① RMT【已封存】→ ② OTA【板测通过 v1.1.7】→ ③ PSRAM 历史【已取消 v1.1.14】→ ④ 外部时钟【草案，待采购】**）
+> 状态：立项排序已定（2026-09-18：**① RMT【已封存】→ ② OTA【板测通过 v1.1.7】→ ③ PSRAM 历史【已取消 v1.1.14】→ ④ 外部时钟【接口 v1.1.15，待购件开 EN】**）
 > 背景：S3 移植转正后的特性深挖规划，基于 2026-09-18 代码/特性审查；各项目启动前按本档「验收准则」细化
-> 修订：③ 已取消；④ 草案见 [ext_clock_design.md](ext_clock_design.md)
+> 修订：③ 已取消；④ 见 [ext_clock_design.md](ext_clock_design.md)
 > 相关：[esp32s3_devkitc1_hw.md](esp32s3_devkitc1_hw.md)、[esp32s3_flash_test_20260917.md](esp32s3_flash_test_20260917.md)、[s3_clock_drift_20260917.md](s3_clock_drift_20260917.md)
 
 ## 0. 现状基线
@@ -11,7 +11,7 @@
 |---|---|
 | 双核 LX7 @240MHz | ✅ task-time 独占 core 1（移植核心收益） |
 | 16MB QIO flash | ✅ default_16MB 分区；app1/OTA 槽位经 Web `/ota` 可写 |
-| 8MB OPI PSRAM | 闲置（history 已取消）；可留给后续特性 |
+| 8MB OPI PSRAM | 闲置（history 已取消）；可留给后续缓冲 |
 | 新版温度传感器 | ✅ `temperatureRead()`（tcmp 显示/日志） |
 | RMT 4TX | 1 路用于 RGB 状态灯；**RX 4 路全闲置** |
 | 3× UART | 2 路在用（调试/GNSS），第 3 路闲置 |
@@ -37,14 +37,13 @@
 - **方案**：`OtaService`（task-net 独占写路径）经 `app_ipc` 发布 `otaBusy/otaPhase`；`WebPortal` 仅 HTTP 适配；`status_leds`/`task-time` 只读 IPC；升级时 `vTaskPrioritySet` 提升 net 高于 time。
 - **验收**：C3/S3 Web OTA 往返已通过（含进度 UI）；NVS 保留。
 
-## 4. 项目四：外部高品质时钟源（最后，硬件依赖）——**草案已写，待采购**
+## 4. 项目四：外部高品质时钟源（最后，硬件依赖）——**接口已落地（v1.1.15），待购件**
 
-- **草案**：[ext_clock_design.md](ext_clock_design.md)（推荐首研 DS3231）
-- **现状**：Holdover 真实上限 = 板载晶振（S3 −12.3 ppm / C3 −1~−2.7 ppm），5 分钟级守时已到顶。
-- **候选路径**：a. DS3231 类 TCXO RTC；b. 外部 OCXO；c. 第二 PPS 输入。
-- **价值**：守时从「分钟级」到「小时级」——唯一能改变产品精度等级的方向。
-- **前置**：购件确认后再写 `ExtClock` + Holdover 挂钩；未焊接时 `enabled=false`。
-- **验收**：拔 GNSS 电源 NTP offset 漂移 ≤ 目标值（DS3231 约 ±2ppm×300s≈0.6 ms）；可用外部 drift monitor 同窗对比。
+- **方案**：[ext_clock_design.md](ext_clock_design.md)（推荐 DS3231）
+- **代码**：`ExtClock` + `LocalClock::setExtAssist`；默认 `EXT_RTC_EN=0`（无 I2C）；`/status.extClock`
+- **Holdover**：RTC healthy 时用 `EXT_RTC_PPM_FLOOR`（2 ppm）作色散地板并跳过 PHI 垫高
+- **开使能**：焊接 DS3231 到 OLED 同总线（`0x68`）后把 `EXT_RTC_EN` 置 1 重编
+- **验收**：拔 GNSS 后漂移优于板载基线；EN=0 时行为与今日相同
 
 ## 5. 明确不做
 
@@ -54,6 +53,6 @@
 
 ## 6. 排序备忘
 
-**① RMT 捕获（已封存）→ ② OTA（已验收）→ ③ PSRAM 历史（已实现，待板测）→ ④ 外部时钟（草案，待采购）**
+**① RMT 捕获（已封存）→ ② OTA（已验收）→ ③ PSRAM 历史（已取消）→ ④ 外部时钟（接口已合入，待购件开 EN）**
 
-> 纯软件项（①②③）全部可在现有两块板+现有工具链完成，无需购件；④ 启动前需采购与方案调研。
+> ④ 默认关闭；购 DS3231 并置 `EXT_RTC_EN=1` 后做拔天线验收。

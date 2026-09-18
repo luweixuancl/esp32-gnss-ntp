@@ -51,6 +51,9 @@ class LocalClock {
 
   void setTempComp(bool enabled, int16_t coeffCenti);
   void updateDieTemp(float tempC);
+  // Optional ExtClock assist: tighter holdover dispersion floor when healthy.
+  // Does not replace GNSS as the Locked time source.
+  void setExtAssist(bool healthy, float ppmFloorHint);
 
   ClockState state() const { return state_; }
   int32_t residualMs() const { return residualMs_; }
@@ -106,4 +109,7 @@ class LocalClock {
   bool haveTempRef_ = false;
   float tempC_ = 0.0f;
   float tempRefC_ = 0.0f;
+
+  bool extHealthy_ = false;
+  float extPpmFloor_ = NAN;
 };
