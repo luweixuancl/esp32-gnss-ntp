@@ -60,6 +60,9 @@ struct IdfPpsState {
   uint32_t lastSyms = 0;
   uint32_t lastD0Us = 0;  // first symbol of the last frame: low-level length
   uint32_t lastD1Us = 0;  // first symbol of the last frame: high-level length
+  uint32_t emptyFrames = 0;
+  uint32_t dataFrames = 0;
+  uint32_t rawStatus = 0;
   RingbufHandle_t rb = nullptr;
 };
 static IdfPpsState gIdf;
@@ -222,18 +225,21 @@ void GpsService::rmtIdfTask(void* arg) {
     if (item == nullptr) {
       continue;
     }
+    const size_t n = static_cast<size_t>(len / sizeof(rmt_item32_t));
     ++gIdf.frames;
-    if (gIdf.firstSyms == 0) {
-      gIdf.firstSyms = static_cast<uint32_t>(len / sizeof(rmt_item32_t));
-    }
-    gIdf.lastSyms = static_cast<uint32_t>(len / sizeof(rmt_item32_t));
-    if (len >= sizeof(rmt_item32_t)) {
+    if (n == 0) {
+      ++gIdf.emptyFrames;
+    } else {
+      ++gIdf.dataFrames;
+      if (gIdf.firstSyms == 0) {
+        gIdf.firstSyms = static_cast<uint32_t>(n);
+      }
+      gIdf.lastSyms = static_cast<uint32_t>(n);
       const uint32_t sym = *static_cast<const uint32_t*>(item);
       gIdf.lastD0Us = (sym & 0x7FFF) * (GPS_PPS_RMT_TICK_NS / 1000);
       gIdf.lastD1Us = ((sym >> 16) & 0x7FFF) * (GPS_PPS_RMT_TICK_NS / 1000);
+      rmtProcessSymbols(static_cast<const uint32_t*>(item), n);
     }
-    rmtProcessSymbols(static_cast<const uint32_t*>(item),
-                      len / sizeof(rmt_item32_t));
     vRingbufferReturnItem(gIdf.rb, item);
   }
 #else
@@ -276,11 +282,10 @@ void GpsService::begin() {
     c.channel = static_cast<rmt_channel_t>(GPS_PPS_RMT_CH);
     c.gpio_num = static_cast<gpio_num_t>(PIN_GPS_PPS);
     c.clk_div = 80;  // 1 µs per tick
-    c.mem_block_num = 1;
-    c.rx_config.filter_en = true;
-    c.rx_config.filter_ticks_thresh = 1;
-    c.rx_config.idle_threshold =
-        static_cast<uint32_t>(GPS_PPS_RMT_WINDOW_MS) * 1000000UL / GPS_PPS_RMT_TICK_NS;
+    c.mem_block_num = 2;
+    c.rx_config.filter_en = false;  // probe: filter off
+    c.rx_config.filter_ticks_thresh = 0;
+    c.rx_config.idle_threshold = 500;  // probe: 0.5 ms idle ends a frame
     esp_err_t err = rmt_config(&c);
     if (err == ESP_OK) {
       gIdf.stage |= 1;
@@ -296,6 +301,9 @@ void GpsService::begin() {
     if (err == ESP_OK) {
       gIdf.stage |= 4;
       err = rmt_rx_start(c.channel, true);
+      // probe: force the threshold via the legacy setter too
+      rmt_set_rx_idle_thresh(c.channel, 500);
+      rmt_set_pin(c.channel, RMT_MODE_RX, static_cast<gpio_num_t>(PIN_GPS_PPS));
     }
     if (err == ESP_OK && xTaskCreate(rmtIdfTask, "rmtpps", 3072, nullptr, 3, nullptr) == pdPASS) {
       gIdf.stage |= 8;
@@ -490,6 +498,9 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
   work.ppsRmt.idfLastSyms = gIdf.lastSyms;
   work.ppsRmt.idfLastD0Us = gIdf.lastD0Us;
   work.ppsRmt.idfLastD1Us = gIdf.lastD1Us;
+  work.ppsRmt.idfEmptyFrames = gIdf.emptyFrames;
+  work.ppsRmt.idfDataFrames = gIdf.dataFrames;
+  rmt_get_status(static_cast<rmt_channel_t>(GPS_PPS_RMT_CH), &work.ppsRmt.idfRawStatus);
 #endif
 
   if (gps_.date.isValid() && gps_.time.isValid()) {

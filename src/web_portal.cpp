@@ -944,6 +944,11 @@ void WebPortal::handleStatus() {
   ppsRmt["idfLastSyms"] = st.ppsRmt.idfLastSyms;
   ppsRmt["idfLastD0Us"] = st.ppsRmt.idfLastD0Us;
   ppsRmt["idfLastD1Us"] = st.ppsRmt.idfLastD1Us;
+  ppsRmt["idfEmptyFrames"] = st.ppsRmt.idfEmptyFrames;
+  ppsRmt["idfDataFrames"] = st.ppsRmt.idfDataFrames;
+  char rs[12];
+  snprintf(rs, sizeof(rs), "0x%08x", st.ppsRmt.idfRawStatus);
+  ppsRmt["idfRawStatus"] = rs;
 #endif
   gps["utcEpoch"] = st.utcEpoch;
   gps["ageMs"] = st.ageMs;
