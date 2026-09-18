@@ -292,6 +292,12 @@ void GpsService::begin() {
     esp_err_t err = rmt_config(&c);
     if (err == ESP_OK) {
       gIdf.stage |= 1;
+      // RX channels must own the capture memory, or the driver discards
+      // received symbols and pushes EMPTY ringbuf items (field-proven).
+      err = rmt_set_memory_owner(c.channel, RMT_MEM_OWNER_RX);
+    }
+    if (err == ESP_OK) {
+      gIdf.stage |= 16;
       err = rmt_driver_install(c.channel, 2048, 0);
     }
     if (err == ESP_OK) {
