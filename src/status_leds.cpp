@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include "app_ipc.h"
 #include "config.h"
+#include "ota_support.h"
 
 #if defined(ARDUINO_ESP32S3_DEV)
 // Three logical channels share the onboard SK6812-mini (GPIO48): R = network
@@ -57,6 +58,11 @@ void StatusLeds::writeHeartbeat(uint8_t pin, uint32_t nowMs) {
 }
 
 bool StatusLeds::tasksStale(uint32_t nowMs) {
+  // Web OTA intentionally blocks task-net inside handleClient for many seconds;
+  // never treat that as a hang (otaKickWatchdogs also refreshes kickNet).
+  if (otaIsBusy()) {
+    return false;
+  }
   const uint32_t t = gIpc.kickTimeMs;
   const uint32_t n = gIpc.kickNetMs;
   const uint32_t u = gIpc.kickUiMs;

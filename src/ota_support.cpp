@@ -1,9 +1,20 @@
 #include "ota_support.h"
 
 #include <Arduino.h>
+#include <esp_app_format.h>
 #include <esp_ota_ops.h>
+#include <esp_task_wdt.h>
+#include <string.h>
 
-void otaMarkAppValidIfNeeded() {
+#include "app_ipc.h"
+#include "config.h"
+
+namespace {
+
+volatile bool gOtaBusy = false;
+bool gOtaConfirmDone = false;
+
+void markValidNow() {
   const esp_partition_t* running = esp_ota_get_running_partition();
   if (running == nullptr) {
     return;
@@ -27,6 +38,83 @@ void otaMarkAppValidIfNeeded() {
   }
 }
 
+}  // namespace
+
+void otaSetBusy(bool busy) {
+  gOtaBusy = busy;
+  if (busy) {
+    otaKickWatchdogs();
+  }
+}
+
+bool otaIsBusy() {
+  return gOtaBusy;
+}
+
+void otaKickWatchdogs() {
+  esp_task_wdt_reset();
+  ipcKickNet();
+}
+
+void otaPollConfirmValid() {
+  if (gOtaConfirmDone || gOtaBusy) {
+    return;
+  }
+  if (millis() < OTA_MARK_VALID_AFTER_MS) {
+    return;
+  }
+  // Require all three tasks to have kicked at least once (system actually running).
+  if (gIpc.kickTimeMs == 0 || gIpc.kickNetMs == 0 || gIpc.kickUiMs == 0) {
+    return;
+  }
+  markValidNow();
+  gOtaConfirmDone = true;
+}
+
+uint16_t otaExpectedChipId() {
+#if defined(ARDUINO_ESP32S3_DEV)
+  return static_cast<uint16_t>(ESP_CHIP_ID_ESP32S3);
+#else
+  return static_cast<uint16_t>(ESP_CHIP_ID_ESP32C3);
+#endif
+}
+
+const char* otaExpectedChipName() {
+#if defined(ARDUINO_ESP32S3_DEV)
+  return "ESP32-S3";
+#else
+  return "ESP32-C3";
+#endif
+}
+
+bool otaValidateImagePrefix(const uint8_t* data, size_t len, char* err, size_t errLen) {
+  auto setErr = [&](const char* msg) {
+    if (err != nullptr && errLen > 0) {
+      strncpy(err, msg, errLen - 1);
+      err[errLen - 1] = '\0';
+    }
+  };
+  if (data == nullptr || len < 14) {
+    setErr("Image header too short");
+    return false;
+  }
+  if (data[0] != ESP_IMAGE_HEADER_MAGIC) {
+    setErr("Not an ESP app image (magic!=0xE9); use firmware.bin not merged");
+    return false;
+  }
+  const uint16_t chip = static_cast<uint16_t>(data[12]) |
+                        (static_cast<uint16_t>(data[13]) << 8);
+  const uint16_t expect = otaExpectedChipId();
+  if (chip != expect) {
+    char buf[96];
+    snprintf(buf, sizeof(buf), "Wrong chip_id 0x%04x (need 0x%04x %s)", chip, expect,
+             otaExpectedChipName());
+    setErr(buf);
+    return false;
+  }
+  return true;
+}
+
 const char* otaRunningPartitionLabel() {
   const esp_partition_t* p = esp_ota_get_running_partition();
   return (p && p->label) ? p->label : "?";
@@ -35,6 +123,11 @@ const char* otaRunningPartitionLabel() {
 const char* otaNextPartitionLabel() {
   const esp_partition_t* p = esp_ota_get_next_update_partition(nullptr);
   return (p && p->label) ? p->label : "?";
+}
+
+size_t otaNextPartitionSize() {
+  const esp_partition_t* p = esp_ota_get_next_update_partition(nullptr);
+  return p ? p->size : 0;
 }
 
 const char* otaImageStateLabel() {

@@ -1,7 +1,12 @@
 #pragma once
 
 // Firmware identity (shown on /cfg /status; bump on releases that ship via OTA).
-#define FW_VERSION           "1.1.0-ota"
+#define FW_VERSION           "1.1.1-ota"
+// After a pending-verify OTA boot, wait until tasks are alive this long before
+// cancelling rollback — catches crash-loops in GPS/WiFi/task bring-up.
+#define OTA_MARK_VALID_AFTER_MS  30000
+// Progress log cadence during Web OTA (bytes).
+#define OTA_PROGRESS_LOG_BYTES   (64 * 1024)
 
 // ---------------------------------------------------------------------------
 // Hardware wiring — target-conditional (合宙 CORE ESP32-C3 default, ESP32-S3

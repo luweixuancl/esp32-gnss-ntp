@@ -618,8 +618,10 @@ static void taskNet(void* /*arg*/) {
     driveScan();
     pollNetWork();
     gPortal.loop();
+    otaPollConfirmValid();
     static uint8_t heapLowStreak = 0;
-    if (ESP.getFreeHeap() < HEAP_RESTART_BYTES) {
+    // Skip heap-panic restart while flash is being rewritten.
+    if (!otaIsBusy() && ESP.getFreeHeap() < HEAP_RESTART_BYTES) {
       if (++heapLowStreak >= HEAP_RESTART_SAMPLES) {
         Serial.printf("[net] heap low (%u) x%u — restart\n",
                       static_cast<unsigned>(ESP.getFreeHeap()), heapLowStreak);
@@ -675,9 +677,6 @@ void setup() {
   checkFactoryReset();  // hold SW 3s at power-on → wipe all settings, reboot
 
   gSettings = gStore.load();
-
-  // Confirm OTA image after NVS/settings load so a crash-looping build rolls back.
-  otaMarkAppValidIfNeeded();
 
   gGps.begin();
   gWifi.begin();

@@ -48,5 +48,7 @@ class WebPortal {
   bool otaAuthOk_ = false;
   bool otaStarted_ = false;
   bool otaSuccess_ = false;
-  String otaError_;
+  bool otaHeaderChecked_ = false;
+  uint32_t otaLastLogBytes_ = 0;
+  char otaError_[96] = {};
 };
