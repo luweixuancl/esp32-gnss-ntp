@@ -1,6 +1,8 @@
 #pragma once
 
 #include <Arduino.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include "config.h"
 #include "gps_service.h"
 #include "local_clock.h"
@@ -73,20 +75,28 @@ class HistoryRecorder {
   HistorySummary summary() const;
   HistoryExportCursor beginExport(uint32_t lastSec, uint32_t maxRows) const;
   bool sampleLogical(const HistoryExportCursor& cur, uint32_t i, HistorySample* out) const;
+  // Copy up to n samples starting at logical index i0 under one lock (CSV batch).
+  size_t copyLogical(const HistoryExportCursor& cur, uint32_t i0, HistorySample* dst,
+                     size_t n) const;
 
   uint32_t count() const;
   uint32_t capacity() const { return capacity_; }
   uint32_t seq() const;
   uint32_t otaSkipped() const { return otaSkipped_; }
-  uint32_t gaps() const { return gaps_; }
+  uint32_t gaps() const;
 
  private:
   static int16_t clampI16(int32_t v);
   static int16_t encodeTempC(float c);
   static int16_t encodePpm(float ppm);
+  bool lock(TickType_t ticks) const;
+  void unlock() const;
   void applyStatsLocked(const HistorySample& s, int dir);  // +1 add / -1 remove
+  void refreshFreqExtLocked();  // recompute min/max when dirty
 
-  mutable portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
+  // Mutex (not portMUX): PSRAM R/W must not run with interrupts disabled —
+  // that stalls WiFi/HTTP on the other core and makes the status page "停秒".
+  mutable SemaphoreHandle_t mu_ = nullptr;
   HistorySample* buf_ = nullptr;
   bool enabled_ = false;
   const char* reason_ = "not started";
@@ -104,6 +114,10 @@ class HistoryRecorder {
   uint32_t stateCounts_[5] = {};
   int64_t freqSumCenti_ = 0;
   uint32_t freqN_ = 0;
+  int16_t freqMinCenti_ = 0;
+  int16_t freqMaxCenti_ = 0;
+  bool haveFreqExt_ = false;
+  bool freqExtDirty_ = false;
 };
 
 extern HistoryRecorder gHistory;

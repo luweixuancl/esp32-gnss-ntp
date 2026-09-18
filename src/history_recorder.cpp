@@ -10,8 +10,28 @@ HistoryRecorder gHistory;
 #define HISTORY_INTERVAL_MS 1000u
 #endif
 
+bool HistoryRecorder::lock(TickType_t ticks) const {
+  if (mu_ == nullptr) {
+    return false;
+  }
+  return xSemaphoreTake(mu_, ticks) == pdTRUE;
+}
+
+void HistoryRecorder::unlock() const {
+  if (mu_ != nullptr) {
+    xSemaphoreGive(mu_);
+  }
+}
+
 void HistoryRecorder::begin() {
 #if defined(BOARD_HAS_PSRAM)
+  mu_ = xSemaphoreCreateMutex();
+  if (mu_ == nullptr) {
+    enabled_ = false;
+    reason_ = "mutex failed";
+    Serial.println("[history] mutex create failed — disabled");
+    return;
+  }
   capacity_ = HISTORY_CAPACITY;
   const size_t bytes = static_cast<size_t>(capacity_) * sizeof(HistorySample);
   buf_ = static_cast<HistorySample*>(
@@ -33,7 +53,9 @@ void HistoryRecorder::begin() {
   memset(stateCounts_, 0, sizeof(stateCounts_));
   freqSumCenti_ = 0;
   freqN_ = 0;
-  Serial.printf("[history] enabled capacity=%u bytes=%u (SPIRAM)\n",
+  haveFreqExt_ = false;
+  freqExtDirty_ = false;
+  Serial.printf("[history] enabled capacity=%u bytes=%u (SPIRAM, mutex)\n",
                 static_cast<unsigned>(capacity_), static_cast<unsigned>(bytes));
 #else
   enabled_ = false;
@@ -77,6 +99,17 @@ void HistoryRecorder::applyStatsLocked(const HistorySample& s, int dir) {
     stateCounts_[st]++;
     freqSumCenti_ += s.freqPpmX100;
     freqN_++;
+    if (!haveFreqExt_) {
+      freqMinCenti_ = freqMaxCenti_ = s.freqPpmX100;
+      haveFreqExt_ = true;
+    } else {
+      if (s.freqPpmX100 < freqMinCenti_) {
+        freqMinCenti_ = s.freqPpmX100;
+      }
+      if (s.freqPpmX100 > freqMaxCenti_) {
+        freqMaxCenti_ = s.freqPpmX100;
+      }
+    }
   } else {
     if (stateCounts_[st] > 0) {
       stateCounts_[st]--;
@@ -85,7 +118,49 @@ void HistoryRecorder::applyStatsLocked(const HistorySample& s, int dir) {
     if (freqN_ > 0) {
       freqN_--;
     }
+    if (haveFreqExt_ &&
+        (s.freqPpmX100 == freqMinCenti_ || s.freqPpmX100 == freqMaxCenti_)) {
+      freqExtDirty_ = true;
+    }
+    if (freqN_ == 0) {
+      haveFreqExt_ = false;
+      freqExtDirty_ = false;
+    }
   }
+}
+
+void HistoryRecorder::refreshFreqExtLocked() {
+  if (!freqExtDirty_ || count_ == 0 || buf_ == nullptr) {
+    return;
+  }
+  // Coarse pass (≤256) — good enough for summary extrema, keeps export snappy.
+  const uint32_t probes = count_ < 256 ? count_ : 256;
+  bool have = false;
+  int16_t mn = 0;
+  int16_t mx = 0;
+  for (uint32_t p = 0; p < probes; ++p) {
+    const uint32_t oldestOffset = (probes == 1) ? 0 : (p * (count_ - 1)) / (probes - 1);
+    const uint32_t phys =
+        (count_ < capacity_) ? oldestOffset : ((head_ + oldestOffset) % capacity_);
+    const int16_t v = buf_[phys].freqPpmX100;
+    if (!have) {
+      mn = mx = v;
+      have = true;
+    } else {
+      if (v < mn) {
+        mn = v;
+      }
+      if (v > mx) {
+        mx = v;
+      }
+    }
+  }
+  if (have) {
+    freqMinCenti_ = mn;
+    freqMaxCenti_ = mx;
+    haveFreqExt_ = true;
+  }
+  freqExtDirty_ = false;
 }
 
 void HistoryRecorder::push(const GpsStatus& st, int8_t rssi) {
@@ -130,7 +205,11 @@ void HistoryRecorder::push(const GpsStatus& st, int8_t rssi) {
     }
   }
 
-  portENTER_CRITICAL(&mux_);
+  // Non-blocking: if export holds the mutex, skip this second rather than stall
+  // task-time (NTP/PPS path).
+  if (!lock(0)) {
+    return;
+  }
   if (count_ == capacity_) {
     applyStatsLocked(buf_[head_], -1);
   }
@@ -144,7 +223,10 @@ void HistoryRecorder::push(const GpsStatus& st, int8_t rssi) {
   if (s.flags & HistGap) {
     gaps_++;
   }
-  portEXIT_CRITICAL(&mux_);
+  if (freqExtDirty_) {
+    refreshFreqExtLocked();
+  }
+  unlock();
 
   lastPushMs_ = now;
   lastPpsCount_ = st.ppsCount;
@@ -152,17 +234,30 @@ void HistoryRecorder::push(const GpsStatus& st, int8_t rssi) {
 }
 
 uint32_t HistoryRecorder::count() const {
-  portENTER_CRITICAL(&mux_);
+  if (!lock(pdMS_TO_TICKS(20))) {
+    return 0;
+  }
   const uint32_t c = count_;
-  portEXIT_CRITICAL(&mux_);
+  unlock();
   return c;
 }
 
 uint32_t HistoryRecorder::seq() const {
-  portENTER_CRITICAL(&mux_);
+  if (!lock(pdMS_TO_TICKS(20))) {
+    return 0;
+  }
   const uint32_t s = seq_;
-  portEXIT_CRITICAL(&mux_);
+  unlock();
   return s;
+}
+
+uint32_t HistoryRecorder::gaps() const {
+  if (!lock(pdMS_TO_TICKS(20))) {
+    return 0;
+  }
+  const uint32_t g = gaps_;
+  unlock();
+  return g;
 }
 
 HistorySummary HistoryRecorder::summary() const {
@@ -176,87 +271,48 @@ HistorySummary HistoryRecorder::summary() const {
     return out;
   }
 
-  uint32_t count = 0;
-  uint32_t head = 0;
-  uint32_t capacity = 0;
-  uint32_t seq = 0;
-  uint32_t gaps = 0;
-  uint32_t stateCounts[5] = {};
-  int64_t freqSumCenti = 0;
-  uint32_t freqN = 0;
-  portENTER_CRITICAL(&mux_);
-  count = count_;
-  head = head_;
-  capacity = capacity_;
-  seq = seq_;
-  gaps = gaps_;
-  memcpy(stateCounts, stateCounts_, sizeof(stateCounts));
-  freqSumCenti = freqSumCenti_;
-  freqN = freqN_;
-  portEXIT_CRITICAL(&mux_);
-
-  out.enabled = true;
-  out.reason = reason_;
-  out.capacity = capacity;
-  out.count = count;
-  out.seq = seq;
-  out.psramBytes = capacity * sizeof(HistorySample);
-  out.otaSkipped = otaSkipped_;
-  out.gaps = gaps;
-  memcpy(out.stateCounts, stateCounts, sizeof(stateCounts));
-
-  if (count == 0) {
+  if (!lock(pdMS_TO_TICKS(100))) {
+    out.enabled = true;
+    out.reason = "busy";
+    out.otaSkipped = otaSkipped_;
     return out;
   }
 
-  // Oldest / newest UTC: O(1) index read.
-  const uint32_t oldestPhys = (count < capacity) ? 0 : head;
-  const uint32_t newestPhys = (head + capacity - 1) % capacity;
-  HistorySample oldest{};
-  HistorySample newest{};
-  portENTER_CRITICAL(&mux_);
-  oldest = buf_[oldestPhys];
-  newest = buf_[newestPhys];
-  portEXIT_CRITICAL(&mux_);
-  out.oldestUtc = oldest.utcEpoch;
-  out.newestUtc = newest.utcEpoch;
-
-  if (freqN > 0) {
-    out.haveFreq = true;
-    out.freqMean = static_cast<float>(freqSumCenti) / (100.0f * static_cast<float>(freqN));
+  if (freqExtDirty_) {
+    // const_cast: dirty refresh mutates cache only
+    const_cast<HistoryRecorder*>(this)->refreshFreqExtLocked();
   }
 
-  // Min/max via coarse stride (≤256 probes) — avoids O(N) under the mux.
-  const uint32_t probes = count < 256 ? count : 256;
-  float freqMin = 0;
-  float freqMax = 0;
-  bool have = false;
-  for (uint32_t p = 0; p < probes; ++p) {
-    const uint32_t oldestOffset = (probes == 1) ? 0 : (p * (count - 1)) / (probes - 1);
-    const uint32_t phys =
-        (count < capacity) ? oldestOffset : ((head + oldestOffset) % capacity);
-    HistorySample s;
-    portENTER_CRITICAL(&mux_);
-    s = buf_[phys];
-    portEXIT_CRITICAL(&mux_);
-    const float ppm = static_cast<float>(s.freqPpmX100) * 0.01f;
-    if (!have) {
-      freqMin = freqMax = ppm;
-      have = true;
-    } else {
-      if (ppm < freqMin) {
-        freqMin = ppm;
-      }
-      if (ppm > freqMax) {
-        freqMax = ppm;
-      }
-    }
+  out.enabled = true;
+  out.reason = reason_;
+  out.capacity = capacity_;
+  out.count = count_;
+  out.seq = seq_;
+  out.psramBytes = capacity_ * sizeof(HistorySample);
+  out.otaSkipped = otaSkipped_;
+  out.gaps = gaps_;
+  memcpy(out.stateCounts, stateCounts_, sizeof(stateCounts_));
+
+  if (count_ == 0) {
+    unlock();
+    return out;
   }
-  if (have) {
+
+  const uint32_t oldestPhys = (count_ < capacity_) ? 0 : head_;
+  const uint32_t newestPhys = (head_ + capacity_ - 1) % capacity_;
+  out.oldestUtc = buf_[oldestPhys].utcEpoch;
+  out.newestUtc = buf_[newestPhys].utcEpoch;
+
+  if (freqN_ > 0) {
     out.haveFreq = true;
-    out.freqMin = freqMin;
-    out.freqMax = freqMax;
+    out.freqMean = static_cast<float>(freqSumCenti_) / (100.0f * static_cast<float>(freqN_));
   }
+  if (haveFreqExt_) {
+    out.haveFreq = true;
+    out.freqMin = static_cast<float>(freqMinCenti_) * 0.01f;
+    out.freqMax = static_cast<float>(freqMaxCenti_) * 0.01f;
+  }
+  unlock();
   return out;
 }
 
@@ -265,12 +321,14 @@ HistoryExportCursor HistoryRecorder::beginExport(uint32_t lastSec, uint32_t maxR
   if (!enabled_ || buf_ == nullptr) {
     return cur;
   }
-  portENTER_CRITICAL(&mux_);
+  if (!lock(pdMS_TO_TICKS(100))) {
+    return cur;
+  }
   cur.seq = seq_;
   cur.count = count_;
   cur.capacity = capacity_;
   cur.head = head_;
-  portEXIT_CRITICAL(&mux_);
+  unlock();
 
   uint32_t limit = cur.count;
   if (lastSec > 0 && lastSec < limit) {
@@ -286,14 +344,26 @@ HistoryExportCursor HistoryRecorder::beginExport(uint32_t lastSec, uint32_t maxR
 
 bool HistoryRecorder::sampleLogical(const HistoryExportCursor& cur, uint32_t i,
                                     HistorySample* out) const {
-  if (out == nullptr || !enabled_ || buf_ == nullptr || i >= cur.limit) {
-    return false;
+  return copyLogical(cur, i, out, 1) == 1;
+}
+
+size_t HistoryRecorder::copyLogical(const HistoryExportCursor& cur, uint32_t i0,
+                                    HistorySample* dst, size_t n) const {
+  if (dst == nullptr || n == 0 || !enabled_ || buf_ == nullptr || i0 >= cur.limit) {
+    return 0;
   }
-  const uint32_t oldestOffset = cur.start + i;
-  const uint32_t phys =
-      (cur.count < cur.capacity) ? oldestOffset : ((cur.head + oldestOffset) % cur.capacity);
-  portENTER_CRITICAL(&mux_);
-  *out = buf_[phys];
-  portEXIT_CRITICAL(&mux_);
-  return true;
+  if (n > cur.limit - i0) {
+    n = cur.limit - i0;
+  }
+  if (!lock(pdMS_TO_TICKS(100))) {
+    return 0;
+  }
+  for (size_t k = 0; k < n; ++k) {
+    const uint32_t logical = cur.start + i0 + static_cast<uint32_t>(k);
+    const uint32_t phys =
+        (cur.count < cur.capacity) ? logical : ((cur.head + logical) % cur.capacity);
+    dst[k] = buf_[phys];
+  }
+  unlock();
+  return n;
 }

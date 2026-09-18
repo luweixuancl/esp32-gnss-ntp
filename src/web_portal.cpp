@@ -347,7 +347,16 @@ void WebPortal::handleRoot() {
       " const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60),x=s%60;"
       " return (d?d+'d ':'')+pad(h)+':'+pad(m)+':'+pad(x)}"
       "function setCls(el,c){el.className='v '+(c||'')}"
+      "let tickBusy=false, baseEpoch=0, baseMono=0, tzHours=0;"
+      "function paintTime(){"
+      " if(!baseEpoch)return;"
+      " const ep=baseEpoch+Math.floor((Date.now()-baseMono)/1000);"
+      " document.getElementById('utc').textContent=fmt(ep,0);"
+      " document.getElementById('local').textContent=fmt(ep,tzHours)"
+      "  +' (UTC'+(tzHours>=0?'+':'')+tzHours+')';"
+      "}"
       "async function tick(){"
+      " if(tickBusy)return; tickBusy=true;"
       " try{"
       "  const r=await fetch('/status'); const j=await r.json();"
       "  const g=j.gps||{}, n=j.ntp||{}, c=j.clock||{};"
@@ -370,10 +379,9 @@ void WebPortal::handleRoot() {
       "  li.textContent=(n.li!=null)?('LI='+n.li):'--'; setCls(li,n.li===0?'ok':'warn');"
       "  document.getElementById('refId').textContent=n.refId||'GPSS';"
       "  document.getElementById('ntpReq').textContent=(n.requests!=null)?n.requests:'--';"
-      "  const tz=j.tzHours||0;"
-      "  document.getElementById('utc').textContent=fmt(g.utcEpoch,0);"
-      "  document.getElementById('local').textContent=fmt(g.utcEpoch,tz)"
-      "    +' (UTC'+(tz>=0?'+':'')+tz+')';"
+      "  tzHours=j.tzHours||0;"
+      "  if(g.utcEpoch){baseEpoch=g.utcEpoch; baseMono=Date.now();}"
+      "  paintTime();"
       "  const fx=document.getElementById('fix');"
       "  fx.textContent=g.fix?'是':'否'; setCls(fx,g.fix?'ok':'bad');"
       "  document.getElementById('sats').textContent=(g.satellites!=null)?g.satellites:'--';"
@@ -407,8 +415,9 @@ void WebPortal::handleRoot() {
       "  tp.textContent=(c.tempC!=null)?(Number(c.tempC).toFixed(1)+'°C · '"
       "    +(c.tempComp?('补偿 '+Number(c.tempCorrPpm||0).toFixed(2)+' ppm'):'补偿关')):'--';"
       " }catch(e){}"
+      " tickBusy=false;"
       "}"
-      "tick(); setInterval(tick,1000);"
+      "tick(); setInterval(tick,1000); setInterval(paintTime,250);"
       "</script>");
 
   server_.send(200, "text/html", buildPage("NTP 状态", body, false));
@@ -1232,52 +1241,55 @@ void WebPortal::handleHistoryCsv() {
       "tempComp,qualityMs,ppsCount,ppsFresh,satellites,fix,rssi,gap\n");
 
   char line[192];
-  for (uint32_t i = 0; i < cur.limit; ++i) {
-    HistorySample s;
-    if (!gHistory.sampleLogical(cur, i, &s)) {
+  HistorySample batch[HISTORY_CSV_BATCH_ROWS];
+  for (uint32_t i = 0; i < cur.limit;) {
+    const size_t got = gHistory.copyLogical(cur, i, batch, HISTORY_CSV_BATCH_ROWS);
+    if (got == 0) {
       break;
     }
-    const float freq = static_cast<float>(s.freqPpmX100) * 0.01f;
-    const bool haveT = s.tempCenti != INT16_MIN;
-    const bool haveTr = s.tempRefCenti != INT16_MIN;
-    float tempC = haveT ? (s.tempCenti * 0.01f) : NAN;
-    float tempRef = haveTr ? (s.tempRefCenti * 0.01f) : NAN;
-    float tempCorr = 0.0f;
-    if ((s.flags & HistTempComp) && haveT && haveTr) {
-      tempCorr = tempCoeffPpmPerC(coeffCenti) * (tempC - tempRef);
-      if (tempCorr > CLK_TEMP_CORR_MAX_PPM) {
-        tempCorr = CLK_TEMP_CORR_MAX_PPM;
+    for (size_t k = 0; k < got; ++k) {
+      const HistorySample& s = batch[k];
+      const float freq = static_cast<float>(s.freqPpmX100) * 0.01f;
+      const bool haveT = s.tempCenti != INT16_MIN;
+      const bool haveTr = s.tempRefCenti != INT16_MIN;
+      float tempC = haveT ? (s.tempCenti * 0.01f) : NAN;
+      float tempRef = haveTr ? (s.tempRefCenti * 0.01f) : NAN;
+      float tempCorr = 0.0f;
+      if ((s.flags & HistTempComp) && haveT && haveTr) {
+        tempCorr = tempCoeffPpmPerC(coeffCenti) * (tempC - tempRef);
+        if (tempCorr > CLK_TEMP_CORR_MAX_PPM) {
+          tempCorr = CLK_TEMP_CORR_MAX_PPM;
+        }
+        if (tempCorr < -CLK_TEMP_CORR_MAX_PPM) {
+          tempCorr = -CLK_TEMP_CORR_MAX_PPM;
+        }
       }
-      if (tempCorr < -CLK_TEMP_CORR_MAX_PPM) {
-        tempCorr = -CLK_TEMP_CORR_MAX_PPM;
+      const char* stLabel = clockStateLabel(static_cast<ClockState>(s.state));
+      char tBuf[16] = "";
+      char trBuf[16] = "";
+      if (haveT) {
+        snprintf(tBuf, sizeof(tBuf), "%.2f", static_cast<double>(tempC));
+      }
+      if (haveTr) {
+        snprintf(trBuf, sizeof(trBuf), "%.2f", static_cast<double>(tempRef));
+      }
+      const int n = snprintf(
+          line, sizeof(line),
+          "%lu,%s,%u,%d,%.4f,%s,%s,%.4f,%u,%u,%lu,%u,%u,%u,%d,%u\n",
+          static_cast<unsigned long>(s.utcEpoch), stLabel,
+          static_cast<unsigned>(s.holdoverSec), static_cast<int>(s.residualMs),
+          static_cast<double>(freq), tBuf, trBuf, static_cast<double>(tempCorr),
+          (s.flags & HistTempComp) ? 1u : 0u, static_cast<unsigned>(s.qualityMs),
+          static_cast<unsigned long>(s.ppsCount), (s.flags & HistPpsFresh) ? 1u : 0u,
+          static_cast<unsigned>(s.satellites), (s.flags & HistFix) ? 1u : 0u,
+          static_cast<int>(s.rssi), (s.flags & HistGap) ? 1u : 0u);
+      if (n > 0) {
+        server_.sendContent(line);
       }
     }
-    const char* stLabel = clockStateLabel(static_cast<ClockState>(s.state));
-    char tBuf[16] = "";
-    char trBuf[16] = "";
-    if (haveT) {
-      snprintf(tBuf, sizeof(tBuf), "%.2f", static_cast<double>(tempC));
-    }
-    if (haveTr) {
-      snprintf(trBuf, sizeof(trBuf), "%.2f", static_cast<double>(tempRef));
-    }
-    const int n = snprintf(
-        line, sizeof(line),
-        "%lu,%s,%u,%d,%.4f,%s,%s,%.4f,%u,%u,%lu,%u,%u,%u,%d,%u\n",
-        static_cast<unsigned long>(s.utcEpoch), stLabel,
-        static_cast<unsigned>(s.holdoverSec), static_cast<int>(s.residualMs),
-        static_cast<double>(freq), tBuf, trBuf, static_cast<double>(tempCorr),
-        (s.flags & HistTempComp) ? 1u : 0u, static_cast<unsigned>(s.qualityMs),
-        static_cast<unsigned long>(s.ppsCount), (s.flags & HistPpsFresh) ? 1u : 0u,
-        static_cast<unsigned>(s.satellites), (s.flags & HistFix) ? 1u : 0u,
-        static_cast<int>(s.rssi), (s.flags & HistGap) ? 1u : 0u);
-    if (n > 0) {
-      server_.sendContent(line);
-    }
-    if ((i % HISTORY_CSV_BATCH_ROWS) == (HISTORY_CSV_BATCH_ROWS - 1)) {
-      ipcKickNet();
-      delay(0);
-    }
+    i += static_cast<uint32_t>(got);
+    ipcKickNet();
+    delay(0);
   }
 }
 
