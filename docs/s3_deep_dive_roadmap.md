@@ -24,15 +24,11 @@
 - **重开条件**：迁移 Arduino 3.x / IDF 5（新 `rmt` 驱动 + S3 RX 专属通道模型）后再评估；代码保留（`GPS_PPS_RMT_EN` 置 1 即回实验态），探索过程全部入档。
 - **验收准则/工作量**：见下（供重开时引用）
 
-## 2. 项目二：PSRAM 诊断环形缓冲 + `/history`（第 3 位）——**方案已定，待实现**
+## 2. 项目二：PSRAM 诊断环形缓冲 + `/history`（第 3 位）——**已实现（v1.1.8），待板测**
 
-- **现状**：8MB PSRAM 零使用；长测依赖外部脚本（手机 1 Hz 拉取）。
-- **方案文档**：[psram_history_design.md](psram_history_design.md)（2026-09-18）
-- **要点**：24 h × 1 Hz × 24 B ≈ 2.1 MB SPIRAM 环；`HistoryRecorder`；task-time 写 / task-net 读；`GET /history` + `/history.csv`（流式）；OTA 停采；C3 `enabled:false`。
-- **价值**：设备自录长测/故障回溯，不依赖外网脚本；`/metrics` 可加 `history_*`。
-- **验收**：见方案 §9（S3 自录 + CSV 对照 `clock_drift_monitor`；C3 关闭且编译通过）。
-- **实现切片**：骨架分配 → time 挂钩 → HTTP JSON/CSV → metrics/链接 → 板测。
-- **暂缓原因（已解除）**：原等待 OTA；OTA 已于 v1.1.7 板测通过。
+- **方案文档**：[psram_history_design.md](psram_history_design.md)
+- **代码**：`HistoryRecorder`；`GET /history`、`GET /history.csv`；`/metrics` `history_*`；OTA 停采；C3 `enabled:false`
+- **验收**：见方案 §9（S3 自录 + CSV；C3 关闭）
 
 ## 3. 项目三：OTA 双分区升级——**已实现并板测通过（v1.1.7）**
 

@@ -15,6 +15,7 @@
 #include "display_ui.h"
 #include "status_leds.h"
 #include "ota_service.h"
+#include "history_recorder.h"
 
 SettingsStore gStore;
 AppSettings gSettings;
@@ -547,6 +548,25 @@ static void taskTime(void* /*arg*/) {
     gGps.loop(cachedPolicy, cachedHoldSec);
     gNtp.loop(gGps);
 
+    // 1 Hz diagnostic sample into PSRAM ring (S3). Skip during OTA.
+    {
+      static uint32_t lastHistMs = 0;
+      const uint32_t now = millis();
+      if (lastHistMs == 0 || (now - lastHistMs) >= HISTORY_INTERVAL_MS) {
+        lastHistMs = now;
+        if (ipcOtaBusy()) {
+          gHistory.skipOta();
+        } else {
+          const GpsStatus st = gGps.snapshot();
+          const WifiLinkSnapshot link = gWifi.linkSnapshot();
+          const int8_t rssi = link.staUp ? static_cast<int8_t>(
+              link.rssi < -128 ? -128 : (link.rssi > 127 ? 127 : link.rssi))
+                                         : static_cast<int8_t>(0);
+          gHistory.push(st, rssi);
+        }
+      }
+    }
+
 #if NTP_STATUS_LOG_MS > 0
     {
       static uint32_t lastLogMs = 0;
@@ -704,6 +724,7 @@ void setup() {
   gWifi.begin();
   gNtp.begin();
   gOta.begin();
+  gHistory.begin();
 
   Serial.printf("MAC=%s\n", WiFi.macAddress().c_str());
   Serial.printf("SoftAP default pass=%s (NVS appw overrides if set)\n",

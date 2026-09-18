@@ -4,6 +4,7 @@
 #include "gps_service.h"
 #include "ntp_server.h"
 #include "ota_service.h"
+#include "history_recorder.h"
 #include <ArduinoJson.h>
 #include <esp_system.h>
 #include <math.h>
@@ -89,6 +90,8 @@ void WebPortal::begin(WifiManager* wifi, GpsService* gps, NtpServer* ntp) {
       "/ota", HTTP_POST, [this]() { handleOtaDone(); }, [this]() { handleOtaUpload(); });
   server_.on("/status", HTTP_GET, [this]() { handleStatus(); });
   server_.on("/metrics", HTTP_GET, [this]() { handleMetrics(); });
+  server_.on("/history", HTTP_GET, [this]() { handleHistory(); });
+  server_.on("/history.csv", HTTP_GET, [this]() { handleHistoryCsv(); });
   server_.onNotFound([this]() {
     sendNoCache();
     const WifiLinkSnapshot link = wifi_ ? wifi_->linkSnapshot() : WifiLinkSnapshot{};
@@ -103,7 +106,7 @@ void WebPortal::begin(WifiManager* wifi, GpsService* gps, NtpServer* ntp) {
   });
   server_.begin();
   started_ = true;
-  Serial.println("HTTP on :80  (/ and /status /metrics open; /cfg+/ota need login)");
+  Serial.println("HTTP on :80  (/ /status /metrics /history open; /cfg+/ota need login)");
 }
 
 void WebPortal::loop() {
@@ -328,7 +331,10 @@ void WebPortal::handleRoot() {
       "<div class='row'><span class='k'>内存</span><span class='v' id='heap'>--</span></div>"
       "<div class='row'><span class='k'>温度</span><span class='v' id='temp'>--</span></div>"
       "</div>"
-      "<p style='color:#64748b'>自动更新 1 Hz · JSON: <a href='/status'>/status</a> · 指标: <a href='/metrics'>/metrics</a></p>"
+      "<p style='color:#64748b'>自动更新 1 Hz · JSON: <a href='/status'>/status</a> · "
+      "指标: <a href='/metrics'>/metrics</a> · "
+      "历史: <a href='/history'>/history</a> · "
+      "<a href='/history.csv?last=3600'>CSV(1h)</a></p>"
       "<script>"
       "function pad(n){return n<10?'0'+n:''+n}"
       "function fmt(epoch,tz){"
@@ -1012,6 +1018,9 @@ void WebPortal::handleStatus() {
   JsonDocument doc;
   doc["fwVersion"] = FW_VERSION;
   doc["fwMark"] = FW_MARK;
+  doc["historyEnabled"] = gHistory.enabled();
+  doc["historyCount"] = gHistory.count();
+  doc["historyCapacity"] = gHistory.capacity();
   doc["otaRunning"] = gOta.runningLabel();
   doc["otaNext"] = gOta.nextLabel();
   doc["otaNextSize"] = gOta.nextSlotSize();
@@ -1151,9 +1160,130 @@ void WebPortal::handleStatus() {
   server_.send(200, "application/json", out);
 }
 
+void WebPortal::handleHistory() {
+  const HistorySummary s = gHistory.summary();
+  JsonDocument doc;
+  doc["enabled"] = s.enabled;
+  doc["reason"] = s.reason;
+  doc["version"] = s.version;
+  doc["capacity"] = s.capacity;
+  doc["count"] = s.count;
+  doc["intervalSec"] = s.intervalSec;
+  doc["seq"] = s.seq;
+  doc["oldestUtc"] = s.oldestUtc;
+  doc["newestUtc"] = s.newestUtc;
+  doc["psramBytes"] = s.psramBytes;
+  doc["gaps"] = s.gaps;
+  doc["otaSkipped"] = s.otaSkipped;
+  if (s.enabled) {
+    JsonObject sc = doc["stateCounts"].to<JsonObject>();
+    sc["ACQ"] = s.stateCounts[static_cast<uint8_t>(ClockState::Acquiring)];
+    sc["LCK"] = s.stateCounts[static_cast<uint8_t>(ClockState::Locked)];
+    sc["DEG"] = s.stateCounts[static_cast<uint8_t>(ClockState::Degraded)];
+    sc["HLD"] = s.stateCounts[static_cast<uint8_t>(ClockState::Holdover)];
+    sc["UNS"] = s.stateCounts[static_cast<uint8_t>(ClockState::Unsynced)];
+    if (s.haveFreq) {
+      JsonObject f = doc["freqPpm"].to<JsonObject>();
+      f["min"] = s.freqMin;
+      f["max"] = s.freqMax;
+      f["mean"] = s.freqMean;
+    }
+  }
+  String out;
+  serializeJson(doc, out);
+  sendNoCache();
+  server_.send(200, "application/json", out);
+}
+
+void WebPortal::handleHistoryCsv() {
+  sendNoCache();
+  if (ipcOtaBusy()) {
+    server_.send(503, "text/plain", "OTA busy");
+    return;
+  }
+  if (!gHistory.enabled()) {
+    server_.send(200, "text/csv",
+                 "utcEpoch,state,holdoverSec,residualMs,freqPpm,tempC,tempRefC,tempCorrPpm,"
+                 "tempComp,qualityMs,ppsCount,ppsFresh,satellites,fix,rssi,gap\n");
+    return;
+  }
+
+  uint32_t lastSec = 0;
+  uint32_t maxRows = 0;
+  if (server_.hasArg("last")) {
+    lastSec = static_cast<uint32_t>(strtoul(server_.arg("last").c_str(), nullptr, 10));
+  }
+  if (server_.hasArg("max")) {
+    maxRows = static_cast<uint32_t>(strtoul(server_.arg("max").c_str(), nullptr, 10));
+  }
+
+  int16_t coeffCenti = CLK_TEMP_COEFF_CENTI;
+  AppSettings settings;
+  if (settingsCopy(pdMS_TO_TICKS(50), &settings)) {
+    coeffCenti = settings.tempCoeffCenti;
+  }
+
+  const HistoryExportCursor cur = gHistory.beginExport(lastSec, maxRows);
+  server_.sendHeader("Connection", "close");
+  server_.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server_.send(200, "text/csv; charset=utf-8", "");
+  server_.sendContent(
+      "utcEpoch,state,holdoverSec,residualMs,freqPpm,tempC,tempRefC,tempCorrPpm,"
+      "tempComp,qualityMs,ppsCount,ppsFresh,satellites,fix,rssi,gap\n");
+
+  char line[192];
+  for (uint32_t i = 0; i < cur.limit; ++i) {
+    HistorySample s;
+    if (!gHistory.sampleLogical(cur, i, &s)) {
+      break;
+    }
+    const float freq = static_cast<float>(s.freqPpmX100) * 0.01f;
+    const bool haveT = s.tempCenti != INT16_MIN;
+    const bool haveTr = s.tempRefCenti != INT16_MIN;
+    float tempC = haveT ? (s.tempCenti * 0.01f) : NAN;
+    float tempRef = haveTr ? (s.tempRefCenti * 0.01f) : NAN;
+    float tempCorr = 0.0f;
+    if ((s.flags & HistTempComp) && haveT && haveTr) {
+      tempCorr = tempCoeffPpmPerC(coeffCenti) * (tempC - tempRef);
+      if (tempCorr > CLK_TEMP_CORR_MAX_PPM) {
+        tempCorr = CLK_TEMP_CORR_MAX_PPM;
+      }
+      if (tempCorr < -CLK_TEMP_CORR_MAX_PPM) {
+        tempCorr = -CLK_TEMP_CORR_MAX_PPM;
+      }
+    }
+    const char* stLabel = clockStateLabel(static_cast<ClockState>(s.state));
+    char tBuf[16] = "";
+    char trBuf[16] = "";
+    if (haveT) {
+      snprintf(tBuf, sizeof(tBuf), "%.2f", static_cast<double>(tempC));
+    }
+    if (haveTr) {
+      snprintf(trBuf, sizeof(trBuf), "%.2f", static_cast<double>(tempRef));
+    }
+    const int n = snprintf(
+        line, sizeof(line),
+        "%lu,%s,%u,%d,%.4f,%s,%s,%.4f,%u,%u,%lu,%u,%u,%u,%d,%u\n",
+        static_cast<unsigned long>(s.utcEpoch), stLabel,
+        static_cast<unsigned>(s.holdoverSec), static_cast<int>(s.residualMs),
+        static_cast<double>(freq), tBuf, trBuf, static_cast<double>(tempCorr),
+        (s.flags & HistTempComp) ? 1u : 0u, static_cast<unsigned>(s.qualityMs),
+        static_cast<unsigned long>(s.ppsCount), (s.flags & HistPpsFresh) ? 1u : 0u,
+        static_cast<unsigned>(s.satellites), (s.flags & HistFix) ? 1u : 0u,
+        static_cast<int>(s.rssi), (s.flags & HistGap) ? 1u : 0u);
+    if (n > 0) {
+      server_.sendContent(line);
+    }
+    if ((i % HISTORY_CSV_BATCH_ROWS) == (HISTORY_CSV_BATCH_ROWS - 1)) {
+      ipcKickNet();
+      delay(0);
+    }
+  }
+}
+
 void WebPortal::handleMetrics() {
   // Prometheus-ish text; no auth (read-only, same as /status).
-  char buf[768];
+  char buf[960];
   const uint32_t served = ntp_ ? ntp_->servedCount() : 0;
   const uint32_t rate = ntp_ ? ntp_->rateLimitedCount() : 0;
   const uint32_t denied = ntp_ ? ntp_->deniedCount() : 0;
@@ -1166,6 +1296,10 @@ void WebPortal::handleMetrics() {
   const unsigned aclMode = ntp_ ? static_cast<unsigned>(ntp_->aclMode()) : 0;
   const unsigned aclCount = ntp_ ? ntp_->aclCount() : 0;
   const unsigned otaBusy = ipcOtaBusy() ? 1 : 0;
+  const unsigned histEn = gHistory.enabled() ? 1 : 0;
+  const unsigned histCount = gHistory.count();
+  const unsigned histCap = gHistory.capacity();
+  const unsigned histGaps = gHistory.gaps();
   snprintf(buf, sizeof(buf),
            "# TYPE ntp_requests_total counter\n"
            "ntp_requests_total %lu\n"
@@ -1189,12 +1323,21 @@ void WebPortal::handleMetrics() {
            "ntp_clients %u\n"
            "# TYPE ota_busy gauge\n"
            "ota_busy %u\n"
+           "# TYPE history_enabled gauge\n"
+           "history_enabled %u\n"
+           "# TYPE history_count gauge\n"
+           "history_count %u\n"
+           "# TYPE history_capacity gauge\n"
+           "history_capacity %u\n"
+           "# TYPE history_gaps_total counter\n"
+           "history_gaps_total %u\n"
            "# TYPE esp_free_heap_bytes gauge\n"
            "esp_free_heap_bytes %u\n",
            static_cast<unsigned long>(reqs), static_cast<unsigned long>(served),
            static_cast<unsigned long>(rate), static_cast<unsigned long>(denied),
            static_cast<unsigned long>(dropped), static_cast<unsigned long>(aclDenied),
            static_cast<unsigned long>(otaRefused), aclMode, aclCount,
-           static_cast<unsigned>(clients), otaBusy, heap);
+           static_cast<unsigned>(clients), otaBusy, histEn, histCount, histCap, histGaps,
+           heap);
   server_.send(200, "text/plain; charset=utf-8", buf);
 }
