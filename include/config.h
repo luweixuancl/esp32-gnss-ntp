@@ -170,6 +170,17 @@
 #define CLK_LOCKED_SLEW_MS            5
 // ISR→task PPS queue (missed edges under WiFi load).
 #define GPS_PPS_ISR_QUEUE             8
+// RMT RX hardware capture of the PPS edge (docs/s3_deep_dive_roadmap.md #1):
+// the channel samples the pad at 80 MHz and a frame (edge + RMT window) is
+// delivered by callback; edge time is reconstructed by subtracting the
+// hardware-measured pulse length from the callback entry time. The GPIO ISR
+// path stays attached as automatic fallback; tick() merges both sources.
+#define GPS_PPS_RMT_EN                1   // 0 = legacy GPIO ISR only
+#define GPS_PPS_RMT_QUEUE             8
+#define GPS_PPS_RMT_TICK_NS        1000   // 1 µs symbols (80 MHz / 80)
+#define GPS_PPS_RMT_WINDOW_MS        20   // capture window after the edge
+#define GPS_PPS_RMT_FILTER_NS      1000   // hw-glitch filter: drop <1 µs pulses
+#define GPS_PPS_RMT_STALE_MS        2100   // no RMT edges for this long -> fall back to GPIO
 // Missed PPS seconds ≥ this → Unsynced (not silent catch-up only).
 #define CLK_PPS_MISS_UNSYNC           3
 // Holdover dispersion: floor crystal error (ppm) when EMA is still small.

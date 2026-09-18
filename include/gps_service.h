@@ -30,6 +30,19 @@ struct GpsStatus {
   float tempCorrPpm = 0;
   bool tempComp = false;
   uint32_t holdoverMs = 0;
+  // RMT RX hardware capture diagnostics (docs/s3_deep_dive_roadmap.md #1).
+  struct PpsRmtStats {
+    bool ok = false;        // capture armed
+    bool active = false;    // RMT is currently the merge source
+    uint32_t samples = 0;   // refined edges delivered
+    int32_t deltaMeanUx10 = 0;  // (rmt - gpio) mean, 0.1 µs units
+    int32_t deltaMinUs = 0;
+    int32_t deltaMaxUs = 0;
+    uint32_t oddPulse = 0;  // pulse width outside the plausible band
+    uint32_t fallbacks = 0; // auto-fallbacks to the GPIO source
+    uint32_t lastWidthUs = 0;
+  };
+  PpsRmtStats ppsRmt;
 };
 
 class GpsService {
@@ -51,6 +64,7 @@ class GpsService {
 
  private:
   static void IRAM_ATTR onPpsIsr();
+  static void rmtPpsCb(uint32_t* data, size_t len, void* arg);
   void parseNmea();
   void commitNmeaTime(uint32_t epochSec, AnomalyPolicy policy, uint16_t holdoverSec);
   void publishStatus(const GpsStatus& work);

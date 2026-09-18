@@ -927,6 +927,18 @@ void WebPortal::handleStatus() {
   gps["lon"] = st.lon;
   gps["ppsFresh"] = st.ppsFresh;
   gps["ppsCount"] = st.ppsCount;
+#if 1  // RMT capture diagnostics (present in both builds; armed only when supported)
+  JsonObject ppsRmt = gps["ppsRmt"].to<JsonObject>();
+  ppsRmt["armed"] = st.ppsRmt.ok;
+  ppsRmt["active"] = st.ppsRmt.active;
+  ppsRmt["samples"] = st.ppsRmt.samples;
+  ppsRmt["deltaMeanUs"] = st.ppsRmt.deltaMeanUx10 / 10.0;
+  ppsRmt["deltaMinUs"] = st.ppsRmt.deltaMinUs;
+  ppsRmt["deltaMaxUs"] = st.ppsRmt.deltaMaxUs;
+  ppsRmt["oddPulse"] = st.ppsRmt.oddPulse;
+  ppsRmt["fallbacks"] = st.ppsRmt.fallbacks;
+  ppsRmt["lastWidthUs"] = st.ppsRmt.lastWidthUs;
+#endif
   gps["utcEpoch"] = st.utcEpoch;
   gps["ageMs"] = st.ageMs;
   gps["timeValid"] = st.timeValid;

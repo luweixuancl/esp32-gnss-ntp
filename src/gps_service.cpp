@@ -15,6 +15,38 @@ volatile uint8_t GpsService::ppsQTail_ = 0;
 volatile GpsService::PpsIsrEdge GpsService::ppsQ_[GPS_PPS_ISR_QUEUE] = {};
 TaskHandle_t GpsService::timeTask_ = nullptr;
 
+// --- RMT RX hardware capture (docs/s3_deep_dive_roadmap.md #1) -----------
+// The RMT channel samples the pad at GPS_PPS_RMT_TICK_NS resolution; each
+// frame (edge + capture window) is delivered to rmtPpsCb with the exact
+// hardware-measured symbol lengths, so the edge time is reconstructed as
+// cb_entry - frame_length — immune to GPIO-ISR latency (incl. WiFi storms).
+// GPIO ISR stays attached; loop() merges by edge count and records deltas.
+#if GPS_PPS_RMT_EN
+struct RmtPpsEdge {
+  uint64_t edgeUs;
+  uint32_t count;
+  uint32_t widthUs;
+};
+struct RmtPpsState {
+  bool armed = false;   // rmtInit + rmtRead succeeded
+  bool alive = false;   // refinements still flowing
+  bool active = false;  // currently the merge source
+  bool reportedFallback = false;  // one log line per fallback episode
+  uint64_t lastEdgeUs = 0;
+  uint8_t head = 0, tail = 0;
+  RmtPpsEdge q[GPS_PPS_RMT_QUEUE];
+  // statistics (task-context writers only)
+  uint32_t samples = 0;
+  int64_t deltaSumUx10 = 0;
+  int32_t deltaMinUs = 0;
+  int32_t deltaMaxUs = 0;
+  uint32_t oddPulse = 0;
+  uint32_t fallbacks = 0;
+  uint32_t lastWidthUs = 0;
+};
+static RmtPpsState gRmt;
+#endif
+
 #if defined(ARDUINO_ESP32S3_DEV)
 static bool boardTempBegin() {
   // temperatureRead() lazily initialises the new tsens driver; gate on a
@@ -68,12 +100,83 @@ void IRAM_ATTR GpsService::onPpsIsr() {
   }
 }
 
+void GpsService::rmtPpsCb(uint32_t* data, size_t len, void* arg) {
+  (void)arg;
+#if GPS_PPS_RMT_EN
+  if (data == nullptr || len == 0) {
+    return;
+  }
+  const uint64_t nowUs = esp_timer_get_time();
+  uint64_t totalNs = 0;
+  uint64_t highNs = 0;
+  for (size_t i = 0; i < len; ++i) {
+    const uint32_t sym = data[i];
+    const uint32_t d0 = sym & 0x7FFF;
+    const uint32_t d1 = (sym >> 16) & 0x7FFF;
+    if (sym & 0x8000) highNs += static_cast<uint64_t>(d1) * GPS_PPS_RMT_TICK_NS;
+    if (sym & 0x4000) highNs += static_cast<uint64_t>(d0) * GPS_PPS_RMT_TICK_NS;
+    totalNs += static_cast<uint64_t>(d0 + d1) * GPS_PPS_RMT_TICK_NS;
+  }
+  const uint64_t totalUs = totalNs / 1000;
+  const uint32_t widthUs = static_cast<uint32_t>(highNs / 1000);
+  if (totalUs == 0 || totalUs > nowUs) {
+    return;
+  }
+  const uint64_t edgeUs = nowUs - totalUs;  // hardware frame length removes cb latency
+
+  portENTER_CRITICAL_ISR(&ppsMux_);
+  const uint32_t count = ppsCount_;  // GPIO ISR owns edge counting
+  const uint8_t next = static_cast<uint8_t>((gRmt.head + 1) % GPS_PPS_RMT_QUEUE);
+  if (next != gRmt.tail) {
+    gRmt.q[gRmt.head].edgeUs = edgeUs;
+    gRmt.q[gRmt.head].count = count;
+    gRmt.q[gRmt.head].widthUs = widthUs;
+    gRmt.head = next;
+  }
+  if (widthUs < 10000 || widthUs > 500000) {
+    gRmt.oddPulse++;  // outside plausible PPS band (double-edge / glitch)
+  }
+  gRmt.lastEdgeUs = nowUs;
+  gRmt.alive = true;
+  gRmt.lastWidthUs = widthUs;
+  portEXIT_CRITICAL_ISR(&ppsMux_);
+
+  BaseType_t woken = pdFALSE;
+  if (timeTask_ != nullptr) {
+    vTaskNotifyGiveFromISR(timeTask_, &woken);
+  }
+  if (woken) {
+    portYIELD_FROM_ISR();
+  }
+#endif
+}
+
 void GpsService::begin() {
   localClock_.reset();
   pinMode(PIN_GPS_PPS, INPUT_PULLDOWN);
   gpsSerial_.setRxBufferSize(2048);
   gpsSerial_.begin(GPS_UART_BAUD, SERIAL_8N1, PIN_GPS_RX, PIN_GPS_TX);
   attachInterrupt(digitalPinToInterrupt(PIN_GPS_PPS), onPpsIsr, RISING);
+#if GPS_PPS_RMT_EN
+  {
+    rmt_obj_t* r = rmtInit(PIN_GPS_PPS, RMT_RX_MODE, RMT_MEM_64);
+    if (r == nullptr) {
+      Serial.println("[pps-rmt] init failed -> GPIO ISR only");
+    } else {
+      rmtSetTick(r, GPS_PPS_RMT_TICK_NS);
+      rmtSetFilter(r, true, GPS_PPS_RMT_FILTER_NS / GPS_PPS_RMT_TICK_NS);
+      rmtSetRxThreshold(r, static_cast<uint32_t>(GPS_PPS_RMT_WINDOW_MS * 1000000UL) / GPS_PPS_RMT_TICK_NS);
+      if (rmtRead(r, &GpsService::rmtPpsCb, nullptr)) {
+        gRmt.armed = true;
+        Serial.printf("[pps-rmt] armed pin=%d tick=%uns win=%ums filter=%uns\n",
+                      PIN_GPS_PPS, GPS_PPS_RMT_TICK_NS, GPS_PPS_RMT_WINDOW_MS,
+                      GPS_PPS_RMT_FILTER_NS);
+      } else {
+        Serial.println("[pps-rmt] rmtRead failed -> GPIO ISR only");
+      }
+    }
+  }
+#endif
   tempSensorOk_ = boardTempBegin();
   Serial.printf("GPS UART%d RX=%d TX=%d baud=%d buf=2048 local-clock=on ppsQ=%d tsens=%d\n",
                 GPS_UART_NUM, PIN_GPS_RX, PIN_GPS_TX, GPS_UART_BAUD, GPS_PPS_ISR_QUEUE,
@@ -104,8 +207,30 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
   sampleDieTemp();
   parseNmea();
 
-  // Drain every queued PPS edge (WiFi may delay task-time by >1s).
+  // Drain every queued PPS edge (WiFi may delay task-time by >1s). With RMT
+  // capture armed, GPIO edges are held briefly until their refined hardware
+  // timestamp arrives (keyed by count); per-edge timeout falls back to the
+  // GPIO timestamp. Delta statistics quantify the RMT gain (roadmap #1).
   uint32_t drainedCount = 0;
+#if GPS_PPS_RMT_EN
+  struct GpioPending {
+    uint64_t edgeUs;
+    uint32_t count;
+    uint64_t queuedUs;
+  };
+  static GpioPending pend[GPS_PPS_ISR_QUEUE];
+  static size_t npend = 0;
+  RmtPpsEdge ref[GPS_PPS_RMT_QUEUE];
+  size_t nref = 0;
+  if (gRmt.armed) {
+    portENTER_CRITICAL(&ppsMux_);
+    while (gRmt.tail != gRmt.head && nref < GPS_PPS_RMT_QUEUE) {
+      ref[nref++] = gRmt.q[gRmt.tail];
+      gRmt.tail = static_cast<uint8_t>((gRmt.tail + 1) % GPS_PPS_RMT_QUEUE);
+    }
+    portEXIT_CRITICAL(&ppsMux_);
+  }
+#endif
   for (;;) {
     uint64_t edgeUs = 0;
     uint32_t count = 0;
@@ -123,8 +248,79 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
     }
     ppsSeen_ = true;
     drainedCount = count;
+#if GPS_PPS_RMT_EN
+    if (gRmt.armed) {
+      if (npend < GPS_PPS_ISR_QUEUE) {
+        pend[npend].edgeUs = edgeUs;
+        pend[npend].count = count;
+        pend[npend].queuedUs = esp_timer_get_time();
+        ++npend;
+      } else {
+        localClock_.onPpsEdge(edgeUs, count);  // pending full: emit raw
+      }
+      continue;
+    }
+#endif
     localClock_.onPpsEdge(edgeUs, count);
   }
+#if GPS_PPS_RMT_EN
+  if (gRmt.armed && npend != 0) {
+    const uint64_t nowUs = esp_timer_get_time();
+    const uint64_t holdNs = static_cast<uint64_t>(GPS_PPS_RMT_WINDOW_MS + 5) * 1000000ULL;
+    size_t out = 0;
+    for (size_t i = 0; i < npend; ++i) {
+      int64_t refined = -1;
+      for (size_t k = 0; k < nref; ++k) {
+        if (ref[k].count == pend[i].count) {
+          refined = static_cast<int64_t>(ref[k].edgeUs);
+          break;
+        }
+      }
+      if (refined >= 0) {
+        localClock_.onPpsEdge(static_cast<uint64_t>(refined), pend[i].count);
+        const int64_t dUs = refined - static_cast<int64_t>(pend[i].edgeUs);
+        ++gRmt.samples;
+        gRmt.deltaSumUx10 += dUs * 10;
+        if (gRmt.samples == 1 || dUs < gRmt.deltaMinUs) gRmt.deltaMinUs = static_cast<int32_t>(dUs);
+        if (gRmt.samples == 1 || dUs > gRmt.deltaMaxUs) gRmt.deltaMaxUs = static_cast<int32_t>(dUs);
+        if (!gRmt.active) {
+          gRmt.active = true;
+          gRmt.reportedFallback = false;
+        }
+        drainedCount = pend[i].count;
+      } else if ((nowUs - pend[i].queuedUs) > holdNs) {
+        localClock_.onPpsEdge(pend[i].edgeUs, pend[i].count);  // no refinement: GPIO fallback
+        if (gRmt.active) {
+          gRmt.active = false;
+          ++gRmt.fallbacks;
+          if (!gRmt.reportedFallback) {
+            Serial.println("[pps-rmt] stale -> GPIO fallback");
+            gRmt.reportedFallback = true;
+          }
+        }
+        drainedCount = pend[i].count;
+      } else {
+        pend[out++] = pend[i];  // still within the capture window: keep waiting
+      }
+    }
+    npend = out;
+    // Refinements whose GPIO twin was dropped (ISR storm): feed them anyway.
+    for (size_t k = 0; k < nref; ++k) {
+      bool matched = false;
+      for (size_t i = 0; i < npend; ++i) {
+        if (pend[i].count == ref[k].count) {
+          matched = true;
+          break;
+        }
+      }
+      if (!matched && ref[k].count > drainedCount) {
+        localClock_.onPpsEdge(ref[k].edgeUs, ref[k].count);
+        drainedCount = ref[k].count;
+        ++gRmt.samples;
+      }
+    }
+  }
+#endif
   if (drainedCount != 0) {
     lastDrainedPpsCount_ = drainedCount;
   }
@@ -150,6 +346,18 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
   work.ppsSeen = ppsSeen_;
   work.ppsCount = ppsCount_;
   work.ppsFresh = ppsFresh();
+#if GPS_PPS_RMT_EN
+  work.ppsRmt.ok = gRmt.armed;
+  work.ppsRmt.active = gRmt.active;
+  work.ppsRmt.samples = gRmt.samples;
+  work.ppsRmt.deltaMeanUx10 = gRmt.samples != 0
+      ? static_cast<int32_t>(gRmt.deltaSumUx10 / gRmt.samples) : 0;
+  work.ppsRmt.deltaMinUs = gRmt.deltaMinUs;
+  work.ppsRmt.deltaMaxUs = gRmt.deltaMaxUs;
+  work.ppsRmt.oddPulse = gRmt.oddPulse;
+  work.ppsRmt.fallbacks = gRmt.fallbacks;
+  work.ppsRmt.lastWidthUs = gRmt.lastWidthUs;
+#endif
 
   if (gps_.date.isValid() && gps_.time.isValid()) {
     TinyGPSDate d = gps_.date;
