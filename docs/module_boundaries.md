@@ -6,8 +6,8 @@ Tight cohesion / loose coupling rules for the GNSS NTP firmware.
 
 | Task | Owns | Must not |
 |------|------|----------|
-| **task-time** | GPS, local clock, NTP reply path | `WiFi.*`, NVS writes, OLED |
-| **task-net** | `WifiManager`, HTTP/OTA, SoftAP, scans | OLED drawing, long GPS work |
+| **task-time** | GPS, local clock, NTP reply path; **HistoryRecorder::push** (1 Hz) | `WiFi.*`, NVS writes, OLED, WebServer |
+| **task-net** | `WifiManager`, HTTP/OTA, SoftAP, scans; **HistoryRecorder export** | OLED drawing, long GPS work |
 | **task-ui** | OLED + encoder | `WiFi.*`, direct `gStore.save` |
 
 ## Shared state
@@ -15,6 +15,7 @@ Tight cohesion / loose coupling rules for the GNSS NTP firmware.
 - **`WifiLinkSnapshot`** (`wifi_types.h`): written only by `WifiManager::refreshLinkSnapshot()` on task-net; any task may `linkSnapshot()`.
 - **`AppSettings`**: read via `settingsCopy()`; persist via `settingsCommit()` only. Factory reset before `ipcInit` may call `gStore.save` directly.
 - **OTA**: observe `ipcOtaBusy()` / `ipcOtaPhase()`; do not call into `OtaService` from time/ui.
+- **History (planned)**: PSRAM ring owned by `HistoryRecorder`; time writes, net reads — see [psram_history_design.md](psram_history_design.md).
 
 ## Queues
 
