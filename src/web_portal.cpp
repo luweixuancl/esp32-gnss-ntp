@@ -267,6 +267,9 @@ String WebPortal::buildPage(const String& title, const String& body, bool refres
             ".row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #334155}"
             ".row:last-child{border-bottom:0}.k{color:#94a3b8}.v{font-weight:700;text-align:right}"
             ".ok{color:#4ade80}.warn{color:#fbbf24}.bad{color:#f87171}"
+            ".obar{display:none;height:10px;background:#334155;border-radius:6px;overflow:hidden;margin:8px 0}"
+            ".ofill{height:100%;width:0;background:#38bdf8;transition:width .15s linear}"
+            "button:disabled{opacity:.55}"
             "</style></head><body>");
   html += body;
   html += F("</body></html>");
@@ -514,7 +517,8 @@ void WebPortal::handleSetup() {
   body += gOta.imageStateLabel();
   body += F("</code></p>"
             "<input id='fw' type='file' accept='.bin,application/octet-stream'>"
-            "<button type='button' onclick='doOta()'>上传并升级</button>"
+            "<button type='button' id='obtn' onclick='doOta()'>上传并升级</button>"
+            "<div id='obar' class='obar'><div id='ofill' class='ofill'></div></div>"
             "<p id='omsg'></p></div>");
   body += F("<script>"
             "async function sleep(ms){return new Promise(r=>setTimeout(r,ms));}"
@@ -523,20 +527,57 @@ void WebPortal::handleSetup() {
             "  headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)});"
             " if(r.status===401){location.href='/login';return '';}"
             " return r.text();}"
-            "async function doOta(){"
-            " try{"
-            "  const f=document.getElementById('fw').files[0];"
-            "  if(!f){document.getElementById('omsg').textContent='请先选择 .bin';return;}"
-            "  if(!f.name.toLowerCase().endsWith('.bin')){"
-            "   document.getElementById('omsg').textContent='仅接受 .bin 固件';return;}"
-            "  const fd=new FormData(); fd.append('firmware',f,f.name);"
-            "  document.getElementById('omsg').textContent='上传中 '+f.name+' ('+f.size+' B)...';"
-            "  const r=await fetch('/ota',{method:'POST',credentials:'same-origin',body:fd});"
-            "  const t=await r.text();"
-            "  if(r.status===401){location.href='/login';return;}"
-            "  document.getElementById('omsg').textContent=t;"
-            "  if(r.ok){document.getElementById('omsg').textContent=t+' · 即将重启...';}"
-            " }catch(e){document.getElementById('omsg').textContent=String(e);}"
+            "function fmtBytes(n){"
+            " if(n<1024)return n+' B';"
+            " if(n<(1024*1024))return (n/1024).toFixed(1)+' KB';"
+            " return (n/(1024*1024)).toFixed(2)+' MB';}"
+            "function setOtaUi(pct,msg,cls){"
+            " const bar=document.getElementById('obar');"
+            " const fill=document.getElementById('ofill');"
+            " const omsg=document.getElementById('omsg');"
+            " if(bar){bar.style.display='block';}"
+            " if(fill){fill.style.width=Math.max(0,Math.min(100,pct|0))+'%';}"
+            " if(omsg){omsg.className=cls||'';omsg.textContent=msg||'';}"
+            "}"
+            "function doOta(){"
+            " const btn=document.getElementById('obtn');"
+            " const f=document.getElementById('fw').files[0];"
+            " if(!f){setOtaUi(0,'请先选择 .bin','bad');return;}"
+            " if(!f.name.toLowerCase().endsWith('.bin')){"
+            "  setOtaUi(0,'仅接受 .bin 固件','bad');return;}"
+            " const fd=new FormData(); fd.append('firmware',f,f.name);"
+            " const xhr=new XMLHttpRequest();"
+            " xhr.open('POST','/ota'); xhr.withCredentials=true; xhr.timeout=600000;"
+            " if(btn){btn.disabled=true;}"
+            " setOtaUi(0,'准备上传 '+f.name+' ('+fmtBytes(f.size)+')...','warn');"
+            " xhr.upload.onprogress=function(e){"
+            "  if(e.lengthComputable&&e.total>0){"
+            "   const pct=Math.floor(100*e.loaded/e.total);"
+            "   setOtaUi(pct,'上传中 '+pct+'% · '+fmtBytes(e.loaded)+' / '+fmtBytes(e.total),'warn');"
+            "  }else{setOtaUi(0,'上传中 '+fmtBytes(e.loaded)+' ...','warn');}"
+            " };"
+            " xhr.upload.onload=function(){"
+            "  setOtaUi(100,'上传完成，设备正在写入 Flash 并校验...','warn');"
+            " };"
+            " xhr.onload=function(){"
+            "  if(btn){btn.disabled=false;}"
+            "  if(xhr.status===401){location.href='/login';return;}"
+            "  if(xhr.status>=200&&xhr.status<300){"
+            "   setOtaUi(100,'✓ 升级成功：'+xhr.responseText+' · 即将重启，约 10 秒后自动刷新','ok');"
+            "   setTimeout(function(){location.href='/';},10000);"
+            "   return;}"
+            "  setOtaUi(0,'失败 ('+xhr.status+'): '+xhr.responseText,'bad');"
+            " };"
+            " xhr.onerror=function(){"
+            "  /* 成功后重启常会掐断 TCP：按「可能已成功」提示 */"
+            "  setOtaUi(100,'连接已断开（多为升级成功后重启）。请等约 15 秒后刷新，OLED 确认新版本。','warn');"
+            "  if(btn){btn.disabled=false;}"
+            "  setTimeout(function(){location.href='/';},15000);"
+            " };"
+            " xhr.ontimeout=function(){"
+            "  setOtaUi(0,'上传超时','bad'); if(btn){btn.disabled=false;}"
+            " };"
+            " xhr.send(fd);"
             "}"
             "async function scan(){"
             " try{"
@@ -959,9 +1000,11 @@ void WebPortal::handleOtaDone() {
     return;
   }
   server_.send(200, "text/plain", "OK — rebooting into new firmware");
-  Serial.println("[ota] reboot in 500ms");
+  Serial.println("[ota] reboot in 800ms");
   gOta.kickNetAlive();
-  delay(500);
+  // Give the HTTP stack a moment to flush the success body before restart
+  // (clients need the 200 + progress UI "完成" cue).
+  delay(800);
   ESP.restart();
 }
 
