@@ -55,6 +55,7 @@ static RmtPpsState gRmt;
 struct IdfPpsState {
   bool ok = false;
   uint8_t stage = 0;  // 1=config 2=install 4=ringbuf 8=task
+  int err = 0;
   uint32_t frames = 0;
   uint32_t firstSyms = 0;
   uint32_t lastSyms = 0;
@@ -282,10 +283,11 @@ void GpsService::begin() {
     c.channel = static_cast<rmt_channel_t>(GPS_PPS_RMT_CH);
     c.gpio_num = static_cast<gpio_num_t>(PIN_GPS_PPS);
     c.clk_div = 80;  // 1 µs per tick
-    c.mem_block_num = 2;
-    c.rx_config.filter_en = false;  // probe: filter off
-    c.rx_config.filter_ticks_thresh = 0;
-    c.rx_config.idle_threshold = 500;  // probe: 0.5 ms idle ends a frame
+    c.mem_block_num = 1;
+    c.rx_config.filter_en = true;
+    c.rx_config.filter_ticks_thresh = 1;
+    c.rx_config.idle_threshold =
+        static_cast<uint32_t>(GPS_PPS_RMT_WINDOW_MS) * 1000000UL / GPS_PPS_RMT_TICK_NS;
     esp_err_t err = rmt_config(&c);
     if (err == ESP_OK) {
       gIdf.stage |= 1;
@@ -301,10 +303,14 @@ void GpsService::begin() {
     if (err == ESP_OK) {
       gIdf.stage |= 4;
       err = rmt_rx_start(c.channel, true);
-      // probe: force the threshold via the legacy setter too
-      rmt_set_rx_idle_thresh(c.channel, 500);
-      rmt_set_pin(c.channel, RMT_MODE_RX, static_cast<gpio_num_t>(PIN_GPS_PPS));
     }
+    if (err == ESP_OK && xTaskCreate(rmtIdfTask, "rmtpps", 3072, nullptr, 3, nullptr) == pdPASS) {
+      gIdf.stage |= 8;
+      gIdf.ok = true;
+    }
+    gIdf.err = err;
+    Serial.printf("[pps-rmt-idf] ch=%d stage=%u ok=%d err=%d\n",
+                  GPS_PPS_RMT_CH, gIdf.stage, gIdf.ok ? 1 : 0, err);
     if (err == ESP_OK && xTaskCreate(rmtIdfTask, "rmtpps", 3072, nullptr, 3, nullptr) == pdPASS) {
       gIdf.stage |= 8;
       gIdf.ok = true;
@@ -501,6 +507,8 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
   work.ppsRmt.idfEmptyFrames = gIdf.emptyFrames;
   work.ppsRmt.idfDataFrames = gIdf.dataFrames;
   rmt_get_status(static_cast<rmt_channel_t>(GPS_PPS_RMT_CH), &work.ppsRmt.idfRawStatus);
+  work.ppsRmt.idfStage = gIdf.stage;
+  work.ppsRmt.idfErr = gIdf.err;
 #endif
 
   if (gps_.date.isValid() && gps_.time.isValid()) {

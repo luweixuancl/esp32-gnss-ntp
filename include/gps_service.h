@@ -51,6 +51,8 @@ struct GpsStatus {
     uint32_t idfEmptyFrames = 0;
     uint32_t idfDataFrames = 0;
     uint32_t idfRawStatus = 0;
+    uint8_t idfStage = 0;
+    int idfErr = 0;
   };
   PpsRmtStats ppsRmt;
 };

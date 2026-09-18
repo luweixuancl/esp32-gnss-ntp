@@ -949,6 +949,8 @@ void WebPortal::handleStatus() {
   char rs[12];
   snprintf(rs, sizeof(rs), "0x%08x", st.ppsRmt.idfRawStatus);
   ppsRmt["idfRawStatus"] = rs;
+  ppsRmt["idfStage"] = st.ppsRmt.idfStage;
+  ppsRmt["idfErr"] = st.ppsRmt.idfErr;
 #endif
   gps["utcEpoch"] = st.utcEpoch;
   gps["ageMs"] = st.ageMs;
