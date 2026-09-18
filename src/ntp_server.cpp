@@ -162,9 +162,10 @@ void NtpServer::sendKiss(const char kiss[4], uint8_t vn, uint8_t poll) {
 }
 
 void NtpServer::sendNormal(const GpsService& gps, bool haveTime, uint32_t recvSec, uint32_t recvFrac) {
+  // Prefer LocalClock / ppsFresh over a full GpsStatus snapshot (same task).
   const bool ppsOk = gps.ppsFresh();
   const uint32_t qMs = gps.qualityMs();
-  const ClockState clk = gps.snapshot().clockState;
+  const ClockState clk = gps.localClock().state();
 
   const bool syncOk =
       haveTime && (clk == ClockState::Locked || clk == ClockState::Degraded ||

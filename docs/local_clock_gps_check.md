@@ -251,3 +251,15 @@ uint16_t holdoverSec = 30;  // Refuse 时忽略；Short/Long 可覆盖预设
 - RTOS + PPS-count 对齐后抽测：异常率 0%，配对差中位 ~48 ms
 - 本方案在「已消除整秒跳变」之上，增加 **GPS 健康可见性与可配置失效策略**，避免模块错秒时仍被客户端当作优质 stratum 1
 - 2026-09-13 伺服收紧（8 s 估频、Locked 5 ms 不跟 NMEA 重锚、诚实 INIT）后，2026-09-14 Termux 10 min 干净样本 stdev 1.34 ms，并拍到 ACQ→LCK；评价见 [clock_eval_two_ntp_cmp.md](clock_eval_two_ntp_cmp.md)
+
+## 13. 2026-09-18 伺服小优化（v1.1.6）
+
+针对 S3 长测中「双边沿毛刺 → 清环 → 4 s ACQ」类事件：
+
+| 改动 | 行为 |
+|------|------|
+| PPS 离群边沿 | \|间隔−1 s\| > 5 ms 的边沿 **不入环、不走相**，只累加 streak；吸收 `ppsCount` 以免下一拍 `delta=2` |
+| Soft Unsynced | 丢锚点停授时，**保留**边沿环与 EMA ppm；`reset()` 仍硬清 |
+| residual 带 | `RELOCK < \|r\| < FAIL` 统一 Degraded（原 WARN/软 FAIL 两段同动作） |
+| Holdover 质量阈 | 文档明确：主限仍是 `holdoverSec`；`MAX_QUALITY_MS` 主要兜底「入口 residual 已大」 |
+| NTP 组包 | `sendNormal` 读 `localClock().state()`，不再为状态打整份 `snapshot()` |

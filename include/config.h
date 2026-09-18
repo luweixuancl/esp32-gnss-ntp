@@ -4,11 +4,11 @@
 // OLED mark is unambiguous after OTA / serial upgrade.
 #define FW_VER_MAJOR         1
 #define FW_VER_MINOR         1
-#define FW_VER_PATCH         5
-// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.5").
-#define FW_MARK              "v1.1.5"
+#define FW_VER_PATCH         6
+// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.6").
+#define FW_MARK              "v1.1.6"
 // Full string for /status, /cfg, serial, OTA pages.
-#define FW_VERSION           "1.1.5"
+#define FW_VERSION           "1.1.6"
 // After a pending-verify OTA boot, wait until tasks are alive this long before
 // cancelling rollback — catches crash-loops in GPS/WiFi/task bring-up.
 #define OTA_MARK_VALID_AFTER_MS  30000
@@ -175,12 +175,12 @@
 #define LED_PANIC_HALF_PERIOD_MS    100
 
 // Local clock / GPS cross-check (see docs/local_clock_gps_check.md)
-#define CLK_RESIDUAL_WARN_MS         50
-#define CLK_RESIDUAL_FAIL_MS        100
+#define CLK_RESIDUAL_WARN_MS         50  // quality / UI warn floor (Degraded)
+#define CLK_RESIDUAL_FAIL_MS        100  // |r| >= this → AnomalyPolicy
 #define CLK_RESIDUAL_RELOCK_MS       30
 #define CLK_RELOCK_COUNT              3
-#define CLK_PPS_INTERVAL_MAX_ERR_US 5000
-#define CLK_PPS_UNSTABLE_COUNT        3
+#define CLK_PPS_INTERVAL_MAX_ERR_US 5000  // outlier vs last accepted edge → drop edge
+#define CLK_PPS_UNSTABLE_COUNT        3   // consecutive outliers → soft unsync
 #define CLK_HOLDOVER_SHORT_SEC       30
 #define CLK_HOLDOVER_LONG_SEC       300
 #define CLK_PPS_EDGE_RING            16
@@ -223,7 +223,9 @@
 #define CLK_HOLDOVER_PHI_PPM         15.0f
 // Extra uncertainty booked when entering / while in holdover (ms).
 #define CLK_HOLDOVER_ENTRY_MS       100
-// If root-quality exceeds this in holdover, drop to Unsynced early.
+// Safety exit when already-degraded residual + growth exceeds this. Primary
+// holdover limit is still holdoverSec (30/300); at 50 ppm × 300 s growth is
+// only ~15 ms, so this mainly catches high residual on entry.
 #define CLK_HOLDOVER_MAX_QUALITY_MS 500
 // Task panic (LED stale) for this long → soft restart.
 #define LED_TASK_PANIC_RESTART_MS 15000

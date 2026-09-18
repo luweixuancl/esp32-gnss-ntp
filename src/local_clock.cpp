@@ -66,6 +66,8 @@ void LocalClock::onPpsEdge(uint64_t edgeUs, uint32_t ppsCount) {
     delta = ppsCount - lastPpsCount_;
   }
 
+  // Outlier vs last *accepted* ring edge (double-edge / EMI glitch):
+  // absorb the count, do not poison the ppm ring, do not walk UTC.
   if (edgeCount_ > 0 && delta == 1) {
     const uint8_t prevIdx = static_cast<uint8_t>((edgeHead_ + kRing - 1) % kRing);
     const uint64_t prev = edges_[prevIdx];
@@ -76,9 +78,18 @@ void LocalClock::onPpsEdge(uint64_t edgeUs, uint32_t ppsCount) {
         if (ppsBadStreak_ < 255) {
           ppsBadStreak_++;
         }
-      } else {
-        ppsBadStreak_ = 0;
+        lastPpsCount_ = ppsCount;
+        ppsStable_ = (ppsBadStreak_ < CLK_PPS_UNSTABLE_COUNT) && (edgeCount_ >= 2);
+        if (!ppsStable_ &&
+            (state_ == ClockState::Locked || state_ == ClockState::Degraded ||
+             state_ == ClockState::Holdover)) {
+          Serial.printf("[clk] PPS glitch streak=%u → soft unsync\n",
+                        static_cast<unsigned>(ppsBadStreak_));
+          enterUnsynced();
+        }
+        return;
       }
+      ppsBadStreak_ = 0;
     }
   } else if (delta > 1) {
     // Missed ISR deliveries / queue overflow — interval sample is not 1s.
@@ -100,7 +111,7 @@ void LocalClock::onPpsEdge(uint64_t edgeUs, uint32_t ppsCount) {
       (state_ == ClockState::Locked || state_ == ClockState::Degraded ||
        state_ == ClockState::Holdover)) {
     if (delta >= CLK_PPS_MISS_UNSYNC) {
-      Serial.printf("[clk] PPS miss delta=%u → unsync\n", static_cast<unsigned>(delta));
+      Serial.printf("[clk] PPS miss delta=%u → soft unsync\n", static_cast<unsigned>(delta));
       enterUnsynced();
     } else if (ppsStable_ && delta == 1) {
       anchorUtcSec_ += 1;
@@ -192,14 +203,14 @@ void LocalClock::enterHoldover() {
 }
 
 void LocalClock::enterUnsynced() {
+  // Soft: drop phase so we stop serving NTP, but keep the PPS second-scale
+  // (edge ring + EMA ppm). Hard wipe only happens in reset().
   state_ = ClockState::Unsynced;
   okStreak_ = 0;
   holdoverStartUs_ = 0;
   haveAnchor_ = false;
-  ppsStable_ = false;
   ppsBadStreak_ = 0;
-  edgeCount_ = 0;
-  edgeHead_ = 0;
+  ppsStable_ = (edgeCount_ >= 2);
 }
 
 void LocalClock::applyFail(AnomalyPolicy policy) {
@@ -283,17 +294,7 @@ void LocalClock::onNmeaCommit(uint32_t epochSec, uint32_t ppsCountAtCommit, Anom
 
   okStreak_ = 0;
 
-  // WARN (RELOCK < |r| <= WARN): Degraded, do not re-anchor — residual feeds dispersion.
-  if (absR <= CLK_RESIDUAL_WARN_MS) {
-    if (ppsStable_ && haveAnchor_) {
-      state_ = ClockState::Degraded;
-    } else {
-      enterUnsynced();
-    }
-    return;
-  }
-
-  // Soft-fail band before FAIL: still Degraded, keep prior anchor.
+  // WARN .. just-below-FAIL: Degraded, keep prior anchor (residual → dispersion).
   if (absR < CLK_RESIDUAL_FAIL_MS) {
     if (ppsStable_ && haveAnchor_) {
       state_ = ClockState::Degraded;
@@ -400,7 +401,9 @@ uint32_t LocalClock::qualityMs() const {
     q = static_cast<uint32_t>(absR);
   }
   if (state_ == ClockState::Degraded) {
-    q = q < 50 ? 50 : q;
+    if (q < CLK_RESIDUAL_WARN_MS) {
+      q = CLK_RESIDUAL_WARN_MS;
+    }
   }
   if (state_ == ClockState::Holdover) {
     // Free-run bound: max(|EMA|, crystal floor, PHI) × age, plus entry uncertainty.

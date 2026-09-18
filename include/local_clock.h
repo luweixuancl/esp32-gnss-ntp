@@ -68,6 +68,8 @@ class LocalClock {
   bool extrapolate(uint64_t atUs, uint32_t& sec, uint32_t& frac) const;
   void setAnchor(uint32_t utcSec, uint64_t edgeUs, uint32_t ppsCount);
   void enterHoldover();
+  // Soft unsync: drop phase anchor but keep PPS edge ring / ppm so re-lock
+  // after a glitch burst does not cold-start the second scale.
   void enterUnsynced();
   void applyFail(AnomalyPolicy policy);
   void pushEdge(uint64_t edgeUs);
