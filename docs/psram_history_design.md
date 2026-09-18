@@ -1,8 +1,8 @@
 # PSRAM 诊断历史缓冲 + `/history`（方案）
 
-> 状态：**已实现（v1.1.8），待板测**（2026-09-18）  
+> 状态：**已实现（v1.1.8+），v1.1.9 打磨 O(1) 概要；待板测**（2026-09-18）  
 > 路线图项：③（原暂缓；OTA 板测通过后启动）  
-> 相关：[s3_deep_dive_roadmap.md](s3_deep_dive_roadmap.md)、[module_boundaries.md](module_boundaries.md)、`tools/clock_drift_monitor.py`
+> 相关：[s3_deep_dive_roadmap.md](s3_deep_dive_roadmap.md)、[module_boundaries.md](module_boundaries.md)、`tools/clock_drift_monitor.py`、`tools/history_pull.py`
 
 ## 1. 目标与非目标
 
@@ -95,7 +95,7 @@ lastPushMs, dropCount (分配失败/忙时丢弃计数)
 
 | 组件 | 职责 |
 |------|------|
-| `HistoryRecorder`（新：`include/history_recorder.h` + `src/history_recorder.cpp`） | `begin()` 分配；`push(const GpsStatus&, int8_t rssi)`；`summary()`；`copyWindow(...)` / 迭代器 |
+| `HistoryRecorder`（`include/history_recorder.h` + `src/history_recorder.cpp`） | `begin()` 分配；`push`；`summary()`（状态直方图/均值 O(1)，freq min/max 粗步长 ≤256）；`beginExport`/`sampleLogical` |
 | `task-time` | 每秒（或 `millis` 跨秒）在 `gGps.loop` 之后 `push`；`ipcOtaBusy()` 则跳过 |
 | `WebPortal` | 注册路由；组 JSON/CSV；**不**在 time 任务里发 HTTP |
 | `main` | S3 `begin()`；C3 no-op |
@@ -186,7 +186,7 @@ history_gaps_total 3
 1. **骨架**：`HistoryRecorder` + `begin`/`push`/`summary`；S3 分配；C3 stub；串口打印 `psram=… enabled=`。
 2. **挂钩**：`task-time` 1 Hz push（OTA 跳过）；`/status` 可加 `historyCount` 可选字段。
 3. **HTTP**：`/history` JSON → `/history.csv` 流式 → `?last=`。
-4. **打磨**：metrics、状态页链接、与 `clock_drift_monitor` 字段对照说明；可选小工具 `tools/history_pull.py`。
+4. **打磨**：metrics、状态页链接、`tools/history_pull.py`；`summary()` 增量统计（避免满环 O(N)）。
 5. **验收**：S3 跑满数小时后拉 CSV，与并行 `clock_drift_monitor` 抽样比对（freqPpm/state 趋势一致即可，不要求逐秒 bit 相同）。
 
 ## 9. 验收准则

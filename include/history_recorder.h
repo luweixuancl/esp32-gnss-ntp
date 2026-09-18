@@ -84,7 +84,7 @@ class HistoryRecorder {
   static int16_t clampI16(int32_t v);
   static int16_t encodeTempC(float c);
   static int16_t encodePpm(float ppm);
-  uint32_t physIndex(uint32_t oldestOffset) const;
+  void applyStatsLocked(const HistorySample& s, int dir);  // +1 add / -1 remove
 
   mutable portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
   HistorySample* buf_ = nullptr;
@@ -99,6 +99,11 @@ class HistoryRecorder {
   bool haveLastPps_ = false;
   uint32_t otaSkipped_ = 0;
   uint32_t gaps_ = 0;
+
+  // Incremental rolling stats (exact mean / state histogram).
+  uint32_t stateCounts_[5] = {};
+  int64_t freqSumCenti_ = 0;
+  uint32_t freqN_ = 0;
 };
 
 extern HistoryRecorder gHistory;

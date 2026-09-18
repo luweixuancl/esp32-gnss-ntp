@@ -4,8 +4,6 @@
 #include <math.h>
 #include <string.h>
 
-#include "app_ipc.h"
-
 HistoryRecorder gHistory;
 
 #ifndef HISTORY_INTERVAL_MS
@@ -19,7 +17,6 @@ void HistoryRecorder::begin() {
   buf_ = static_cast<HistorySample*>(
       heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   if (buf_ == nullptr) {
-    // Fallback: try generic malloc (some builds map PSRAM via malloc).
     buf_ = static_cast<HistorySample*>(malloc(bytes));
   }
   if (buf_ == nullptr) {
@@ -36,6 +33,9 @@ void HistoryRecorder::begin() {
   count_ = 0;
   head_ = 0;
   seq_ = 0;
+  memset(stateCounts_, 0, sizeof(stateCounts_));
+  freqSumCenti_ = 0;
+  freqN_ = 0;
   Serial.printf("[history] enabled capacity=%u bytes=%u (SPIRAM)\n",
                 static_cast<unsigned>(capacity_), static_cast<unsigned>(bytes));
 #else
@@ -71,11 +71,24 @@ int16_t HistoryRecorder::encodePpm(float ppm) {
   return clampI16(lroundf(ppm * 100.0f));
 }
 
-uint32_t HistoryRecorder::physIndex(uint32_t oldestOffset) const {
-  if (count_ < capacity_) {
-    return oldestOffset;
+void HistoryRecorder::applyStatsLocked(const HistorySample& s, int dir) {
+  uint8_t st = s.state;
+  if (st > 4) {
+    st = 0;
   }
-  return (head_ + oldestOffset) % capacity_;
+  if (dir > 0) {
+    stateCounts_[st]++;
+    freqSumCenti_ += s.freqPpmX100;
+    freqN_++;
+  } else {
+    if (stateCounts_[st] > 0) {
+      stateCounts_[st]--;
+    }
+    freqSumCenti_ -= s.freqPpmX100;
+    if (freqN_ > 0) {
+      freqN_--;
+    }
+  }
 }
 
 void HistoryRecorder::push(const GpsStatus& st, int8_t rssi) {
@@ -121,7 +134,11 @@ void HistoryRecorder::push(const GpsStatus& st, int8_t rssi) {
   }
 
   portENTER_CRITICAL(&mux_);
+  if (count_ == capacity_) {
+    applyStatsLocked(buf_[head_], -1);
+  }
   buf_[head_] = s;
+  applyStatsLocked(s, +1);
   head_ = (head_ + 1) % capacity_;
   if (count_ < capacity_) {
     count_++;
@@ -166,11 +183,19 @@ HistorySummary HistoryRecorder::summary() const {
   uint32_t head = 0;
   uint32_t capacity = 0;
   uint32_t seq = 0;
+  uint32_t gaps = 0;
+  uint32_t stateCounts[5] = {};
+  int64_t freqSumCenti = 0;
+  uint32_t freqN = 0;
   portENTER_CRITICAL(&mux_);
   count = count_;
   head = head_;
   capacity = capacity_;
   seq = seq_;
+  gaps = gaps_;
+  memcpy(stateCounts, stateCounts_, sizeof(stateCounts));
+  freqSumCenti = freqSumCenti_;
+  freqN = freqN_;
   portEXIT_CRITICAL(&mux_);
 
   out.enabled = true;
@@ -180,45 +205,47 @@ HistorySummary HistoryRecorder::summary() const {
   out.seq = seq;
   out.psramBytes = capacity * sizeof(HistorySample);
   out.otaSkipped = otaSkipped_;
-  out.gaps = gaps_;
+  out.gaps = gaps;
+  memcpy(out.stateCounts, stateCounts, sizeof(stateCounts));
 
   if (count == 0) {
     return out;
   }
 
-  double freqSum = 0;
-  uint32_t freqN = 0;
+  // Oldest / newest UTC: O(1) index read.
+  const uint32_t oldestPhys = (count < capacity) ? 0 : head;
+  const uint32_t newestPhys = (head + capacity - 1) % capacity;
+  HistorySample oldest{};
+  HistorySample newest{};
+  portENTER_CRITICAL(&mux_);
+  oldest = buf_[oldestPhys];
+  newest = buf_[newestPhys];
+  portEXIT_CRITICAL(&mux_);
+  out.oldestUtc = oldest.utcEpoch;
+  out.newestUtc = newest.utcEpoch;
+
+  if (freqN > 0) {
+    out.haveFreq = true;
+    out.freqMean = static_cast<float>(freqSumCenti) / (100.0f * static_cast<float>(freqN));
+  }
+
+  // Min/max via coarse stride (≤256 probes) — avoids O(N) under the mux.
+  const uint32_t probes = count < 256 ? count : 256;
   float freqMin = 0;
   float freqMax = 0;
-  bool haveFreq = false;
-  uint32_t oldestUtc = 0;
-  uint32_t newestUtc = 0;
-
-  for (uint32_t i = 0; i < count; ++i) {
+  bool have = false;
+  for (uint32_t p = 0; p < probes; ++p) {
+    const uint32_t oldestOffset = (probes == 1) ? 0 : (p * (count - 1)) / (probes - 1);
     const uint32_t phys =
-        (count < capacity) ? i : ((head + i) % capacity);
+        (count < capacity) ? oldestOffset : ((head + oldestOffset) % capacity);
     HistorySample s;
     portENTER_CRITICAL(&mux_);
     s = buf_[phys];
     portEXIT_CRITICAL(&mux_);
-
-    if (i == 0) {
-      oldestUtc = s.utcEpoch;
-    }
-    if (i + 1 == count) {
-      newestUtc = s.utcEpoch;
-    }
-
-    uint8_t st = s.state;
-    if (st > 4) {
-      st = 0;
-    }
-    out.stateCounts[st]++;
-
     const float ppm = static_cast<float>(s.freqPpmX100) * 0.01f;
-    if (!haveFreq) {
+    if (!have) {
       freqMin = freqMax = ppm;
-      haveFreq = true;
+      have = true;
     } else {
       if (ppm < freqMin) {
         freqMin = ppm;
@@ -227,17 +254,11 @@ HistorySummary HistoryRecorder::summary() const {
         freqMax = ppm;
       }
     }
-    freqSum += ppm;
-    freqN++;
   }
-
-  out.oldestUtc = oldestUtc;
-  out.newestUtc = newestUtc;
-  out.haveFreq = haveFreq;
-  if (haveFreq && freqN > 0) {
+  if (have) {
+    out.haveFreq = true;
     out.freqMin = freqMin;
     out.freqMax = freqMax;
-    out.freqMean = static_cast<float>(freqSum / static_cast<double>(freqN));
   }
   return out;
 }

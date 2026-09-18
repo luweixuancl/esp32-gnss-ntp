@@ -15,7 +15,7 @@ Tight cohesion / loose coupling rules for the GNSS NTP firmware.
 - **`WifiLinkSnapshot`** (`wifi_types.h`): written only by `WifiManager::refreshLinkSnapshot()` on task-net; any task may `linkSnapshot()`.
 - **`AppSettings`**: read via `settingsCopy()`; persist via `settingsCommit()` only. Factory reset before `ipcInit` may call `gStore.save` directly.
 - **OTA**: observe `ipcOtaBusy()` / `ipcOtaPhase()`; do not call into `OtaService` from time/ui.
-- **History (planned)**: PSRAM ring owned by `HistoryRecorder`; time writes, net reads — see [psram_history_design.md](psram_history_design.md).
+- **History**: PSRAM ring owned by `HistoryRecorder` (S3 only); time writes, net reads via `summary()` / export cursor — see [psram_history_design.md](psram_history_design.md).
 
 ## Queues
 
