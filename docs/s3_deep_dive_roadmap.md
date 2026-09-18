@@ -10,7 +10,7 @@
 | S3 特性 | 现状 |
 |---|---|
 | 双核 LX7 @240MHz | ✅ task-time 独占 core 1（移植核心收益） |
-| 16MB QIO flash | ✅ default_16MB 分区；app1/OTA 槽位**闲置** |
+| 16MB QIO flash | ✅ default_16MB 分区；app1/OTA 槽位经 Web `/ota` 可写 |
 | 8MB OPI PSRAM | ⬜ 仅编译开关，**零使用** |
 | 新版温度传感器 | ✅ `temperatureRead()`（tcmp 显示/日志） |
 | RMT 4TX | 1 路用于 RGB 状态灯；**RX 4 路全闲置** |
