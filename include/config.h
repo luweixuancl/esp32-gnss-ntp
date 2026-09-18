@@ -43,8 +43,8 @@
 // ESP32-S3-DevKitC-1: UART0 debug = GPIO43/44 via onboard bridge (Serial
 // default pins, no macros needed). Native USB on GPIO19/20 — keep free.
 // GPIO0/3/45/46 are strapping pins: encoder B moved off C3's GPIO3.
-#define PIN_GPS_RX           1   // ESP32 RX <- GP22 TXD
-#define PIN_GPS_TX           0   // ESP32 TX -> GP22 RXD (output-only, BOOT strap safe; fallback GPIO18)
+#define PIN_GPS_RX           1   // ESP32 RX <- GP10 TXD
+#define PIN_GPS_TX           0   // ESP32 TX -> GP10 RXD (output-only, BOOT strap safe; fallback GPIO18)
 #define PIN_GPS_PPS          4   // 1PPS input (RTC-domain)
 #define PIN_OLED_SDA         8
 #define PIN_OLED_SCL        10
@@ -62,9 +62,9 @@
 #else
 
 // UART0 (合宙 CORE / CH343): GPIO20 RX, GPIO21 TX — debug via Serial @ 115200
-// DX-GP22 GNSS on UART1 (board UART1_RX=GPIO1, UART1_TX=GPIO0; 9600 8N1; 1PPS after fix)
-#define PIN_GPS_RX           1   // ESP32 RX <- GP22 TXD  (UART1_RX)
-#define PIN_GPS_TX           0   // ESP32 TX -> GP22 RXD  (UART1_TX)
+// DX-GP10 GNSS on UART1 (board UART1_RX=GPIO1, UART1_TX=GPIO0; 9600 8N1; 1PPS after fix)
+#define PIN_GPS_RX           1   // ESP32 RX <- GP10 TXD  (UART1_RX)
+#define PIN_GPS_TX           0   // ESP32 TX -> GP10 RXD  (UART1_TX)
 #define PIN_GPS_PPS          4   // 1PPS input
 #define PIN_OLED_SDA         8
 #define PIN_OLED_SCL        10
@@ -82,7 +82,7 @@
 #define GPS_UART_NUM         1
 #define GPS_DEBUG            0   // 1 = 每秒向 UART0 打印定位/PPS（time 任务内，默认关）
 #define GPS_DEBUG_NMEA       0   // 1 = 把 NMEA 原文转发到 UART0
-// Boot: sniff NMEA talkers, then $PCAS03 → only GGA + ZDA (DX-GP22 / CASIC).
+// Boot: sniff NMEA talkers, then $PCAS03 → only GGA + ZDA (DX-GP10 / CASIC).
 #ifndef GPS_NMEA_FILTER_EN
 #define GPS_NMEA_FILTER_EN       1
 #endif
