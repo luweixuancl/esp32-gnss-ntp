@@ -137,7 +137,7 @@ chronyc sources
 
 ```bash
 curl -L -o ntp_cmp_termux.py \
-  https://gh-proxy.com/https://raw.githubusercontent.com/luweixuancl/esp32c3-gnss-ntp/main/tools/ntp_cmp_termux.py
+  https://gh-proxy.com/https://raw.githubusercontent.com/luweixuancl/esp32-gnss-ntp/main/tools/ntp_cmp_termux.py
 python ntp_cmp_termux.py --gps <设备IP>     # 默认 10 min；--quick 冒烟 1 min
 ```
 
