@@ -582,9 +582,8 @@ static void taskNet(void* /*arg*/) {
   ipcKickNet();
 
   AppSettings boot;
-  if (settingsLock(pdMS_TO_TICKS(500))) {
-    boot = gSettings;
-    settingsUnlock();
+  if (!settingsCopy(pdMS_TO_TICKS(500), &boot)) {
+    boot = AppSettings{};
   }
 
   gWifi.setAutoReconnect(boot.autoReconnect);
