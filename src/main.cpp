@@ -636,8 +636,10 @@ static void taskNet(void* /*arg*/) {
     gOta.poll();
     gWifi.refreshLinkSnapshot();
     static uint8_t heapLowStreak = 0;
-    // Skip heap-panic restart while flash is being rewritten.
-    if (!ipcOtaBusy() && ESP.getFreeHeap() < HEAP_RESTART_BYTES) {
+    // Skip heap-panic restart while flash is being rewritten, and during the
+    // post-OTA pending-verify window (a restart there rolls back the upgrade).
+    if (!ipcOtaBusy() && !ipcOtaPendingVerify() &&
+        ESP.getFreeHeap() < HEAP_RESTART_BYTES) {
       if (++heapLowStreak >= HEAP_RESTART_SAMPLES) {
         Serial.printf("[net] heap low (%u) x%u — restart\n",
                       static_cast<unsigned>(ESP.getFreeHeap()), heapLowStreak);

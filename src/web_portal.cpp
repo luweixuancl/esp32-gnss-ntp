@@ -583,7 +583,9 @@ void WebPortal::handleSetup() {
   body += gOta.runningLabel();
   body += F("</code> · 下一写入 <code>");
   body += gOta.nextLabel();
-  body += F("</code> · 状态 <code>");
+  body += F("</code> · 槽位 ");
+  body += String(gOta.nextSlotSize());
+  body += F(" B · 状态 <code>");
   body += gOta.imageStateLabel();
   body += F("</code></p>"
             "<input id='fw' type='file' accept='.bin,application/octet-stream'>"
@@ -609,12 +611,32 @@ void WebPortal::handleSetup() {
             " if(fill){fill.style.width=Math.max(0,Math.min(100,pct|0))+'%';}"
             " if(omsg){omsg.className=cls||'';omsg.textContent=msg||'';}"
             "}"
-            "function doOta(){"
+            "function checkFwHeader(f){"
+            " return new Promise(function(resolve){"
+            "  if(!f||f.size<14){resolve('文件过小，请重新下载 firmware.bin');return;}"
+            "  const maxSlot=");
+  body += String(gOta.nextSlotSize());
+  body += F(";"
+            "  if(maxSlot>0&&f.size>maxSlot){resolve('文件超过 OTA 槽位 '+maxSlot+' B');return;}"
+            "  if(f.size<200*1024){resolve('文件过小（可能下载不完整）');return;}"
+            "  const r=new FileReader();"
+            "  r.onload=function(){"
+            "   const u=new Uint8Array(r.result);"
+            "   if(u[0]!==0xE9){resolve('不是 ESP app 镜像（magic≠E9）；勿用 merged 整片包');return;}"
+            "   if(u[1]<1||u[1]>16){resolve('镜像头异常，请重新下载');return;}"
+            "   resolve('');"
+            "  };"
+            "  r.onerror=function(){resolve('无法读取文件头');};"
+            "  r.readAsArrayBuffer(f.slice(0,16));"
+            " });}"
+            "async function doOta(){"
             " const btn=document.getElementById('obtn');"
             " const f=document.getElementById('fw').files[0];"
             " if(!f){setOtaUi(0,'请先选择 .bin','bad');return;}"
             " if(!f.name.toLowerCase().endsWith('.bin')){"
             "  setOtaUi(0,'仅接受 .bin 固件','bad');return;}"
+            " const herr=await checkFwHeader(f);"
+            " if(herr){setOtaUi(0,herr,'bad');return;}"
             " const fd=new FormData(); fd.append('firmware',f,f.name);"
             " const xhr=new XMLHttpRequest();"
             " xhr.open('POST','/ota'); xhr.withCredentials=true; xhr.timeout=600000;"
@@ -1013,6 +1035,9 @@ void WebPortal::handleOtaUpload() {
     size_t contentLen = 0;
     if (server_.hasHeader("Content-Length")) {
       contentLen = static_cast<size_t>(strtoul(server_.header("Content-Length").c_str(), nullptr, 10));
+    }
+    if (contentLen == 0 && server_.clientContentLength() > 0) {
+      contentLen = static_cast<size_t>(server_.clientContentLength());
     }
     if (!gOta.beginSession(contentLen, otaError_, sizeof(otaError_))) {
       otaAuthOk_ = false;

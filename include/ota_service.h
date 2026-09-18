@@ -54,6 +54,8 @@ class OtaService {
   bool prioBoosted_ = false;
   uint32_t failUntilMs_ = 0;
   uint32_t lastLogBytes_ = 0;
+  uint8_t hdrBuf_[24] = {};
+  size_t hdrLen_ = 0;
   UBaseType_t savedPrioTime_ = 0;
   UBaseType_t savedPrioNet_ = 0;
 };

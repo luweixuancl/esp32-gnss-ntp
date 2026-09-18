@@ -9,8 +9,20 @@
 
 ## Current app build
 
-- Mark: **v1.1.17** (`FW_MARK`)
+- Mark: **v1.1.18** (`FW_MARK`)
 - Branch tip when refreshed: see git history on `dist/firmware*.bin`
+
+## Verify before Web OTA
+
+Confirm the downloaded app image size/hash (truncated downloads often “succeed” then roll back to the previous version):
+
+```text
+# after download
+wc -c firmware.bin
+md5sum firmware.bin
+```
+
+Expected app sizes are recorded next to the bins in `dist/SHA256SUMS` on this branch.
 
 ## Keep WiFi / settings
 

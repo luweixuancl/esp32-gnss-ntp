@@ -2,6 +2,7 @@
 
 #include <Update.h>
 #include <esp_app_format.h>
+#include <esp_image_format.h>
 #include <esp_ota_ops.h>
 #include <esp_task_wdt.h>
 #include <string.h>
@@ -64,12 +65,16 @@ void OtaService::kickNetAlive() {
 }
 
 void OtaService::clear() {
+  if (Update.isRunning()) {
+    Update.abort();
+  }
   applyOtaPriorities(false);
   sessionActive_ = false;
   headerChecked_ = false;
   success_ = false;
   failUntilMs_ = 0;
   lastLogBytes_ = 0;
+  hdrLen_ = 0;
   publish(OtaPhase::Idle, false);
 }
 
@@ -80,6 +85,7 @@ void OtaService::fail(const char* reason) {
   sessionActive_ = false;
   headerChecked_ = false;
   success_ = false;
+  hdrLen_ = 0;
   applyOtaPriorities(false);
   failUntilMs_ = millis() + OTA_FAIL_LED_MS;
   publish(OtaPhase::Failed, false);
@@ -99,6 +105,7 @@ bool OtaService::beginSession(size_t contentLengthHint, char* err, size_t errLen
     fail("No OTA partition");
     return false;
   }
+  // Multipart Content-Length includes boundary overhead; allow a small slack.
   if (contentLengthHint > 0 && contentLengthHint > next->size + 4096) {
     setErr(err, errLen, "Upload too large for OTA slot");
     fail("Upload too large for OTA slot");
@@ -117,6 +124,7 @@ bool OtaService::beginSession(size_t contentLengthHint, char* err, size_t errLen
   headerChecked_ = false;
   success_ = false;
   lastLogBytes_ = 0;
+  hdrLen_ = 0;
   applyOtaPriorities(true);
   publish(OtaPhase::Uploading, true);
   kickNetAlive();
@@ -131,6 +139,11 @@ bool OtaService::validatePrefix(const uint8_t* data, size_t len, char* err, size
   }
   if (data[0] != ESP_IMAGE_HEADER_MAGIC) {
     setErr(err, errLen, "Not an ESP app image (magic!=0xE9); use firmware.bin not merged");
+    return false;
+  }
+  // segment_count at byte 1 — reject empty / absurd headers (HTML, truncated).
+  if (data[1] < 1 || data[1] > 16) {
+    setErr(err, errLen, "Bad image segment_count; re-download firmware.bin");
     return false;
   }
   const uint16_t chip = static_cast<uint16_t>(data[12]) |
@@ -151,27 +164,46 @@ bool OtaService::write(const uint8_t* data, size_t len, char* err, size_t errLen
     setErr(err, errLen, "No OTA session");
     return false;
   }
+  if (data == nullptr || len == 0) {
+    return true;
+  }
   kickNetAlive();
 
+  const uint8_t* out = data;
+  size_t outLen = len;
+
   if (!headerChecked_) {
-    if (len < 14) {
-      setErr(err, errLen, "First chunk too small for image header");
-      fail("First chunk too small for image header");
-      return false;
+    // Accumulate until we can validate the ESP image header (WebServer may
+    // deliver a tiny first WRITE in edge cases).
+    while (hdrLen_ < sizeof(hdrBuf_) && outLen > 0) {
+      hdrBuf_[hdrLen_++] = *out++;
+      outLen--;
     }
-    if (!validatePrefix(data, len, err, errLen)) {
+    if (hdrLen_ < 14) {
+      return true;  // wait for more bytes
+    }
+    if (!validatePrefix(hdrBuf_, hdrLen_, err, errLen)) {
       fail(err && err[0] ? err : "bad image header");
       return false;
     }
     headerChecked_ = true;
+    if (Update.write(hdrBuf_, hdrLen_) != hdrLen_) {
+      char buf[96];
+      snprintf(buf, sizeof(buf), "Write failed: %s", Update.errorString());
+      setErr(err, errLen, buf);
+      fail(buf);
+      return false;
+    }
   }
 
-  if (Update.write(const_cast<uint8_t*>(data), len) != len) {
-    char buf[96];
-    snprintf(buf, sizeof(buf), "Write failed: %s", Update.errorString());
-    setErr(err, errLen, buf);
-    fail(buf);
-    return false;
+  if (outLen > 0) {
+    if (Update.write(const_cast<uint8_t*>(out), outLen) != outLen) {
+      char buf[96];
+      snprintf(buf, sizeof(buf), "Write failed: %s", Update.errorString());
+      setErr(err, errLen, buf);
+      fail(buf);
+      return false;
+    }
   }
 
   const size_t prog = Update.progress();
@@ -196,6 +228,15 @@ bool OtaService::finish(char* err, size_t errLen) {
     fail("Missing image header");
     return false;
   }
+  const size_t written = Update.progress();
+  if (written < OTA_MIN_IMAGE_BYTES) {
+    char buf[96];
+    snprintf(buf, sizeof(buf), "Image too small (%u B) — truncated download?",
+             static_cast<unsigned>(written));
+    setErr(err, errLen, buf);
+    fail(buf);
+    return false;
+  }
   if (!Update.end(true)) {
     char buf[96];
     snprintf(buf, sizeof(buf), "Update.end failed: %s", Update.errorString());
@@ -203,6 +244,28 @@ bool OtaService::finish(char* err, size_t errLen) {
     fail(buf);
     return false;
   }
+
+  // Update.end only checks magic; verify full image checksum before reboot.
+  const esp_partition_t* boot = esp_ota_get_boot_partition();
+  const esp_partition_t* running = esp_ota_get_running_partition();
+  if (boot != nullptr) {
+    esp_image_metadata_t meta{};
+    const esp_partition_pos_t pos = {.offset = boot->address, .size = boot->size};
+    const esp_err_t v = esp_image_verify(ESP_IMAGE_VERIFY, &pos, &meta);
+    if (v != ESP_OK) {
+      if (running != nullptr) {
+        esp_ota_set_boot_partition(running);
+      }
+      char buf[96];
+      snprintf(buf, sizeof(buf), "Image verify failed (%s) — re-download bin",
+               esp_err_to_name(v));
+      setErr(err, errLen, buf);
+      fail(buf);
+      return false;
+    }
+    Serial.printf("[ota] image verify ok bytes=%u\n", static_cast<unsigned>(meta.image_len));
+  }
+
   sessionActive_ = false;
   success_ = true;
   // Keep busy + boosted prio until ESP.restart() in the HTTP done handler.

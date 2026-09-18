@@ -1,5 +1,6 @@
 #include "app_ipc.h"
 #include <cstring>
+#include <esp_ota_ops.h>
 
 AppIpc gIpc;
 
@@ -71,4 +72,16 @@ const char* ipcOtaPhaseLabel() {
     default:
       return "idle";
   }
+}
+
+bool ipcOtaPendingVerify() {
+  const esp_partition_t* running = esp_ota_get_running_partition();
+  if (running == nullptr) {
+    return false;
+  }
+  esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
+  if (esp_ota_get_state_partition(running, &state) != ESP_OK) {
+    return false;
+  }
+  return state == ESP_OTA_IMG_PENDING_VERIFY;
 }

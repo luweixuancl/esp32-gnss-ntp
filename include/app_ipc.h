@@ -98,3 +98,5 @@ inline void ipcKickUi() { gIpc.kickUiMs = millis(); }
 inline bool ipcOtaBusy() { return gIpc.otaBusy; }
 inline OtaPhase ipcOtaPhase() { return gIpc.otaPhase; }
 const char* ipcOtaPhaseLabel();
+// True while running app is ESP_OTA_IMG_PENDING_VERIFY (post-OTA confirm window).
+bool ipcOtaPendingVerify();

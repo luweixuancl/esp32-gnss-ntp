@@ -104,7 +104,8 @@ bool StatusLeds::writeOtaPattern(uint32_t nowMs) {
 
 bool StatusLeds::tasksStale(uint32_t nowMs) {
   // OTA blocks task-net inside handleClient; IPC busy + kickNetAlive cover it.
-  if (ipcOtaBusy()) {
+  // Pending-verify: never panic-restart — that would roll back a fresh OTA.
+  if (ipcOtaBusy() || ipcOtaPendingVerify()) {
     return false;
   }
   const uint32_t t = gIpc.kickTimeMs;
