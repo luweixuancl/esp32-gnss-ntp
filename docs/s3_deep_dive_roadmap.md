@@ -1,8 +1,8 @@
 # S3 特性深挖路线图（PPS 硬件捕获 / PSRAM 历史 / OTA / 外部时钟）
 
-> 状态：立项排序已定（2026-09-18 用户定序修订：**① RMT 捕获【已尝试、平台级封存】→ ② OTA【实现中 / Web 上传已合入本分支】→ ③ PSRAM 历史【暂缓】→ ④ 外部时钟最后**）
+> 状态：立项排序已定（2026-09-18 用户定序修订：**① RMT 捕获【已封存】→ ② OTA【板测通过 v1.1.7】→ ③ PSRAM 历史【方案已定，待实现】→ ④ 外部时钟最后**）
 > 背景：S3 移植转正后的特性深挖规划，基于 2026-09-18 代码/特性审查；各项目启动前按本档「验收准则」细化
-> 修订：③ PSRAM 暂不做，回退到①完成态后先做② OTA（同日用户指示）
+> 修订：③ 在 OTA 验收后进入方案制定（见 [psram_history_design.md](psram_history_design.md)）
 > 相关：[esp32s3_devkitc1_hw.md](esp32s3_devkitc1_hw.md)、[esp32s3_flash_test_20260917.md](esp32s3_flash_test_20260917.md)、[s3_clock_drift_20260917.md](s3_clock_drift_20260917.md)
 
 ## 0. 现状基线
@@ -24,24 +24,23 @@
 - **重开条件**：迁移 Arduino 3.x / IDF 5（新 `rmt` 驱动 + S3 RX 专属通道模型）后再评估；代码保留（`GPS_PPS_RMT_EN` 置 1 即回实验态），探索过程全部入档。
 - **验收准则/工作量**：见下（供重开时引用）
 
-## 2. 项目二：PSRAM 诊断环形缓冲 + `/history`（原第 2 位）——**暂缓**
+## 2. 项目二：PSRAM 诊断环形缓冲 + `/history`（第 3 位）——**方案已定，待实现**
 
 - **现状**：8MB PSRAM 零使用；长测依赖外部脚本（手机 1 Hz 拉取）。
-- **方案**：PSRAM 里放 24h×1 Hz 环形缓冲（freqPpm/tempC/tempRefC/state/residual/quality/sat/rssi），Web 加只读 `/history`（JSON 概要 + CSV 下载）；掉电丢失可接受（RAM 环形），关键事件另存 NVS 计数。
-- **价值**：设备自录长测/故障回溯，不依赖外网脚本；`/metrics` 可加直方图（如 qualityMs 分布）。
-- **验收**：S3 连续 24h 自录 + `/history` 取回与 `clock_drift_monitor` 并跑数据一致；C3 不受影响（PSRAM 不存在时功能自动关闭）。
-- **工作量**：纯软件，估 1–2 个会话（缓冲结构 + web 端点 + C3 禁用路径）。
-- **暂缓原因**：2026-09-18 用户指示先做 OTA；本项排到 OTA 之后再启动。
+- **方案文档**：[psram_history_design.md](psram_history_design.md)（2026-09-18）
+- **要点**：24 h × 1 Hz × 24 B ≈ 2.1 MB SPIRAM 环；`HistoryRecorder`；task-time 写 / task-net 读；`GET /history` + `/history.csv`（流式）；OTA 停采；C3 `enabled:false`。
+- **价值**：设备自录长测/故障回溯，不依赖外网脚本；`/metrics` 可加 `history_*`。
+- **验收**：见方案 §9（S3 自录 + CSV 对照 `clock_drift_monitor`；C3 关闭且编译通过）。
+- **实现切片**：骨架分配 → time 挂钩 → HTTP JSON/CSV → metrics/链接 → 板测。
+- **暂缓原因（已解除）**：原等待 OTA；OTA 已于 v1.1.7 板测通过。
 
-## 3. 项目三：OTA 双分区升级（第 2 位）——**本分支已实现（待板测验收）**
+## 3. 项目三：OTA 双分区升级——**已实现并板测通过（v1.1.7）**
 
-- **现状**：`POST /ota`（登录会话）+ `/cfg` 上传 UI；`Update` 写下一 app 槽；启动后延迟 `esp_ota_mark_app_valid_cancel_rollback`（任务存活 ≥30s）；串口升级仍为兜底。
+- **现状**：`POST /ota`（登录会话）+ `/cfg` 上传 UI（进度条 + 完成/重启提示）；`Update` 写下一 app 槽；启动后延迟 `esp_ota_mark_app_valid_cancel_rollback`（任务存活 ≥30s）；串口升级仍为兜底。
 - **升级窗口策略**：OTA busy 期间拒绝 NTP（KoD `RSTR`）、暂停 GPS/UI/WiFi 扫描以让出 CPU/Flash；状态灯琥珀快闪→绿常亮→红闪失败。
 - **健壮性**：LED stale panic / heap-low 重启豁免；镜像 magic+chip_id 校验拒绝跨 C3/S3；未授权断连；Content-Length 超槽拒绝。
 - **方案**：`OtaService`（task-net 独占写路径）经 `app_ipc` 发布 `otaBusy/otaPhase`；`WebPortal` 仅 HTTP 适配；`status_leds`/`task-time` 只读 IPC；升级时 `vTaskPrioritySet` 提升 net 高于 time。
-- **价值**：产品化远程升级，运维体验质变。
-- **验收**：S3/C3 各完成一次 Web OTA 往返；升级中 `ntpdate` 见 kiss/拒绝且灯色正确；断电/坏包回滚；NVS 保留；错芯片镜像被拒。
-- **注意**：C3 app 槽 `0x140000`（1.25MB）；当前固件 ~923KB，余量约 350KB——超限由 `Update.begin(next->size)` 硬拒。勿换分区表以免动已部署 NVS。
+- **验收**：C3/S3 Web OTA 往返已通过（含进度 UI）；NVS 保留。
 
 ## 4. 项目四：外部高品质时钟源（最后，硬件依赖）
 
@@ -62,6 +61,6 @@
 
 ## 6. 排序备忘
 
-**① RMT 捕获（已封存）→ ② OTA（当前）→ ③ PSRAM 历史（暂缓）→ ④ 外部时钟（硬件、最后）**
+**① RMT 捕获（已封存）→ ② OTA（已验收）→ ③ PSRAM 历史（方案已定 → 实现）→ ④ 外部时钟（硬件、最后）**
 
 > 纯软件项（①②③）全部可在现有两块板+现有工具链完成，无需购件；④ 启动前需采购与方案调研。
