@@ -6,6 +6,10 @@
 #else
 #include "driver/temp_sensor.h"
 #endif
+#if GPS_PPS_RMT_EN
+#include "driver/rmt.h"
+#include <freertos/ringbuf.h>
+#endif
 
 portMUX_TYPE GpsService::ppsMux_ = portMUX_INITIALIZER_UNLOCKED;
 volatile uint32_t GpsService::ppsCount_ = 0;
@@ -45,6 +49,17 @@ struct RmtPpsState {
   uint32_t lastWidthUs = 0;
 };
 static RmtPpsState gRmt;
+
+// Direct-IDF probe (Phase 1 of roadmap #1): same pad, explicit channel,
+// our own RX task — isolates HAL-vs-driver failure layers.
+struct IdfPpsState {
+  bool ok = false;
+  uint8_t stage = 0;  // 1=config 2=install 4=ringbuf 8=task
+  uint32_t frames = 0;
+  uint32_t firstSyms = 0;
+  RingbufHandle_t rb = nullptr;
+};
+static IdfPpsState gIdf;
 #endif
 
 #if defined(ARDUINO_ESP32S3_DEV)
@@ -106,11 +121,10 @@ void IRAM_ATTR GpsService::onPpsIsr() {
 // threshold, so the edge must be located by the LAST 0->1 transition in the
 // frame — reconstructing from the total frame length would land ~one second
 // early (the ACQ-oscillation bug of the first attempt).
-void GpsService::rmtPpsCb(uint32_t* data, size_t len, void* arg) {
-  (void)arg;
+bool GpsService::rmtProcessSymbols(const uint32_t* data, size_t len) {
 #if GPS_PPS_RMT_EN
   if (data == nullptr || len == 0) {
-    return;
+    return false;
   }
   const uint64_t nowUs = esp_timer_get_time();
 
@@ -145,7 +159,7 @@ void GpsService::rmtPpsCb(uint32_t* data, size_t len, void* arg) {
     }
   }
   if (!haveEdge) {
-    return;
+    return false;
   }
   const uint32_t widthUs = static_cast<uint32_t>(widthNs / 1000);
   const uint64_t edgeUs = nowUs - ((cumNs - riseNs) / 1000);
@@ -155,10 +169,10 @@ void GpsService::rmtPpsCb(uint32_t* data, size_t len, void* arg) {
     portENTER_CRITICAL(&ppsMux_);
     ++gRmt.oddPulse;
     portEXIT_CRITICAL(&ppsMux_);
-    return;
+    return false;
   }
   if (nowUs - edgeUs > 1500000ULL) {
-    return;  // reconstructed edge older than 1.5 s: malformed frame
+    return false;  // reconstructed edge older than 1.5 s: malformed frame
   }
 
   portENTER_CRITICAL(&ppsMux_);
@@ -178,6 +192,43 @@ void GpsService::rmtPpsCb(uint32_t* data, size_t len, void* arg) {
   if (timeTask_ != nullptr) {
     xTaskNotifyGive(timeTask_);
   }
+  return true;
+#else
+  (void)data;
+  (void)len;
+  return false;
+#endif
+}
+
+// HAL wrapper: rmtRead() delivers frames from _rmtRxTask (task context).
+void GpsService::rmtPpsCb(uint32_t* data, size_t len, void* arg) {
+  (void)arg;
+  rmtProcessSymbols(data, len);
+}
+
+// Direct-IDF RX task: ringbuf -> same symbol parser as the HAL callback.
+void GpsService::rmtIdfTask(void* arg) {
+  (void)arg;
+#if GPS_PPS_RMT_EN
+  if (gIdf.rb == nullptr) {
+    vTaskDelete(nullptr);
+  }
+  for (;;) {
+    size_t len = 0;
+    void* item = xRingbufferReceive(gIdf.rb, &len, portMAX_DELAY);
+    if (item == nullptr) {
+      continue;
+    }
+    ++gIdf.frames;
+    if (gIdf.firstSyms == 0) {
+      gIdf.firstSyms = static_cast<uint32_t>(len / sizeof(rmt_item32_t));
+    }
+    rmtProcessSymbols(static_cast<const uint32_t*>(item),
+                      len / sizeof(rmt_item32_t));
+    vRingbufferReturnItem(gIdf.rb, item);
+  }
+#else
+  vTaskDelete(nullptr);
 #endif
 }
 
@@ -207,7 +258,44 @@ void GpsService::begin() {
     }
   }
 #endif
-  tempSensorOk_ = boardTempBegin();
+#if GPS_PPS_RMT_EN
+  {
+    // Direct-IDF probe: explicit channel + own RX task, isolating HAL-vs-
+    // driver failure layers (HAL rmtRead(cb) stays armed above for A/B).
+    rmt_config_t c = {};
+    c.rmt_mode = RMT_MODE_RX;
+    c.channel = static_cast<rmt_channel_t>(GPS_PPS_RMT_CH);
+    c.gpio_num = static_cast<gpio_num_t>(PIN_GPS_PPS);
+    c.clk_div = 80;  // 1 µs per tick
+    c.mem_block_num = 1;
+    c.rx_config.filter_en = true;
+    c.rx_config.filter_ticks_thresh = 1;
+    c.rx_config.idle_threshold =
+        static_cast<uint32_t>(GPS_PPS_RMT_WINDOW_MS) * 1000000UL / GPS_PPS_RMT_TICK_NS;
+    esp_err_t err = rmt_config(&c);
+    if (err == ESP_OK) {
+      gIdf.stage |= 1;
+      err = rmt_driver_install(c.channel, 2048, 0);
+    }
+    if (err == ESP_OK) {
+      gIdf.stage |= 2;
+      err = rmt_get_ringbuf_handle(c.channel, &gIdf.rb);
+      if (gIdf.rb == nullptr && err == ESP_OK) {
+        err = ESP_FAIL;
+      }
+    }
+    if (err == ESP_OK) {
+      gIdf.stage |= 4;
+      err = rmt_rx_start(c.channel, true);
+    }
+    if (err == ESP_OK && xTaskCreate(rmtIdfTask, "rmtpps", 3072, nullptr, 3, nullptr) == pdPASS) {
+      gIdf.stage |= 8;
+      gIdf.ok = true;
+    }
+    Serial.printf("[pps-rmt-idf] ch=%d stage=%u ok=%d err=%d\n",
+                  GPS_PPS_RMT_CH, gIdf.stage, gIdf.ok ? 1 : 0, err);
+  }
+#endif
   Serial.printf("GPS UART%d RX=%d TX=%d baud=%d buf=2048 local-clock=on ppsQ=%d tsens=%d\n",
                 GPS_UART_NUM, PIN_GPS_RX, PIN_GPS_TX, GPS_UART_BAUD, GPS_PPS_ISR_QUEUE,
                 tempSensorOk_ ? 1 : 0);
@@ -387,6 +475,9 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
   work.ppsRmt.oddPulse = gRmt.oddPulse;
   work.ppsRmt.fallbacks = gRmt.fallbacks;
   work.ppsRmt.lastWidthUs = gRmt.lastWidthUs;
+  work.ppsRmt.idfOk = gIdf.ok;
+  work.ppsRmt.idfFrames = gIdf.frames;
+  work.ppsRmt.idfFirstSyms = gIdf.firstSyms;
 #endif
 
   if (gps_.date.isValid() && gps_.time.isValid()) {

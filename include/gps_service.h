@@ -41,6 +41,10 @@ struct GpsStatus {
     uint32_t oddPulse = 0;  // pulse width outside the plausible band
     uint32_t fallbacks = 0; // auto-fallbacks to the GPIO source
     uint32_t lastWidthUs = 0;
+    // direct-IDF driver probe (bypasses the HAL rmtRead wrapper)
+    bool idfOk = false;
+    uint32_t idfFrames = 0;
+    uint32_t idfFirstSyms = 0;
   };
   PpsRmtStats ppsRmt;
 };
@@ -65,6 +69,8 @@ class GpsService {
  private:
   static void IRAM_ATTR onPpsIsr();
   static void rmtPpsCb(uint32_t* data, size_t len, void* arg);
+  static bool rmtProcessSymbols(const uint32_t* data, size_t len);
+  static void rmtIdfTask(void* arg);
   void parseNmea();
   void commitNmeaTime(uint32_t epochSec, AnomalyPolicy policy, uint16_t holdoverSec);
   void publishStatus(const GpsStatus& work);

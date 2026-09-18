@@ -938,6 +938,9 @@ void WebPortal::handleStatus() {
   ppsRmt["oddPulse"] = st.ppsRmt.oddPulse;
   ppsRmt["fallbacks"] = st.ppsRmt.fallbacks;
   ppsRmt["lastWidthUs"] = st.ppsRmt.lastWidthUs;
+  ppsRmt["idfOk"] = st.ppsRmt.idfOk;
+  ppsRmt["idfFrames"] = st.ppsRmt.idfFrames;
+  ppsRmt["idfFirstSyms"] = st.ppsRmt.idfFirstSyms;
 #endif
   gps["utcEpoch"] = st.utcEpoch;
   gps["ageMs"] = st.ageMs;
