@@ -100,6 +100,12 @@ void IRAM_ATTR GpsService::onPpsIsr() {
   }
 }
 
+// HAL delivers frames from a normal TASK context (_rmtRxTask), not an ISR:
+// plain critical-section/notify APIs are the correct ones here. A frame is
+// ~one second of symbols ([low gap][pulse][trailing low]) split at the idle
+// threshold, so the edge must be located by the LAST 0->1 transition in the
+// frame — reconstructing from the total frame length would land ~one second
+// early (the ACQ-oscillation bug of the first attempt).
 void GpsService::rmtPpsCb(uint32_t* data, size_t len, void* arg) {
   (void)arg;
 #if GPS_PPS_RMT_EN
@@ -107,24 +113,55 @@ void GpsService::rmtPpsCb(uint32_t* data, size_t len, void* arg) {
     return;
   }
   const uint64_t nowUs = esp_timer_get_time();
-  uint64_t totalNs = 0;
-  uint64_t highNs = 0;
+
+  // Walk the symbol halves in order; remember where the last rising edge
+  // starts and the length of the high run after it (the pulse may span
+  // several symbols: one symbol caps at 32767 ticks = ~32.8 ms @1 µs).
+  uint64_t cumNs = 0;
+  uint64_t riseNs = 0;
+  uint64_t widthNs = 0;
+  bool haveEdge = false;
+  int prevLevel = 0;
   for (size_t i = 0; i < len; ++i) {
     const uint32_t sym = data[i];
-    const uint32_t d0 = sym & 0x7FFF;
-    const uint32_t d1 = (sym >> 16) & 0x7FFF;
-    if (sym & 0x8000) highNs += static_cast<uint64_t>(d1) * GPS_PPS_RMT_TICK_NS;
-    if (sym & 0x4000) highNs += static_cast<uint64_t>(d0) * GPS_PPS_RMT_TICK_NS;
-    totalNs += static_cast<uint64_t>(d0 + d1) * GPS_PPS_RMT_TICK_NS;
+    const uint32_t durs[2] = {sym & 0x7FFF, (sym >> 16) & 0x7FFF};
+    const int levels[2] = {static_cast<int>((sym >> 15) & 1),
+                           static_cast<int>((sym >> 31) & 1)};
+    for (int h = 0; h < 2; ++h) {
+      if (durs[h] == 0) {
+        continue;
+      }
+      const uint64_t dNs = static_cast<uint64_t>(durs[h]) * GPS_PPS_RMT_TICK_NS;
+      if (prevLevel == 0 && levels[h] == 1) {
+        riseNs = cumNs;
+        widthNs = 0;
+        haveEdge = true;
+      }
+      if (levels[h] == 1 && haveEdge) {
+        widthNs += dNs;
+      }
+      cumNs += dNs;
+      prevLevel = levels[h];
+    }
   }
-  const uint64_t totalUs = totalNs / 1000;
-  const uint32_t widthUs = static_cast<uint32_t>(highNs / 1000);
-  if (totalUs == 0 || totalUs > nowUs) {
+  if (!haveEdge) {
     return;
   }
-  const uint64_t edgeUs = nowUs - totalUs;  // hardware frame length removes cb latency
+  const uint32_t widthUs = static_cast<uint32_t>(widthNs / 1000);
+  const uint64_t edgeUs = nowUs - ((cumNs - riseNs) / 1000);
+  // Sanity gates: a valid PPS edge happened recently and its pulse is
+  // plausible; anything else is a malformed frame — drop, never poison.
+  if (widthUs < 10000 || widthUs > 500000) {
+    portENTER_CRITICAL(&ppsMux_);
+    ++gRmt.oddPulse;
+    portEXIT_CRITICAL(&ppsMux_);
+    return;
+  }
+  if (nowUs - edgeUs > 1500000ULL) {
+    return;  // reconstructed edge older than 1.5 s: malformed frame
+  }
 
-  portENTER_CRITICAL_ISR(&ppsMux_);
+  portENTER_CRITICAL(&ppsMux_);
   const uint32_t count = ppsCount_;  // GPIO ISR owns edge counting
   const uint8_t next = static_cast<uint8_t>((gRmt.head + 1) % GPS_PPS_RMT_QUEUE);
   if (next != gRmt.tail) {
@@ -133,20 +170,13 @@ void GpsService::rmtPpsCb(uint32_t* data, size_t len, void* arg) {
     gRmt.q[gRmt.head].widthUs = widthUs;
     gRmt.head = next;
   }
-  if (widthUs < 10000 || widthUs > 500000) {
-    gRmt.oddPulse++;  // outside plausible PPS band (double-edge / glitch)
-  }
   gRmt.lastEdgeUs = nowUs;
   gRmt.alive = true;
   gRmt.lastWidthUs = widthUs;
-  portEXIT_CRITICAL_ISR(&ppsMux_);
+  portEXIT_CRITICAL(&ppsMux_);
 
-  BaseType_t woken = pdFALSE;
   if (timeTask_ != nullptr) {
-    vTaskNotifyGiveFromISR(timeTask_, &woken);
-  }
-  if (woken) {
-    portYIELD_FROM_ISR();
+    xTaskNotifyGive(timeTask_);
   }
 #endif
 }
