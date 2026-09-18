@@ -173,18 +173,18 @@
 // ISR→task PPS queue (missed edges under WiFi load).
 #define GPS_PPS_ISR_QUEUE             8
 // RMT RX hardware capture of the PPS edge (docs/s3_deep_dive_roadmap.md #1):
-// the channel samples the pad at 80 MHz and a frame (edge + RMT window) is
-// delivered by callback; edge time is reconstructed by subtracting the
-// hardware-measured pulse length from the callback entry time. The GPIO ISR
-// path stays attached as automatic fallback; tick() merges both sources.
-#define GPS_PPS_RMT_EN                1   // 0 = legacy GPIO ISR only
+// PARKED (2026-09-18) — Arduino-ESP32 2.0.17 / IDF 4.4.7 legacy RMT RX on S3
+// delivers only EMPTY ringbuf items (2 per edge, both the HAL rmtRead(cb)
+// wrapper and a direct-IDF driver path with RMT_MEM_OWNER_RX claimed; raw
+// channel status constant at 0x2a8150). Platform-level data-path defect,
+// not fixable app-side. Reopen on Arduino 3.x / IDF 5 (new RMT driver).
+#define GPS_PPS_RMT_EN                0   // 0 = legacy GPIO ISR only
 #define GPS_PPS_RMT_QUEUE             8
 #define GPS_PPS_RMT_TICK_NS        1000   // 1 µs symbols (80 MHz / 80)
 #define GPS_PPS_RMT_WINDOW_MS        20   // capture window after the edge
 #define GPS_PPS_RMT_FILTER_NS      1000   // hw-glitch filter: drop <1 µs pulses
+#define GPS_PPS_RMT_HOLD_MS         700    // hold a GPIO edge for its refinement
 #define GPS_PPS_RMT_STALE_MS        2100   // no RMT edges for this long -> fall back to GPIO
-#define GPS_PPS_RMT_HOLD_MS         700    // hold a GPIO edge for its refinement: pulse(<=500ms)
-                                           // + 20 ms window + margin; refined edges arrive sooner
 // Missed PPS seconds ≥ this → Unsynced (not silent catch-up only).
 #define CLK_PPS_MISS_UNSYNC           3
 // Holdover dispersion: floor crystal error (ppm) when EMA is still small.
