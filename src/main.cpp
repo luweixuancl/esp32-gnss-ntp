@@ -548,15 +548,22 @@ static void taskTime(void* /*arg*/) {
     gGps.loop(cachedPolicy, cachedHoldSec);
     gNtp.loop(gGps);
 
-    // 1 Hz diagnostic sample into PSRAM ring (S3). Skip during OTA.
+    // Minute-cadence diagnostic sample into PSRAM ring (S3). Skip during OTA
+    // or when the user has armed recording off.
     {
       static uint32_t lastHistMs = 0;
+      static bool histArmed = true;
       const uint32_t now = millis();
+      if (settingsLock(0)) {
+        histArmed = gSettings.historyRecord;
+        settingsUnlock();
+        gHistory.setRecording(histArmed);
+      }
       if (lastHistMs == 0 || (now - lastHistMs) >= HISTORY_INTERVAL_MS) {
         lastHistMs = now;
         if (ipcOtaBusy()) {
           gHistory.skipOta();
-        } else {
+        } else if (gHistory.recording()) {
           const GpsStatus st = gGps.snapshot();
           const WifiLinkSnapshot link = gWifi.linkSnapshot();
           const int8_t rssi = link.staUp ? static_cast<int8_t>(
@@ -725,6 +732,7 @@ void setup() {
   gNtp.begin();
   gOta.begin();
   gHistory.begin();
+  gHistory.setRecording(gSettings.historyRecord);
 
   Serial.printf("MAC=%s\n", WiFi.macAddress().c_str());
   Serial.printf("SoftAP default pass=%s (NVS appw overrides if set)\n",

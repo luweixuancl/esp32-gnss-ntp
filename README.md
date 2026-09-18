@@ -22,7 +22,7 @@ GNSS：大夏龙雀 DX-GP22（GPS/北斗/GLONASS 多模，9600 8N1，定位后 1
 9. **B4 可观测**：OLED NTP Stats、串口 60s 摘要、`/metrics` Prometheus 文本
 10. **多目标构建**：PlatformIO 多环境，源码 100% 共享，引脚差异集中在 `include/config.h` 目标条件宏
 11. **Web OTA**：登录 `/cfg` 上传 `firmware.bin`；升级期间拒绝 NTP（KoD `RSTR`）并让出 CPU/Flash；琥珀/绿/红状态灯；启动确认后取消回滚；NVS 保留；串口升级仍为兜底
-12. **PSRAM 诊断历史（S3）**：约 24 h × 1 Hz 环形缓冲；`GET /history` 概要、`GET /history.csv?last=` 流式导出；C3 返回 `enabled:false`；OTA 期间停采
+12. **PSRAM 诊断历史（S3）**：约 7 天 × 1/min 环形缓冲；状态页可开始/停止录制；`GET /history` 概要、`GET /history.csv?last=`（秒）流式导出（带 Content-Length）；C3 返回 `enabled:false`；OTA 期间停采
 
 ## 硬件连接
 

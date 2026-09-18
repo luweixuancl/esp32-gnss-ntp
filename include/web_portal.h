@@ -28,6 +28,7 @@ class WebPortal {
   void handleMetrics();
   void handleHistory();
   void handleHistoryCsv();
+  void handleHistoryCtrl();
   bool sessionCookieOk();
   bool requireSession(bool htmlLogin);
   void sendLoginPage(const char* err);

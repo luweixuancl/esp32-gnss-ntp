@@ -120,6 +120,8 @@ AppSettings SettingsStore::load() const {
 
   // Display-only preference: not part of the CRC (missing key → default).
   s.oledIdleOffMs = prefs_.getULong("ooff", OLED_IDLE_OFF_DEFAULT_MS);
+  // History arm: also outside CRC so older NVS stays valid.
+  s.historyRecord = prefs_.getBool("hist", true);
 
   const uint16_t ver = prefs_.getUShort("ver", 0);
   const uint32_t storedCrc = prefs_.getUInt("crc", 0);
@@ -186,6 +188,7 @@ void SettingsStore::save(const AppSettings& s) const {
   prefs_.putBool("tcmp", s.tempComp);
   prefs_.putShort("tcpc", s.tempCoeffCenti);
   prefs_.putULong("ooff", s.oledIdleOffMs);
+  prefs_.putBool("hist", s.historyRecord);
   prefs_.putUShort("ver", kSettingsVer);
   prefs_.putUInt("crc", settingsCrc(s));
 }

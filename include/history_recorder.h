@@ -7,7 +7,8 @@
 #include "gps_service.h"
 #include "local_clock.h"
 
-// Packed 1 Hz diagnostic sample (v1). Lives in PSRAM on S3 only.
+// Packed diagnostic sample (v1). Lives in PSRAM on S3 only.
+// Cadence is HISTORY_INTERVAL_SEC (1 minute), not 1 Hz.
 struct HistorySample {
   uint32_t utcEpoch = 0;
   int16_t residualMs = 0;
@@ -34,11 +35,12 @@ enum HistoryFlag : uint8_t {
 
 struct HistorySummary {
   bool enabled = false;
+  bool recording = false;
   const char* reason = "";
   uint8_t version = 1;
   uint32_t capacity = 0;
   uint32_t count = 0;
-  uint32_t intervalSec = 1;
+  uint32_t intervalSec = HISTORY_INTERVAL_SEC;
   uint32_t seq = 0;
   uint32_t oldestUtc = 0;
   uint32_t newestUtc = 0;
@@ -68,12 +70,19 @@ class HistoryRecorder {
   bool enabled() const { return enabled_; }
   const char* reason() const { return reason_; }
 
+  // Runtime arm (persisted via AppSettings.historyRecord). Independent of
+  // hardware enable (PSRAM). When false, push() is a no-op.
+  bool recording() const { return recording_; }
+  void setRecording(bool on) { recording_ = on; }
+
   // task-time only. Skip when OTA busy (caller checks) or call skipOta().
   void push(const GpsStatus& st, int8_t rssi);
   void skipOta() { otaSkipped_++; }
 
   HistorySummary summary() const;
-  HistoryExportCursor beginExport(uint32_t lastSec, uint32_t maxRows) const;
+  // lastRows: keep the newest N samples (0 = all). HTTP layer converts
+  // ?last=<seconds> → rows via HISTORY_INTERVAL_SEC.
+  HistoryExportCursor beginExport(uint32_t lastRows, uint32_t maxRows) const;
   bool sampleLogical(const HistoryExportCursor& cur, uint32_t i, HistorySample* out) const;
   // Copy up to n samples starting at logical index i0 under one lock (CSV batch).
   size_t copyLogical(const HistoryExportCursor& cur, uint32_t i0, HistorySample* dst,
@@ -85,6 +94,7 @@ class HistoryRecorder {
   uint32_t seq() const { return seq_; }
   uint32_t otaSkipped() const { return otaSkipped_; }
   uint32_t gaps() const { return gaps_; }
+  uint32_t intervalSec() const { return HISTORY_INTERVAL_SEC; }
 
  private:
   static int16_t clampI16(int32_t v);
@@ -100,6 +110,7 @@ class HistoryRecorder {
   mutable SemaphoreHandle_t mu_ = nullptr;
   HistorySample* buf_ = nullptr;
   bool enabled_ = false;
+  volatile bool recording_ = true;
   const char* reason_ = "not started";
   uint32_t capacity_ = 0;
   // Written under mu_; plain 32-bit reads are lock-free for telemetry.

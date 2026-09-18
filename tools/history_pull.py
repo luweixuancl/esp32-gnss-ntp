@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Pull device-side PSRAM history (/history + /history.csv).
 
-Read-only. Useful after flashing v1.1.10+ on ESP32-S3 to verify the ring
-and dump a window for offline analysis (alongside clock_drift_monitor).
+Read-only. Useful after flashing v1.1.13+ on ESP32-S3 to verify the ring
+(1 sample/min) and dump a window for offline analysis.
 
 Examples:
-  tools/history_pull.py --host 10.81.127.14
-  tools/history_pull.py --host 10.81.127.14 --last 3600 --csv out.csv
+  tools/history_pull.py --host 192.168.1.24
+  tools/history_pull.py --host 192.168.1.24 --last 3600 --csv out.csv
 """
 from __future__ import annotations
 
@@ -19,14 +19,25 @@ import urllib.request
 
 def get(url: str, timeout: float = 30.0) -> bytes:
     with urllib.request.urlopen(url, timeout=timeout) as resp:
-        return resp.read()
+        cl = resp.headers.get("Content-Length")
+        data = resp.read()
+        if cl is not None:
+            try:
+                expect = int(cl)
+            except ValueError:
+                expect = -1
+            if expect >= 0 and len(data) != expect:
+                raise OSError(
+                    f"Content-Length mismatch: got {len(data)} want {expect}"
+                )
+        return data
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--host", required=True, help="device IP / hostname")
     ap.add_argument("--last", type=int, default=3600,
-                    help="seconds of CSV to fetch (0 = all; default 3600)")
+                    help="seconds of CSV window (0 = all; default 3600 = 1h)")
     ap.add_argument("--max", type=int, default=0,
                     help="optional hard cap on CSV rows")
     ap.add_argument("--csv", default="",
@@ -41,7 +52,7 @@ def main() -> int:
     if not args.csv_only:
         try:
             raw = get(base + "/history", timeout=min(args.timeout, 15.0))
-        except (urllib.error.URLError, TimeoutError) as exc:
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
             print(f"GET /history failed: {exc}", file=sys.stderr)
             return 1
         try:
@@ -66,7 +77,7 @@ def main() -> int:
 
     try:
         body = get(csv_url, timeout=args.timeout)
-    except (urllib.error.URLError, TimeoutError) as exc:
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
         print(f"GET /history.csv failed: {exc}", file=sys.stderr)
         return 1
 
@@ -77,11 +88,10 @@ def main() -> int:
     elif args.csv_only:
         sys.stdout.buffer.write(body)
     else:
-        # Preview first lines after JSON summary.
         text = body.decode("utf-8", errors="replace")
         lines = text.splitlines()
         preview = 12 if len(lines) > 12 else len(lines)
-        print(f"\n# CSV {len(lines)} lines (showing {preview})")
+        print(f"\n# CSV {len(lines)} lines / {len(body)} bytes (showing {preview})")
         print("\n".join(lines[:preview]))
         if len(lines) > preview:
             print("...")

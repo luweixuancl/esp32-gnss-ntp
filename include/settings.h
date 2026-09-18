@@ -86,6 +86,8 @@ struct AppSettings {
   int16_t tempCoeffCenti = CLK_TEMP_COEFF_CENTI;  // ppm/°C × 100
   // OLED idle blanking timeout in ms; 0 = always on (NVS ooff).
   uint32_t oledIdleOffMs = OLED_IDLE_OFF_DEFAULT_MS;
+  // PSRAM history arm (NVS hist). Default on when hardware supports it.
+  bool historyRecord = true;
 };
 
 // Fixed pick list shared by OLED menu + web config (ms values).

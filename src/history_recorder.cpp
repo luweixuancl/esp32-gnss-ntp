@@ -55,8 +55,9 @@ void HistoryRecorder::begin() {
   freqN_ = 0;
   haveFreqExt_ = false;
   freqExtDirty_ = false;
-  Serial.printf("[history] enabled capacity=%u bytes=%u (SPIRAM, mutex)\n",
-                static_cast<unsigned>(capacity_), static_cast<unsigned>(bytes));
+  Serial.printf("[history] enabled capacity=%u bytes=%u interval=%us (SPIRAM, mutex)\n",
+                static_cast<unsigned>(capacity_), static_cast<unsigned>(bytes),
+                static_cast<unsigned>(HISTORY_INTERVAL_SEC));
 #else
   enabled_ = false;
   reason_ = "no PSRAM";
@@ -164,7 +165,7 @@ void HistoryRecorder::refreshFreqExtLocked() {
 }
 
 void HistoryRecorder::push(const GpsStatus& st, int8_t rssi) {
-  if (!enabled_ || buf_ == nullptr) {
+  if (!enabled_ || buf_ == nullptr || !recording_) {
     return;
   }
   const uint32_t now = millis();
@@ -200,12 +201,15 @@ void HistoryRecorder::push(const GpsStatus& st, int8_t rssi) {
   if (haveLastPps_) {
     const uint32_t dPps = (st.ppsCount >= lastPpsCount_) ? (st.ppsCount - lastPpsCount_) : 0;
     const uint32_t dMs = (lastPushMs_ != 0) ? (now - lastPushMs_) : 0;
-    if (dPps > 1 || dMs > (HISTORY_INTERVAL_MS + 500)) {
+    // Expect ~HISTORY_INTERVAL_SEC PPS ticks between minute samples.
+    const uint32_t ppsSlack = HISTORY_INTERVAL_SEC / 2u + 5u;
+    if (dPps > (HISTORY_INTERVAL_SEC + ppsSlack) ||
+        dMs > (HISTORY_INTERVAL_MS + HISTORY_INTERVAL_MS / 2u)) {
       s.flags |= HistGap;
     }
   }
 
-  // Non-blocking: if export holds the mutex, skip this second rather than stall
+  // Non-blocking: if export holds the mutex, skip this sample rather than stall
   // task-time (NTP/PPS path).
   if (!lock(0)) {
     return;
@@ -223,7 +227,7 @@ void HistoryRecorder::push(const GpsStatus& st, int8_t rssi) {
   if (s.flags & HistGap) {
     gaps_++;
   }
-  // Leave freqExtDirty_ for summary()/export — never scan PSRAM on the 1 Hz path.
+  // Leave freqExtDirty_ for summary()/export — never scan PSRAM on the sample path.
   unlock();
 
   lastPushMs_ = now;
@@ -234,7 +238,8 @@ void HistoryRecorder::push(const GpsStatus& st, int8_t rssi) {
 HistorySummary HistoryRecorder::summary() const {
   HistorySummary out;
   out.version = 1;
-  out.intervalSec = 1;
+  out.intervalSec = HISTORY_INTERVAL_SEC;
+  out.recording = recording_;
   if (!enabled_ || buf_ == nullptr) {
     out.enabled = false;
     out.reason = reason_;
@@ -287,7 +292,7 @@ HistorySummary HistoryRecorder::summary() const {
   return out;
 }
 
-HistoryExportCursor HistoryRecorder::beginExport(uint32_t lastSec, uint32_t maxRows) const {
+HistoryExportCursor HistoryRecorder::beginExport(uint32_t lastRows, uint32_t maxRows) const {
   HistoryExportCursor cur;
   if (!enabled_ || buf_ == nullptr) {
     return cur;
@@ -302,8 +307,8 @@ HistoryExportCursor HistoryRecorder::beginExport(uint32_t lastSec, uint32_t maxR
   unlock();
 
   uint32_t limit = cur.count;
-  if (lastSec > 0 && lastSec < limit) {
-    limit = lastSec;
+  if (lastRows > 0 && lastRows < limit) {
+    limit = lastRows;
   }
   if (maxRows > 0 && maxRows < limit) {
     limit = maxRows;
