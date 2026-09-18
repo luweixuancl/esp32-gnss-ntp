@@ -121,9 +121,9 @@ void DisplayUi::begin() {
     Serial.println("SH1107 init failed");
   }
   display_.setRotation(OLED_ROTATION);
-  bootMessage("GNSS NTP Server", "Booting...");
+  bootMessage("GNSS NTP Server", FW_MARK);
   lastInputMs_ = millis();
-  Serial.printf("[ui] OLED menu FreeMono9pt rows=%u rowH=%u mark=%s\n",
+  Serial.printf("[ui] OLED %s menu FreeMono9pt rows=%u rowH=%u uiMark=%s\n", FW_MARK,
                 static_cast<unsigned>(OLED_MENU_ROWS),
                 static_cast<unsigned>(OLED_MENU_ROW_H), OLED_UI_MARK);
 }
@@ -399,7 +399,8 @@ void DisplayUi::drawHome(const GpsStatus& st, const WifiManager& wifi, const App
   }
   clockLine(display_, 12, timeBuf);
 
-  // --- SSID (secondary) ---
+  // --- SSID (left) + firmware mark (right) ---
+  // Mark is short ("v1.1.5") so a glance after flash/OTA confirms the build.
   display_.setTextSize(1);
   String ssid;
   if (sta) {
@@ -411,21 +412,28 @@ void DisplayUi::drawHome(const GpsStatus& st, const WifiManager& wifi, const App
   } else {
     ssid = "(no WiFi)";
   }
-  // Max ~21 chars at size1; keep 20 + NUL
-  char ssidLine[21];
+  const char* mark = FW_MARK;
+  const int16_t markW = static_cast<int16_t>(strlen(mark) * 6);
+  const int16_t ssidMaxPx = static_cast<int16_t>(128 - markW - 6);  // 1-char gap
+  const size_t ssidMax = ssidMaxPx > 0 ? static_cast<size_t>(ssidMaxPx / 6) : 0;
+  char ssidLine[22];
   const size_t n = ssid.length();
-  if (n <= 20) {
+  if (n <= ssidMax) {
     memcpy(ssidLine, ssid.c_str(), n);
     ssidLine[n] = '\0';
+  } else if (ssidMax >= 4) {
+    memcpy(ssidLine, ssid.c_str(), ssidMax - 3);
+    ssidLine[ssidMax - 3] = '.';
+    ssidLine[ssidMax - 2] = '.';
+    ssidLine[ssidMax - 1] = '.';
+    ssidLine[ssidMax] = '\0';
   } else {
-    memcpy(ssidLine, ssid.c_str(), 17);
-    ssidLine[17] = '.';
-    ssidLine[18] = '.';
-    ssidLine[19] = '.';
-    ssidLine[20] = '\0';
+    ssidLine[0] = '\0';
   }
   display_.setCursor(0, 38);
   display_.print(ssidLine);
+  display_.setCursor(128 - markW, 38);
+  display_.print(mark);
 
   // --- IP + SYNC ---
   display_.setCursor(0, 52);

@@ -968,6 +968,7 @@ void WebPortal::handleOtaDone() {
 void WebPortal::handleStatus() {
   JsonDocument doc;
   doc["fwVersion"] = FW_VERSION;
+  doc["fwMark"] = FW_MARK;
   doc["otaRunning"] = gOta.runningLabel();
   doc["otaNext"] = gOta.nextLabel();
   doc["otaNextSize"] = gOta.nextSlotSize();

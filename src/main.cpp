@@ -104,7 +104,7 @@ static void checkFactoryReset() {
     delay(10);
   }
   Serial.println("[reset] released early - normal boot");
-  gUi.bootMessage("GNSS NTP Server", "Booting...");
+  gUi.bootMessage("GNSS NTP Server", FW_MARK);
 }
 
 static void openSetupApIfNeeded(const char* uiMsg) {
@@ -677,7 +677,7 @@ void setup() {
   Serial.begin(115200);
   delay(200);
   Serial.println("\nGNSS NTP Server (RTOS)");
-  Serial.printf("FW %s\n", FW_VERSION);
+  Serial.printf("FW %s (%s)\n", FW_MARK, FW_VERSION);
 
   if (!ipcInit()) {
     Serial.println("IPC init failed — halt/restart");
