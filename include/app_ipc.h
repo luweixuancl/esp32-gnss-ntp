@@ -6,10 +6,12 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/semphr.h>
+#include <freertos/task.h>
 #include "settings.h"
 #include "wifi_manager.h"
 
 // Cross-task IPC for RTOS refactor (time / net / ui).
+// Modules own their logic; AppIpc carries shared snapshots and queues only.
 
 enum class NetReqType : uint8_t {
   ConnectWifi,
@@ -40,6 +42,15 @@ struct UiMsg {
   // Scan results: payload lives in shared scan buffer guarded by scanMutex.
 };
 
+// Published by OtaService (task-net). Readers (task-time / task-ui / LEDs)
+// must not call into OtaService — only observe these fields.
+enum class OtaPhase : uint8_t {
+  Idle = 0,
+  Uploading = 1,
+  Rebooting = 2,
+  Failed = 3,
+};
+
 struct AppIpc {
   QueueHandle_t netReq = nullptr;
   QueueHandle_t uiMsg = nullptr;
@@ -53,6 +64,15 @@ struct AppIpc {
   volatile uint32_t kickTimeMs = 0;
   volatile uint32_t kickNetMs = 0;
   volatile uint32_t kickUiMs = 0;
+
+  // OTA snapshot (written only by OtaService).
+  volatile bool otaBusy = false;       // Uploading | Rebooting
+  volatile OtaPhase otaPhase = OtaPhase::Idle;
+
+  // Task handles for priority shed during OTA (set once from setup).
+  TaskHandle_t taskTime = nullptr;
+  TaskHandle_t taskNet = nullptr;
+  TaskHandle_t taskUi = nullptr;
 };
 
 extern AppIpc gIpc;
@@ -68,3 +88,7 @@ bool postUiText(const char* text);
 inline void ipcKickTime() { gIpc.kickTimeMs = millis(); }
 inline void ipcKickNet() { gIpc.kickNetMs = millis(); }
 inline void ipcKickUi() { gIpc.kickUiMs = millis(); }
+
+inline bool ipcOtaBusy() { return gIpc.otaBusy; }
+inline OtaPhase ipcOtaPhase() { return gIpc.otaPhase; }
+const char* ipcOtaPhaseLabel();

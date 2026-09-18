@@ -36,3 +36,17 @@ bool postUiText(const char* text) {
   msg.text[sizeof(msg.text) - 1] = '\0';
   return xQueueSend(gIpc.uiMsg, &msg, 0) == pdTRUE;
 }
+
+const char* ipcOtaPhaseLabel() {
+  switch (gIpc.otaPhase) {
+    case OtaPhase::Uploading:
+      return "uploading";
+    case OtaPhase::Rebooting:
+      return "rebooting";
+    case OtaPhase::Failed:
+      return "failed";
+    case OtaPhase::Idle:
+    default:
+      return "idle";
+  }
+}

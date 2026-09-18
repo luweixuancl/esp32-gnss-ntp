@@ -14,7 +14,7 @@
 #include "encoder.h"
 #include "display_ui.h"
 #include "status_leds.h"
-#include "ota_support.h"
+#include "ota_service.h"
 
 SettingsStore gStore;
 AppSettings gSettings;
@@ -515,7 +515,7 @@ static void taskTime(void* /*arg*/) {
   for (;;) {
     // OTA window: refuse NTP, skip GPS/settings work, yield CPU/Flash to the
     // upload on task-net (especially critical on single-core C3).
-    if (otaIsBusy()) {
+    if (ipcOtaBusy()) {
       gNtp.loopRefuseOta();
       ipcKickTime();
       esp_task_wdt_reset();
@@ -614,7 +614,7 @@ static void taskNet(void* /*arg*/) {
 
   for (;;) {
     // During OTA, skip WiFi scan/reconnect churn so the HTTP upload owns the radio.
-    if (!otaIsBusy()) {
+    if (!ipcOtaBusy()) {
       driveScan();
 
       NetRequest req;
@@ -632,10 +632,10 @@ static void taskNet(void* /*arg*/) {
     }
 
     gPortal.loop();
-    otaPollConfirmValid();
+    gOta.poll();
     static uint8_t heapLowStreak = 0;
     // Skip heap-panic restart while flash is being rewritten.
-    if (!otaIsBusy() && ESP.getFreeHeap() < HEAP_RESTART_BYTES) {
+    if (!ipcOtaBusy() && ESP.getFreeHeap() < HEAP_RESTART_BYTES) {
       if (++heapLowStreak >= HEAP_RESTART_SAMPLES) {
         Serial.printf("[net] heap low (%u) x%u — restart\n",
                       static_cast<unsigned>(ESP.getFreeHeap()), heapLowStreak);
@@ -660,7 +660,7 @@ static void taskUi(void* /*arg*/) {
     // LEDs always run (OTA amber/green/red). Skip encoder/OLED work while
     // uploading so I2C and UI CPU do not contend with flash writes.
     gLeds.loop(gIpc.setupAp, gWifi.isStaConnected(), st);
-    if (!otaIsBusy()) {
+    if (!ipcOtaBusy()) {
       gEnc.loop();
       gUi.loop(gEnc, gGps, gWifi, gNtp);
       esp_task_wdt_reset();
@@ -702,17 +702,23 @@ void setup() {
   gGps.begin();
   gWifi.begin();
   gNtp.begin();
+  gOta.begin();
 
   Serial.printf("MAC=%s\n", WiFi.macAddress().c_str());
   Serial.printf("SoftAP default pass=%s (NVS appw overrides if set)\n",
                 derivedSoftApPassword().c_str());
 
   // Priority: time=5 > net=2 > ui=1 (all below WiFi/lwIP ~18+).
+  // During OTA, OtaService temporarily boosts net above time via vTaskPrioritySet.
   // TASK_TIME_CORE: 0 on C3 (single core), 1 on S3 (dual-core: GNSS/NTP/PPS
   // alone on core 1 for deterministic timestamping, net/ui on core 0).
-  xTaskCreatePinnedToCore(taskTime, "task-time", 6144, nullptr, 5, &gTaskTime, TASK_TIME_CORE);
-  xTaskCreatePinnedToCore(taskNet, "task-net", 8192, nullptr, 2, &gTaskNet, 0);
-  xTaskCreatePinnedToCore(taskUi, "task-ui", 4096, nullptr, 1, &gTaskUi, 0);
+  xTaskCreatePinnedToCore(taskTime, "task-time", 6144, nullptr, TASK_PRIO_TIME, &gTaskTime,
+                          TASK_TIME_CORE);
+  xTaskCreatePinnedToCore(taskNet, "task-net", 8192, nullptr, TASK_PRIO_NET, &gTaskNet, 0);
+  xTaskCreatePinnedToCore(taskUi, "task-ui", 4096, nullptr, TASK_PRIO_UI, &gTaskUi, 0);
+  gIpc.taskTime = gTaskTime;
+  gIpc.taskNet = gTaskNet;
+  gIpc.taskUi = gTaskUi;
 
   Serial.println("Tasks started: time=5 net=2 ui=1");
 }

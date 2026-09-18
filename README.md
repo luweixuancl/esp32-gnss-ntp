@@ -156,8 +156,8 @@ PlatformIO + Arduino（espressif32）。注意：工程路径含非 ASCII 时 Wi
 ## 目录结构
 
 ```
-include/     配置与头文件（引脚目标条件宏）
-src/         固件源码（FreeRTOS 任务：time / net / ui）
+include/     配置与头文件（引脚目标条件宏；app_ipc 跨任务快照）
+src/         固件源码（FreeRTOS 任务：time / net / ui；OtaService 等模块）
 docs/        设计方案与测试报告（C3/S3 全系列）
 tools/       辅助脚本（NTP 比对、失效链/长时段监测）
 dist/        固件产物（C3 app / S3 app / S3 整片合并）

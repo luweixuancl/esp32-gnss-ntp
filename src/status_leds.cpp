@@ -2,13 +2,12 @@
 #include <Arduino.h>
 #include "app_ipc.h"
 #include "config.h"
-#include "ota_support.h"
 
 #if defined(ARDUINO_ESP32S3_DEV)
 // Three logical channels share the onboard SK6812-mini (GPIO48): R = network
 // (D4 semantics), G = clock/GNSS (D5 semantics), B = NTP serving-ready
 // (steady while Locked/Degraded/Holdover, off otherwise). OTA overrides all
-// three with dedicated colours (see writeOtaPattern).
+// three with dedicated colours from the AppIpc OTA snapshot.
 static bool rgbD4On_ = false;
 static bool rgbD5On_ = false;
 static bool rgbBOn_ = false;
@@ -45,14 +44,13 @@ static void setLed(uint8_t pin, bool on) {
 
 void StatusLeds::begin() {
 #if defined(ARDUINO_ESP32S3_DEV)
-  flushRgb();  // RGB off (boot default is off; be explicit)
+  flushRgb();
 #else
   pinMode(PIN_LED_D4, OUTPUT);
   pinMode(PIN_LED_D5, OUTPUT);
   digitalWrite(PIN_LED_D4, LOW);
   digitalWrite(PIN_LED_D5, LOW);
 #endif
-  // Leave kicks at 0 until each task actually runs (see tasksStale).
 }
 
 void StatusLeds::writeBlink(uint8_t pin, uint32_t nowMs, uint32_t halfPeriodMs) {
@@ -67,55 +65,51 @@ void StatusLeds::writeHeartbeat(uint8_t pin, uint32_t nowMs) {
 }
 
 bool StatusLeds::writeOtaPattern(uint32_t nowMs) {
-  const OtaUiPhase phase = otaUiPhase();
-  if (phase == OtaUiPhase::Idle) {
+  // Observe IPC snapshot only — no dependency on OtaService.
+  const OtaPhase phase = ipcOtaPhase();
+  if (phase == OtaPhase::Idle) {
     return false;
   }
   const bool on = ((nowMs / OTA_LED_BLINK_HALF_MS) % 2) == 0;
   switch (phase) {
-    case OtaUiPhase::Uploading:
-      // Amber / yellow fast blink — distinct from panic (which alternates R/G).
+    case OtaPhase::Uploading:
 #if defined(ARDUINO_ESP32S3_DEV)
-      setRgb(on, on, false);
+      setRgb(on, on, false);  // amber
 #else
       setLed(PIN_LED_D4, on);
       setLed(PIN_LED_D5, on);
 #endif
       return true;
-    case OtaUiPhase::Rebooting:
-      // Solid green — image accepted, about to restart.
+    case OtaPhase::Rebooting:
 #if defined(ARDUINO_ESP32S3_DEV)
-      setRgb(false, true, false);
+      setRgb(false, true, false);  // solid green
 #else
       setLed(PIN_LED_D4, false);
       setLed(PIN_LED_D5, true);
 #endif
       return true;
-    case OtaUiPhase::Failed:
-      // Red blink — reject / abort, then auto-clears to Idle.
+    case OtaPhase::Failed:
 #if defined(ARDUINO_ESP32S3_DEV)
-      setRgb(on, false, false);
+      setRgb(on, false, false);  // red blink
 #else
       setLed(PIN_LED_D4, on);
       setLed(PIN_LED_D5, false);
 #endif
       return true;
-    case OtaUiPhase::Idle:
+    case OtaPhase::Idle:
     default:
       return false;
   }
 }
 
 bool StatusLeds::tasksStale(uint32_t nowMs) {
-  // Web OTA intentionally blocks task-net inside handleClient for many seconds;
-  // never treat that as a hang (otaKickWatchdogs also refreshes kickNet).
-  if (otaIsBusy()) {
+  // OTA blocks task-net inside handleClient; IPC busy + kickNetAlive cover it.
+  if (ipcOtaBusy()) {
     return false;
   }
   const uint32_t t = gIpc.kickTimeMs;
   const uint32_t n = gIpc.kickNetMs;
   const uint32_t u = gIpc.kickUiMs;
-  // Ignore until all tasks have kicked at least once (0 = not started).
   if (t == 0 || n == 0 || u == 0) {
     return false;
   }
@@ -132,13 +126,11 @@ void StatusLeds::loop(bool apMode, bool wifiStaOk, const GpsStatus& st) {
   }
   lastUpdateMs_ = now;
 
-  // OTA colours take over the whole indicator (upload must be obvious).
   if (writeOtaPattern(now)) {
     panicSinceMs_ = 0;
     return;
   }
 
-  // Panic: another task stopped kicking — alternate D4/D5 ~5 Hz; then soft-restart.
   if (tasksStale(now)) {
     if (panicSinceMs_ == 0) {
       panicSinceMs_ = now;
@@ -168,10 +160,9 @@ void StatusLeds::loop(bool apMode, bool wifiStaOk, const GpsStatus& st) {
 
   if (st.validFix && st.ppsFresh && st.timeValid &&
       (st.clockState == ClockState::Locked || st.clockState == ClockState::Degraded)) {
-    // Opposite phase to D4 so dual-heartbeat is easier to see as "alive".
     writeHeartbeat(PIN_LED_D5, now + LED_HEARTBEAT_ON_MS / 2);
   } else if (st.clockState == ClockState::Holdover) {
-    writeBlink(PIN_LED_D5, now, 200);  // fast blink = holdover
+    writeBlink(PIN_LED_D5, now, 200);
   } else if (st.validFix || st.satellites > 0 || st.clockState == ClockState::Acquiring) {
     writeBlink(PIN_LED_D5, now, 400);
   } else {
@@ -179,8 +170,6 @@ void StatusLeds::loop(bool apMode, bool wifiStaOk, const GpsStatus& st) {
   }
 
 #if defined(ARDUINO_ESP32S3_DEV)
-  // B = NTP serving-ready: steady while the server answers stratum 1
-  // (Locked/Degraded/Holdover), off while acquiring or refusing (UNS / OTA).
   rgbBOn_ = (st.clockState == ClockState::Locked ||
              st.clockState == ClockState::Degraded ||
              st.clockState == ClockState::Holdover);

@@ -44,11 +44,7 @@ class WebPortal {
   String pendingPass_;
   String sessionToken_;
   uint32_t sessionUntilMs_ = 0;
-  // OTA upload state (single in-flight multipart; task-net only).
+  // HTTP-layer OTA session gate (flash/partition logic lives in OtaService).
   bool otaAuthOk_ = false;
-  bool otaStarted_ = false;
-  bool otaSuccess_ = false;
-  bool otaHeaderChecked_ = false;
-  uint32_t otaLastLogBytes_ = 0;
   char otaError_[96] = {};
 };

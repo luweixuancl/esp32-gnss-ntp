@@ -3,13 +3,10 @@
 #include "config.h"
 #include "gps_service.h"
 #include "ntp_server.h"
-#include "ota_support.h"
+#include "ota_service.h"
 #include <ArduinoJson.h>
-#include <Update.h>
 #include <WiFi.h>
-#include <esp_ota_ops.h>
 #include <esp_system.h>
-#include <esp_task_wdt.h>
 #include <math.h>
 #include <time.h>
 
@@ -509,13 +506,13 @@ void WebPortal::handleSetup() {
             "<p>当前 <b>");
   body += FW_VERSION;
   body += F("</b> · 目标 <code>");
-  body += otaExpectedChipName();
+  body += gOta.expectedChipName();
   body += F("</code> · 运行分区 <code>");
-  body += otaRunningPartitionLabel();
+  body += gOta.runningLabel();
   body += F("</code> · 下一写入 <code>");
-  body += otaNextPartitionLabel();
+  body += gOta.nextLabel();
   body += F("</code> · 状态 <code>");
-  body += otaImageStateLabel();
+  body += gOta.imageStateLabel();
   body += F("</code></p>"
             "<input id='fw' type='file' accept='.bin,application/octet-stream'>"
             "<button type='button' onclick='doOta()'>上传并升级</button>"
@@ -912,148 +909,59 @@ void WebPortal::handleSave() {
 
 void WebPortal::handleOtaUpload() {
   HTTPUpload& upload = server_.upload();
-  auto fail = [this](const char* msg) {
-    if (msg != nullptr && msg[0]) {
-      strncpy(otaError_, msg, sizeof(otaError_) - 1);
-      otaError_[sizeof(otaError_) - 1] = '\0';
-    }
-    if (otaStarted_ || Update.isRunning()) {
-      Update.abort();
-    }
-    otaStarted_ = false;
-    otaSuccess_ = false;
-    otaEnterFailed();
-    Serial.printf("[ota] fail: %s\n", otaError_);
-  };
 
   if (upload.status == UPLOAD_FILE_START) {
     otaAuthOk_ = sessionCookieOk();
-    otaStarted_ = false;
-    otaSuccess_ = false;
-    otaHeaderChecked_ = false;
-    otaLastLogBytes_ = 0;
     otaError_[0] = '\0';
-    otaClear();
+    gOta.clear();
 
     if (!otaAuthOk_) {
       strncpy(otaError_, "Unauthorized", sizeof(otaError_) - 1);
       Serial.println("[ota] reject: no session");
-      // Drop the socket so a huge unauthenticated body is not fully buffered.
       server_.client().stop();
       return;
     }
-    // Keep the login session alive for the whole transfer.
     sessionUntilMs_ = millis() + 30UL * 60UL * 1000UL;
 
-    if (Update.isRunning()) {
-      fail("OTA already running");
-      otaAuthOk_ = false;
-      return;
-    }
-    const esp_partition_t* next = esp_ota_get_next_update_partition(nullptr);
-    if (next == nullptr) {
-      fail("No OTA partition");
-      otaAuthOk_ = false;
-      return;
-    }
-
-    // Reject oversized bodies early when Content-Length is present.
+    size_t contentLen = 0;
     if (server_.hasHeader("Content-Length")) {
-      const size_t cl = static_cast<size_t>(strtoul(server_.header("Content-Length").c_str(), nullptr, 10));
-      // Multipart overhead is small vs app size; still bound to partition.
-      if (cl > next->size + 4096) {
-        fail("Upload too large for OTA slot");
-        otaAuthOk_ = false;
-        server_.client().stop();
-        return;
-      }
+      contentLen = static_cast<size_t>(strtoul(server_.header("Content-Length").c_str(), nullptr, 10));
     }
-
-    Serial.printf("[ota] start file=%s → %s slot=%u chip=%s\n", upload.filename.c_str(),
-                  next->label, static_cast<unsigned>(next->size), otaExpectedChipName());
-    if (!Update.begin(next->size)) {
-      char buf[96];
-      snprintf(buf, sizeof(buf), "Update.begin failed: %s", Update.errorString());
-      fail(buf);
+    if (!gOta.beginSession(contentLen, otaError_, sizeof(otaError_))) {
       otaAuthOk_ = false;
+      server_.client().stop();
       return;
     }
-    otaStarted_ = true;
-    otaEnterUploading();
     postUiText("OTA uploading...");
   } else if (upload.status == UPLOAD_FILE_WRITE) {
-    if (!otaAuthOk_ || !otaStarted_) {
+    if (!otaAuthOk_ || !gOta.sessionActive()) {
       return;
     }
-    otaKickWatchdogs();
-
-    if (!otaHeaderChecked_) {
-      if (upload.currentSize < 14) {
-        // Pathological tiny first chunk — cannot validate yet; refuse rather than
-        // risk writing an unverified prefix (HTTP uploads are normally >>14 B).
-        fail("First chunk too small for image header");
-        server_.client().stop();
-        return;
-      }
-      char verr[96];
-      if (!otaValidateImagePrefix(upload.buf, upload.currentSize, verr, sizeof(verr))) {
-        fail(verr);
-        server_.client().stop();
-        return;
-      }
-      otaHeaderChecked_ = true;
-    }
-
-    if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
-      char buf[96];
-      snprintf(buf, sizeof(buf), "Write failed: %s", Update.errorString());
-      fail(buf);
-      return;
-    }
-
-    const size_t prog = Update.progress();
-    if (prog >= otaLastLogBytes_ + OTA_PROGRESS_LOG_BYTES) {
-      otaLastLogBytes_ = static_cast<uint32_t>(prog);
-      Serial.printf("[ota] progress %u / %u\n", static_cast<unsigned>(prog),
-                    static_cast<unsigned>(Update.size()));
-      otaKickWatchdogs();
+    if (!gOta.write(upload.buf, upload.currentSize, otaError_, sizeof(otaError_))) {
+      server_.client().stop();
     }
   } else if (upload.status == UPLOAD_FILE_END) {
     if (!otaAuthOk_) {
       return;
     }
-    if (!otaStarted_) {
+    if (!gOta.sessionActive() && !gOta.succeeded()) {
       if (otaError_[0] == '\0') {
         strncpy(otaError_, "Upload aborted", sizeof(otaError_) - 1);
       }
-      otaEnterFailed();
+      if (ipcOtaPhase() != OtaPhase::Failed) {
+        gOta.fail(otaError_);
+      }
       return;
     }
-    otaKickWatchdogs();
-    if (!otaHeaderChecked_) {
-      fail("Missing image header");
-      return;
-    }
-    if (Update.end(true)) {
-      otaSuccess_ = true;
-      otaEnterRebooting();
+    if (gOta.finish(otaError_, sizeof(otaError_))) {
       Serial.printf("[ota] success %u bytes → reboot\n", static_cast<unsigned>(upload.totalSize));
       postUiText("OTA OK reboot");
-    } else {
-      char buf[96];
-      snprintf(buf, sizeof(buf), "Update.end failed: %s", Update.errorString());
-      fail(buf);
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
-    if (otaStarted_ || Update.isRunning()) {
-      Update.abort();
-    }
-    otaStarted_ = false;
-    otaSuccess_ = false;
     if (otaError_[0] == '\0') {
       strncpy(otaError_, "Upload aborted", sizeof(otaError_) - 1);
     }
-    otaEnterFailed();
+    gOta.fail(otaError_);
     Serial.println("[ota] client aborted");
   }
 }
@@ -1064,26 +972,19 @@ void WebPortal::handleOtaDone() {
   if (!otaAuthOk_) {
     server_.send(401, "text/plain", otaError_[0] ? otaError_ : "Unauthorized");
     otaAuthOk_ = false;
-    otaStarted_ = false;
-    otaSuccess_ = false;
     return;
   }
-  if (!otaSuccess_) {
-    if (Update.isRunning()) {
-      Update.abort();
-    }
+  if (!gOta.succeeded()) {
     server_.send(400, "text/plain", otaError_[0] ? otaError_ : "OTA failed");
     otaAuthOk_ = false;
-    otaStarted_ = false;
-    otaSuccess_ = false;
-    if (otaUiPhase() != OtaUiPhase::Failed) {
-      otaEnterFailed();
+    if (ipcOtaPhase() != OtaPhase::Failed) {
+      gOta.fail(otaError_[0] ? otaError_ : "OTA failed");
     }
     return;
   }
   server_.send(200, "text/plain", "OK — rebooting into new firmware");
   Serial.println("[ota] reboot in 500ms");
-  otaKickWatchdogs();
+  gOta.kickNetAlive();
   delay(500);
   ESP.restart();
 }
@@ -1091,14 +992,14 @@ void WebPortal::handleOtaDone() {
 void WebPortal::handleStatus() {
   JsonDocument doc;
   doc["fwVersion"] = FW_VERSION;
-  doc["otaRunning"] = otaRunningPartitionLabel();
-  doc["otaNext"] = otaNextPartitionLabel();
-  doc["otaNextSize"] = otaNextPartitionSize();
-  doc["otaState"] = otaImageStateLabel();
-  doc["otaBusy"] = otaIsBusy();
-  doc["otaPhase"] = otaUiPhaseLabel();
-  doc["otaChip"] = otaExpectedChipName();
-  doc["ntpServing"] = !otaIsBusy();
+  doc["otaRunning"] = gOta.runningLabel();
+  doc["otaNext"] = gOta.nextLabel();
+  doc["otaNextSize"] = gOta.nextSlotSize();
+  doc["otaState"] = gOta.imageStateLabel();
+  doc["otaBusy"] = ipcOtaBusy();
+  doc["otaPhase"] = ipcOtaPhaseLabel();
+  doc["otaChip"] = gOta.expectedChipName();
+  doc["ntpServing"] = !ipcOtaBusy();
   doc["sta"] = wifi_->isStaConnected();
   doc["ip"] = wifi_->localIp().toString();
   doc["ssid"] = WiFi.SSID();
@@ -1202,7 +1103,7 @@ void WebPortal::handleStatus() {
   clock["holdoverMs"] = st.holdoverMs;
 
   JsonObject ntp = doc["ntp"].to<JsonObject>();
-  const bool otaBusy = otaIsBusy();
+  const bool otaBusy = ipcOtaBusy();
   const bool syncOk = !otaBusy && st.timeValid &&
                       (st.clockState == ClockState::Locked || st.clockState == ClockState::Degraded ||
                        st.clockState == ClockState::Holdover);
@@ -1243,7 +1144,7 @@ void WebPortal::handleMetrics() {
   const unsigned heap = ESP.getFreeHeap();
   const unsigned aclMode = ntp_ ? static_cast<unsigned>(ntp_->aclMode()) : 0;
   const unsigned aclCount = ntp_ ? ntp_->aclCount() : 0;
-  const unsigned otaBusy = otaIsBusy() ? 1 : 0;
+  const unsigned otaBusy = ipcOtaBusy() ? 1 : 0;
   snprintf(buf, sizeof(buf),
            "# TYPE ntp_requests_total counter\n"
            "ntp_requests_total %lu\n"
