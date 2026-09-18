@@ -8,10 +8,11 @@
 #include <freertos/semphr.h>
 #include <freertos/task.h>
 #include "settings.h"
-#include "wifi_manager.h"
+#include "wifi_types.h"
 
 // Cross-task IPC for RTOS refactor (time / net / ui).
 // Modules own their logic; AppIpc carries shared snapshots and queues only.
+// WiFi types live in wifi_types.h so UI code need not include WifiManager.
 
 enum class NetReqType : uint8_t {
   ConnectWifi,
@@ -84,6 +85,11 @@ bool settingsLock(TickType_t ticks);
 void settingsUnlock();
 bool postNetRequest(const NetRequest& req);
 bool postUiText(const char* text);
+
+// Single write path for AppSettings (UI / Web / net must not call gStore.save
+// directly). Copy under mutex; commit assigns gSettings then persists NVS.
+bool settingsCopy(TickType_t wait, AppSettings* out);
+bool settingsCommit(TickType_t wait, const AppSettings& in);
 
 inline void ipcKickTime() { gIpc.kickTimeMs = millis(); }
 inline void ipcKickNet() { gIpc.kickNetMs = millis(); }

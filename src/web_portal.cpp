@@ -5,7 +5,6 @@
 #include "ntp_server.h"
 #include "ota_service.h"
 #include <ArduinoJson.h>
-#include <WiFi.h>
 #include <esp_system.h>
 #include <math.h>
 #include <time.h>
@@ -92,9 +91,9 @@ void WebPortal::begin(WifiManager* wifi, GpsService* gps, NtpServer* ntp) {
   server_.on("/metrics", HTTP_GET, [this]() { handleMetrics(); });
   server_.onNotFound([this]() {
     sendNoCache();
-    const bool apUp = (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA);
+    const WifiLinkSnapshot link = wifi_ ? wifi_->linkSnapshot() : WifiLinkSnapshot{};
     // Captive probes must not land on settings HTML. SoftAP → login; STA → status.
-    if (apUp && wifi_ && !wifi_->isStaConnected()) {
+    if (link.apUp && !link.staUp) {
       server_.sendHeader("Location", "/login", true);
       server_.send(302, "text/plain", "");
       return;
@@ -125,9 +124,9 @@ bool WebPortal::consumeConnectRequest(String& ssid, String& pass) {
 
 String WebPortal::writePassword() const {
   String expect;
-  if (settingsLock(pdMS_TO_TICKS(100))) {
-    expect = effectiveWebWritePassword(gSettings);
-    settingsUnlock();
+  AppSettings s;
+  if (settingsCopy(pdMS_TO_TICKS(100), &s)) {
+    expect = effectiveWebWritePassword(s);
   } else {
     expect = derivedSoftApPassword();
   }
@@ -418,21 +417,21 @@ void WebPortal::handleSetup() {
   String aclLines;
   String savedSsid;
   bool haveSaved = false;
-  if (settingsLock(pdMS_TO_TICKS(50))) {
-    apol = static_cast<uint8_t>(gSettings.anomalyPolicy);
-    aclm = static_cast<uint8_t>(gSettings.ntpAclMode);
-    tcmp = gSettings.tempComp;
-    tcpc = gSettings.tempCoeffCenti;
-    ooffMin = gSettings.oledIdleOffMs / 60000;
-    for (uint8_t i = 0; i < gSettings.ntpAclCount && i < NTP_ACL_MAX_ENTRIES; ++i) {
+  AppSettings s;
+  if (settingsCopy(pdMS_TO_TICKS(50), &s)) {
+    apol = static_cast<uint8_t>(s.anomalyPolicy);
+    aclm = static_cast<uint8_t>(s.ntpAclMode);
+    tcmp = s.tempComp;
+    tcpc = s.tempCoeffCenti;
+    ooffMin = s.oledIdleOffMs / 60000;
+    for (uint8_t i = 0; i < s.ntpAclCount && i < NTP_ACL_MAX_ENTRIES; ++i) {
       if (i) {
         aclLines += '\n';
       }
-      aclLines += gSettings.ntpAcl[i].toString();
+      aclLines += s.ntpAcl[i].toString();
     }
-    savedSsid = gSettings.wifiSsid;
+    savedSsid = s.wifiSsid;
     haveSaved = !savedSsid.isEmpty();
-    settingsUnlock();
   }
   String body;
   body.reserve(7200);
@@ -695,46 +694,46 @@ void WebPortal::handleSave() {
 
   // Optional password overrides (still require auth above).
   bool touchMgmt = false;
-  if (doc["apPassword"].is<const char*>()) {
-    String ap = doc["apPassword"].as<const char*>();
-    if (ap == "null") {
-      ap = "";
-    }
-    if (!ap.isEmpty() && ap.length() < 8) {
-      server_.send(400, "text/plain", "apPassword must be >=8 chars");
+  if (doc["apPassword"].is<const char*>() || doc["webPassword"].is<const char*>()) {
+    AppSettings s;
+    if (!settingsCopy(pdMS_TO_TICKS(100), &s)) {
+      server_.send(503, "text/plain", "Settings busy");
       return;
     }
-    if (settingsLock(pdMS_TO_TICKS(100))) {
-      gSettings.apPassword = ap;
-      settingsUnlock();
+    if (doc["apPassword"].is<const char*>()) {
+      String ap = doc["apPassword"].as<const char*>();
+      if (ap == "null") {
+        ap = "";
+      }
+      if (!ap.isEmpty() && ap.length() < 8) {
+        server_.send(400, "text/plain", "apPassword must be >=8 chars");
+        return;
+      }
+      s.apPassword = ap;
       touchMgmt = true;
     }
-  }
-  if (doc["webPassword"].is<const char*>()) {
-    String wp = doc["webPassword"].as<const char*>();
-    if (wp == "null") {
-      wp = "";
-    }
-    if (settingsLock(pdMS_TO_TICKS(100))) {
-      gSettings.webPassword = wp;
-      settingsUnlock();
+    if (doc["webPassword"].is<const char*>()) {
+      String wp = doc["webPassword"].as<const char*>();
+      if (wp == "null") {
+        wp = "";
+      }
+      s.webPassword = wp;
       touchMgmt = true;
     }
-  }
-  if (touchMgmt && settingsLock(pdMS_TO_TICKS(100))) {
-    AppSettings copy = gSettings;
-    settingsUnlock();
-    gStore.save(copy);
+    if (touchMgmt && !settingsCommit(pdMS_TO_TICKS(100), s)) {
+      server_.send(503, "text/plain", "Settings busy");
+      return;
+    }
   }
 
   // Reuse NVS WiFi without retyping password (SoftAP escape / post-OTA).
   if (doc["reconnectSaved"] == true) {
     String ssid;
     String pass;
-    if (settingsLock(pdMS_TO_TICKS(200))) {
-      ssid = gSettings.wifiSsid;
-      pass = gSettings.wifiPass;
-      settingsUnlock();
+    AppSettings s;
+    if (settingsCopy(pdMS_TO_TICKS(200), &s)) {
+      ssid = s.wifiSsid;
+      pass = s.wifiPass;
     }
     if (ssid.isEmpty()) {
       server_.send(400, "text/plain", "No saved WiFi");
@@ -751,27 +750,22 @@ void WebPortal::handleSave() {
   if (!doc["anomalyPolicy"].isNull()) {
     const int v = doc["anomalyPolicy"].as<int>();
     if (v >= 0 && v <= static_cast<int>(AnomalyPolicy::HoldoverLong)) {
-      AppSettings copy;
-      bool locked = false;
-      if (settingsLock(pdMS_TO_TICKS(200))) {
-        gSettings.anomalyPolicy = static_cast<AnomalyPolicy>(v);
-        const uint16_t defHold = anomalyPolicyDefaultHoldoverSec(gSettings.anomalyPolicy);
+      AppSettings s;
+      if (settingsCopy(pdMS_TO_TICKS(200), &s)) {
+        s.anomalyPolicy = static_cast<AnomalyPolicy>(v);
+        const uint16_t defHold = anomalyPolicyDefaultHoldoverSec(s.anomalyPolicy);
         if (defHold > 0) {
-          gSettings.holdoverSec = defHold;
+          s.holdoverSec = defHold;
         }
         if (!doc["holdoverSec"].isNull()) {
           uint16_t hs = doc["holdoverSec"].as<uint16_t>();
           if (hs < 10) hs = 10;
           if (hs > 600) hs = 600;
-          gSettings.holdoverSec = hs;
+          s.holdoverSec = hs;
         }
-        copy = gSettings;
-        settingsUnlock();
-        locked = true;
-      }
-      if (locked) {
-        gStore.save(copy);
-        savedPolicy = true;
+        if (settingsCommit(pdMS_TO_TICKS(200), s)) {
+          savedPolicy = true;
+        }
       }
     }
   }
@@ -780,12 +774,11 @@ void WebPortal::handleSave() {
   const bool haveAclMode = !doc["ntpAclMode"].isNull();
   const bool haveAclList = doc["ntpAcl"].is<JsonArray>();
   if (haveAclMode || haveAclList) {
-    AppSettings copy;
-    bool locked = false;
-    if (settingsLock(pdMS_TO_TICKS(200))) {
+    AppSettings s;
+    if (settingsCopy(pdMS_TO_TICKS(200), &s)) {
       if (haveAclMode) {
         const int m = doc["ntpAclMode"].as<int>();
-        gSettings.ntpAclMode =
+        s.ntpAclMode =
             (m == static_cast<int>(NtpAclMode::AllowList)) ? NtpAclMode::AllowList : NtpAclMode::Off;
       }
       if (haveAclList) {
@@ -800,18 +793,14 @@ void WebPortal::handleSave() {
           }
           IPAddress ip;
           if (ip.fromString(v.as<const char*>()) && static_cast<uint32_t>(ip) != 0) {
-            gSettings.ntpAcl[n++] = ip;
+            s.ntpAcl[n++] = ip;
           }
         }
-        gSettings.ntpAclCount = n;
+        s.ntpAclCount = n;
       }
-      copy = gSettings;
-      settingsUnlock();
-      locked = true;
-    }
-    if (locked) {
-      gStore.save(copy);
-      savedAcl = true;
+      if (settingsCommit(pdMS_TO_TICKS(200), s)) {
+        savedAcl = true;
+      }
     }
   }
 
@@ -819,11 +808,10 @@ void WebPortal::handleSave() {
   const bool haveTempComp = !doc["tempComp"].isNull();
   const bool haveTempCoeff = !doc["tempCoeff"].isNull();
   if (haveTempComp || haveTempCoeff) {
-    AppSettings copy;
-    bool locked = false;
-    if (settingsLock(pdMS_TO_TICKS(200))) {
+    AppSettings s;
+    if (settingsCopy(pdMS_TO_TICKS(200), &s)) {
       if (haveTempComp) {
-        gSettings.tempComp = doc["tempComp"].as<bool>();
+        s.tempComp = doc["tempComp"].as<bool>();
       }
       if (haveTempCoeff) {
         float k = doc["tempCoeff"].as<float>();
@@ -833,15 +821,11 @@ void WebPortal::handleSave() {
         if (k > 5.0f) {
           k = 5.0f;
         }
-        gSettings.tempCoeffCenti = static_cast<int16_t>(lroundf(k * 100.0f));
+        s.tempCoeffCenti = static_cast<int16_t>(lroundf(k * 100.0f));
       }
-      copy = gSettings;
-      settingsUnlock();
-      locked = true;
-    }
-    if (locked) {
-      gStore.save(copy);
-      savedTemp = true;
+      if (settingsCommit(pdMS_TO_TICKS(200), s)) {
+        savedTemp = true;
+      }
     }
   }
 
@@ -852,17 +836,12 @@ void WebPortal::handleSave() {
     if (mins > 60) {
       mins = 60;
     }
-    AppSettings copy;
-    bool locked = false;
-    if (settingsLock(pdMS_TO_TICKS(200))) {
-      gSettings.oledIdleOffMs = mins * 60000UL;
-      copy = gSettings;
-      settingsUnlock();
-      locked = true;
-    }
-    if (locked) {
-      gStore.save(copy);
-      savedScreen = true;
+    AppSettings s;
+    if (settingsCopy(pdMS_TO_TICKS(200), &s)) {
+      s.oledIdleOffMs = mins * 60000UL;
+      if (settingsCommit(pdMS_TO_TICKS(200), s)) {
+        savedScreen = true;
+      }
     }
   }
 
@@ -874,20 +853,17 @@ void WebPortal::handleSave() {
       pendingSsid_ = "";
     }
     if (!pendingSsid_.isEmpty()) {
-      AppSettings copy;
-      bool locked = false;
-      if (settingsLock(pdMS_TO_TICKS(200))) {
-        gSettings.wifiSsid = pendingSsid_;
-        gSettings.wifiPass = pendingPass_;
-        copy = gSettings;
-        settingsUnlock();
-        locked = true;
+      AppSettings s;
+      if (settingsCopy(pdMS_TO_TICKS(200), &s)) {
+        s.wifiSsid = pendingSsid_;
+        s.wifiPass = pendingPass_;
+        if (settingsCommit(pdMS_TO_TICKS(200), s)) {
+          pendingConnect_ = true;
+          server_.send(200, "text/plain", "Saved. Connecting...");
+          return;
+        }
       }
-      if (locked) {
-        gStore.save(copy);
-      }
-      pendingConnect_ = true;
-      server_.send(200, "text/plain", "Saved. Connecting...");
+      server_.send(503, "text/plain", "Settings busy");
       return;
     }
   }
@@ -1000,11 +976,12 @@ void WebPortal::handleStatus() {
   doc["otaPhase"] = ipcOtaPhaseLabel();
   doc["otaChip"] = gOta.expectedChipName();
   doc["ntpServing"] = !ipcOtaBusy();
-  doc["sta"] = wifi_->isStaConnected();
-  doc["ip"] = wifi_->localIp().toString();
-  doc["ssid"] = WiFi.SSID();
-  doc["rssi"] = WiFi.RSSI();
-  doc["mac"] = wifi_->macAddress();
+  const WifiLinkSnapshot link = wifi_ ? wifi_->linkSnapshot() : WifiLinkSnapshot{};
+  doc["sta"] = link.staUp;
+  doc["ip"] = (link.staUp ? link.staIp : link.apIp).toString();
+  doc["ssid"] = link.staUp ? link.staSsid : "";
+  doc["rssi"] = link.staUp ? link.rssi : 0;
+  doc["mac"] = wifi_ ? wifi_->macAddress() : "";
   doc["uptimeSec"] = millis() / 1000;
   doc["freeHeap"] = ESP.getFreeHeap();
   doc["minFreeHeap"] = ESP.getMinFreeHeap();
@@ -1017,22 +994,22 @@ void WebPortal::handleStatus() {
   bool tcmp = false;
   int16_t tcpc = CLK_TEMP_COEFF_CENTI;
   IPAddress aclIps[NTP_ACL_MAX_ENTRIES];
-  if (settingsLock(pdMS_TO_TICKS(20))) {
-    doc["tzHours"] = gSettings.timezoneHours;
-    apol = gSettings.anomalyPolicy;
-    hold = gSettings.holdoverSec;
-    savedSsid = gSettings.wifiSsid;
-    tcmp = gSettings.tempComp;
-    tcpc = gSettings.tempCoeffCenti;
-    aclMode = gSettings.ntpAclMode;
-    aclCount = gSettings.ntpAclCount;
+  AppSettings s;
+  if (settingsCopy(pdMS_TO_TICKS(20), &s)) {
+    doc["tzHours"] = s.timezoneHours;
+    apol = s.anomalyPolicy;
+    hold = s.holdoverSec;
+    savedSsid = s.wifiSsid;
+    tcmp = s.tempComp;
+    tcpc = s.tempCoeffCenti;
+    aclMode = s.ntpAclMode;
+    aclCount = s.ntpAclCount;
     if (aclCount > NTP_ACL_MAX_ENTRIES) {
       aclCount = NTP_ACL_MAX_ENTRIES;
     }
     for (uint8_t i = 0; i < aclCount; ++i) {
-      aclIps[i] = gSettings.ntpAcl[i];
+      aclIps[i] = s.ntpAcl[i];
     }
-    settingsUnlock();
   } else {
     doc["tzHours"] = 8;
   }

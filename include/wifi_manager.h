@@ -5,12 +5,7 @@
 #include <WiFi.h>
 #include <vector>
 #include "settings.h"
-
-struct WifiNetwork {
-  String ssid;
-  int32_t rssi = 0;
-  wifi_auth_mode_t enc = WIFI_AUTH_OPEN;
-};
+#include "wifi_types.h"
 
 enum class WifiConnectState : uint8_t {
   Idle = 0,
@@ -96,6 +91,11 @@ class WifiManager {
   // If radio already has STA+IP but FSM missed GOT_IP, promote to Connected.
   bool healIfStaUp();
 
+  // task-net: refresh cached link view after WiFi mutations / each net loop.
+  void refreshLinkSnapshot();
+  // Any task: copy of last published link view (no WiFi.* calls).
+  WifiLinkSnapshot linkSnapshot() const;
+
  private:
   static void onWifiEvent(WiFiEvent_t event, WiFiEventInfo_t info);
   static WifiManager* instance_;
@@ -105,10 +105,14 @@ class WifiManager {
   bool peekEventBit(WifiEvtBits bit);
   void harvestScanResults();
   static uint32_t backoffMsForAttempt(uint8_t attempt);
+  static void copySsid(char* dst, size_t dstLen, const String& src);
 
   portMUX_TYPE evtMux_ = portMUX_INITIALIZER_UNLOCKED;
   volatile uint32_t evtFlags_ = 0;
   volatile uint16_t lastDiscReason_ = 0;
+
+  mutable portMUX_TYPE linkMux_ = portMUX_INITIALIZER_UNLOCKED;
+  WifiLinkSnapshot link_;
 
   WifiConnectState connectState_ = WifiConnectState::Idle;
   uint32_t connectDeadlineMs_ = 0;

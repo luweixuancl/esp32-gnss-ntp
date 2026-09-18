@@ -1,7 +1,7 @@
 #pragma once
 
 // Firmware identity (shown on /cfg /status; bump on releases that ship via OTA).
-#define FW_VERSION           "1.1.3-ota"
+#define FW_VERSION           "1.1.4-ipc"
 // After a pending-verify OTA boot, wait until tasks are alive this long before
 // cancelling rollback — catches crash-loops in GPS/WiFi/task bring-up.
 #define OTA_MARK_VALID_AFTER_MS  30000

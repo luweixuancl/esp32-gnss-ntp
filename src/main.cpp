@@ -113,9 +113,9 @@ static void openSetupApIfNeeded(const char* uiMsg) {
   }
   gWifi.cancelAutoReconnect();
   String apPass;
-  if (settingsLock(pdMS_TO_TICKS(50))) {
-    apPass = effectiveSoftApPassword(gSettings);
-    settingsUnlock();
+  AppSettings s;
+  if (settingsCopy(pdMS_TO_TICKS(50), &s)) {
+    apPass = effectiveSoftApPassword(s);
   } else {
     apPass = derivedSoftApPassword();
   }
@@ -296,17 +296,18 @@ static void finishConnect(WifiConnectState st) {
 }
 
 static void handleConnect(const char* ssid, const char* pass) {
-  if (!settingsLock(pdMS_TO_TICKS(500))) {
+  AppSettings s;
+  if (!settingsCopy(pdMS_TO_TICKS(500), &s)) {
     postUiText("Settings busy");
     return;
   }
-  gSettings.wifiSsid = ssid;
-  gSettings.wifiPass = pass;
-  AppSettings copy = gSettings;
-  settingsUnlock();
-  gStore.save(copy);
-
-  startStaConnect(copy, gIpc.setupAp);
+  s.wifiSsid = ssid;
+  s.wifiPass = pass;
+  if (!settingsCommit(pdMS_TO_TICKS(500), s)) {
+    postUiText("Settings busy");
+    return;
+  }
+  startStaConnect(s, gIpc.setupAp);
 }
 
 static void handleNetRequest(const NetRequest& req) {
@@ -327,12 +328,11 @@ static void handleNetRequest(const NetRequest& req) {
       break;
     }
     case NetReqType::ApplyStaticIp: {
-      if (!settingsLock(pdMS_TO_TICKS(200))) {
+      AppSettings copy;
+      if (!settingsCopy(pdMS_TO_TICKS(200), &copy)) {
         postUiText("Settings busy");
         break;
       }
-      AppSettings copy = gSettings;
-      settingsUnlock();
       if (!gWifi.isStaConnected() && copy.wifiSsid.isEmpty()) {
         postUiText("Connect WiFi first");
       } else if (gNetWork != NetWork::Idle || gWifi.isBusy()) {
@@ -353,14 +353,16 @@ static void handleNetRequest(const NetRequest& req) {
       break;
     }
     case NetReqType::UseDhcp: {
-      if (!settingsLock(pdMS_TO_TICKS(200))) {
+      AppSettings copy;
+      if (!settingsCopy(pdMS_TO_TICKS(200), &copy)) {
         postUiText("Settings busy");
         break;
       }
-      gSettings.useStaticIp = false;
-      AppSettings copy = gSettings;
-      settingsUnlock();
-      gStore.save(copy);
+      copy.useStaticIp = false;
+      if (!settingsCommit(pdMS_TO_TICKS(200), copy)) {
+        postUiText("Settings busy");
+        break;
+      }
       if (!copy.wifiSsid.isEmpty()) {
         startStaConnect(copy, false);
       }
@@ -368,9 +370,9 @@ static void handleNetRequest(const NetRequest& req) {
     }
     case NetReqType::StartWebSetup: {
       String apPass;
-      if (settingsLock(pdMS_TO_TICKS(50))) {
-        apPass = effectiveSoftApPassword(gSettings);
-        settingsUnlock();
+      AppSettings s;
+      if (settingsCopy(pdMS_TO_TICKS(50), &s)) {
+        apPass = effectiveSoftApPassword(s);
       } else {
         apPass = derivedSoftApPassword();
       }
@@ -427,9 +429,8 @@ static void pollDisconnectAndReconnect() {
   // retry-forever there is no SoftAP fallback, so re-arm from saved creds.
   if (!gWifi.isStaConnected() && !gIpc.setupAp && !gWifi.autoReconnectArmed() &&
       !gWifi.isBusy()) {
-    if (settingsLock(pdMS_TO_TICKS(50))) {
-      AppSettings snap = gSettings;
-      settingsUnlock();
+    AppSettings snap;
+    if (settingsCopy(pdMS_TO_TICKS(50), &snap)) {
       if (snap.autoReconnect && !snap.wifiSsid.isEmpty()) {
         gWifi.armReconnect(snap, WIFI_RECONNECT_BACKOFF_1_MS, /*linkLoss=*/true);
         Serial.println("[wifi] link-loss retry re-armed");
@@ -633,6 +634,7 @@ static void taskNet(void* /*arg*/) {
 
     gPortal.loop();
     gOta.poll();
+    gWifi.refreshLinkSnapshot();
     static uint8_t heapLowStreak = 0;
     // Skip heap-panic restart while flash is being rewritten.
     if (!ipcOtaBusy() && ESP.getFreeHeap() < HEAP_RESTART_BYTES) {

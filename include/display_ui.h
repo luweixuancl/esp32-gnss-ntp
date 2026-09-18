@@ -66,13 +66,13 @@ class DisplayUi {
   void drawScreen();
   void drawNtpStats(const NtpServer& ntp);
   void drawMessage();
-  void drawWebHint();
+  void drawWebHint(const WifiManager& wifi);
 
   void handleHome(int8_t rot, bool click);
   void handleMenu(int8_t rot, bool click, bool longPress, WifiManager& wifi);
   void handleWifiScan(int8_t rot, bool click, bool longPress);
   void handlePassword(int8_t rot, bool click, bool longPress);
-  void handleSetIp(int8_t rot, bool click, bool longPress);
+  void handleSetIp(int8_t rot, bool click, bool longPress, const WifiManager& wifi);
   void handleTimezone(int8_t rot, bool click);
   void handleAnomaly(int8_t rot, bool click, bool longPress);
   void handleAcl(int8_t rot, bool click, bool longPress);

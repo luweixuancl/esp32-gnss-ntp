@@ -19,6 +19,28 @@ void settingsUnlock() {
   xSemaphoreGive(gIpc.settingsMutex);
 }
 
+bool settingsCopy(TickType_t wait, AppSettings* out) {
+  if (out == nullptr) {
+    return false;
+  }
+  if (!settingsLock(wait)) {
+    return false;
+  }
+  *out = gSettings;
+  settingsUnlock();
+  return true;
+}
+
+bool settingsCommit(TickType_t wait, const AppSettings& in) {
+  if (!settingsLock(wait)) {
+    return false;
+  }
+  gSettings = in;
+  settingsUnlock();
+  gStore.save(in);
+  return true;
+}
+
 bool postNetRequest(const NetRequest& req) {
   if (!gIpc.netReq) {
     return false;
