@@ -1,5 +1,8 @@
 #pragma once
 
+// Firmware identity (shown on /cfg /status; bump on releases that ship via OTA).
+#define FW_VERSION           "1.1.0-ota"
+
 // ---------------------------------------------------------------------------
 // Hardware wiring — target-conditional (合宙 CORE ESP32-C3 default, ESP32-S3
 // DevKitC-1 + WROOM-1 N16R8 opt-in). Adjust these pins if your board differs.

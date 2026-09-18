@@ -14,6 +14,7 @@
 #include "encoder.h"
 #include "display_ui.h"
 #include "status_leds.h"
+#include "ota_support.h"
 
 SettingsStore gStore;
 AppSettings gSettings;
@@ -652,6 +653,7 @@ void setup() {
   Serial.begin(115200);
   delay(200);
   Serial.println("\nGNSS NTP Server (RTOS)");
+  Serial.printf("FW %s\n", FW_VERSION);
 
   if (!ipcInit()) {
     Serial.println("IPC init failed — halt/restart");
@@ -673,6 +675,9 @@ void setup() {
   checkFactoryReset();  // hold SW 3s at power-on → wipe all settings, reboot
 
   gSettings = gStore.load();
+
+  // Confirm OTA image after NVS/settings load so a crash-looping build rolls back.
+  otaMarkAppValidIfNeeded();
 
   gGps.begin();
   gWifi.begin();

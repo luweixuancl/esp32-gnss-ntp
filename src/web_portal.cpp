@@ -3,9 +3,13 @@
 #include "config.h"
 #include "gps_service.h"
 #include "ntp_server.h"
+#include "ota_support.h"
 #include <ArduinoJson.h>
+#include <Update.h>
 #include <WiFi.h>
+#include <esp_ota_ops.h>
 #include <esp_system.h>
+#include <esp_task_wdt.h>
 #include <math.h>
 #include <time.h>
 
@@ -84,6 +88,9 @@ void WebPortal::begin(WifiManager* wifi, GpsService* gps, NtpServer* ntp) {
   server_.on("/logout", HTTP_GET, [this]() { handleLogout(); });
   server_.on("/scan", HTTP_GET, [this]() { handleScan(); });
   server_.on("/save", HTTP_POST, [this]() { handleSave(); });
+  // Multipart firmware upload (login session). Final handler runs after body.
+  server_.on(
+      "/ota", HTTP_POST, [this]() { handleOtaDone(); }, [this]() { handleOtaUpload(); });
   server_.on("/status", HTTP_GET, [this]() { handleStatus(); });
   server_.on("/metrics", HTTP_GET, [this]() { handleMetrics(); });
   server_.onNotFound([this]() {
@@ -100,7 +107,7 @@ void WebPortal::begin(WifiManager* wifi, GpsService* gps, NtpServer* ntp) {
   });
   server_.begin();
   started_ = true;
-  Serial.println("HTTP on :80  (/ and /status /metrics open; /cfg needs login)");
+  Serial.println("HTTP on :80  (/ and /status /metrics open; /cfg+/ota need login)");
 }
 
 void WebPortal::loop() {
@@ -318,6 +325,7 @@ void WebPortal::handleRoot() {
       "<div class='row'><span class='k'>RSSI</span><span class='v' id='rssi'>--</span></div>"
       "<div class='row'><span class='k'>MAC</span><span class='v' id='mac'>--</span></div>"
       "<div class='row'><span class='k'>运行</span><span class='v' id='up'>--</span></div>"
+      "<div class='row'><span class='k'>固件</span><span class='v' id='fw'>--</span></div>"
       "<div class='row'><span class='k'>内存</span><span class='v' id='heap'>--</span></div>"
       "<div class='row'><span class='k'>温度</span><span class='v' id='temp'>--</span></div>"
       "</div>"
@@ -385,6 +393,8 @@ void WebPortal::handleRoot() {
       "  document.getElementById('rssi').textContent=(j.rssi!=null)?(j.rssi+' dBm'):'--';"
       "  document.getElementById('mac').textContent=j.mac||'--';"
       "  document.getElementById('up').textContent=fmtUp(j.uptimeSec);"
+      "  document.getElementById('fw').textContent=(j.fwVersion||'--')"
+      "    +' · '+(j.otaRunning||'?')+'/'+(j.otaState||'?');"
       "  const hb=Math.round((j.freeHeap||0)/1024), hmn=Math.round((j.minFreeHeap||0)/1024);"
       "  const he=document.getElementById('heap');"
       "  he.textContent=hb+' KB (min '+hmn+')'; setCls(he,hb<20480?'bad':'');"
@@ -428,7 +438,7 @@ void WebPortal::handleSetup() {
     settingsUnlock();
   }
   String body;
-  body.reserve(5600);
+  body.reserve(7200);
   body += F("<!-- ntp-cfg-v2 -->"
             "<h1>NTP 设置</h1><p><a href='/'>返回状态</a> · <a href='/logout'>退出</a></p>");
   if (haveSaved) {
@@ -489,6 +499,22 @@ void WebPortal::handleSetup() {
             "<label>Password</label><input id='pass' type='password'>"
             "<button type='button' onclick='saveWifi()'>连接</button>"
             "<p id='msg'></p></div>");
+  body += F("<div class='card'><h2 style='font-size:1rem;margin:0 0 8px'>固件 OTA</h2>"
+            "<p style='color:#64748b;font-size:.85rem'>上传 PlatformIO 产出的 "
+            "<code>firmware.bin</code>（仅 app，勿用 merged 整片镜像）。"
+            "需登录会话；成功后自动重启，NVS 配置保留。串口烧录仍可用作兜底。</p>"
+            "<p>当前 <b>");
+  body += FW_VERSION;
+  body += F("</b> · 运行分区 <code>");
+  body += otaRunningPartitionLabel();
+  body += F("</code> · 下一写入 <code>");
+  body += otaNextPartitionLabel();
+  body += F("</code> · 状态 <code>");
+  body += otaImageStateLabel();
+  body += F("</code></p>"
+            "<input id='fw' type='file' accept='.bin,application/octet-stream'>"
+            "<button type='button' onclick='doOta()'>上传并升级</button>"
+            "<p id='omsg'></p></div>");
   body += F("<script>"
             "async function sleep(ms){return new Promise(r=>setTimeout(r,ms));}"
             "async function postSave(obj){"
@@ -496,6 +522,21 @@ void WebPortal::handleSetup() {
             "  headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)});"
             " if(r.status===401){location.href='/login';return '';}"
             " return r.text();}"
+            "async function doOta(){"
+            " try{"
+            "  const f=document.getElementById('fw').files[0];"
+            "  if(!f){document.getElementById('omsg').textContent='请先选择 .bin';return;}"
+            "  if(!f.name.toLowerCase().endsWith('.bin')){"
+            "   document.getElementById('omsg').textContent='仅接受 .bin 固件';return;}"
+            "  const fd=new FormData(); fd.append('firmware',f,f.name);"
+            "  document.getElementById('omsg').textContent='上传中 '+f.name+' ('+f.size+' B)...';"
+            "  const r=await fetch('/ota',{method:'POST',credentials:'same-origin',body:fd});"
+            "  const t=await r.text();"
+            "  if(r.status===401){location.href='/login';return;}"
+            "  document.getElementById('omsg').textContent=t;"
+            "  if(r.ok){document.getElementById('omsg').textContent=t+' · 即将重启...';}"
+            " }catch(e){document.getElementById('omsg').textContent=String(e);}"
+            "}"
             "async function scan(){"
             " try{"
             " document.getElementById('msg').textContent='Scanning...';"
@@ -864,8 +905,123 @@ void WebPortal::handleSave() {
   server_.send(400, "text/plain", "SSID or anomalyPolicy or ntpAcl required");
 }
 
+void WebPortal::handleOtaUpload() {
+  HTTPUpload& upload = server_.upload();
+  if (upload.status == UPLOAD_FILE_START) {
+    otaAuthOk_ = sessionCookieOk();
+    otaStarted_ = false;
+    otaSuccess_ = false;
+    otaError_ = "";
+    if (!otaAuthOk_) {
+      otaError_ = "Unauthorized";
+      Serial.println("[ota] reject: no session");
+      return;
+    }
+    if (Update.isRunning()) {
+      otaError_ = "OTA already running";
+      otaAuthOk_ = false;
+      return;
+    }
+    const esp_partition_t* next = esp_ota_get_next_update_partition(nullptr);
+    if (next == nullptr) {
+      otaError_ = "No OTA partition";
+      otaAuthOk_ = false;
+      Serial.println("[ota] no next update partition");
+      return;
+    }
+    Serial.printf("[ota] start file=%s → %s size=%u\n", upload.filename.c_str(), next->label,
+                  static_cast<unsigned>(next->size));
+    // Cap to the next app slot so C3's ~1.25MB limit is enforced early.
+    if (!Update.begin(next->size)) {
+      otaError_ = String("Update.begin failed: ") + Update.errorString();
+      otaAuthOk_ = false;
+      Serial.printf("[ota] begin fail: %s\n", Update.errorString());
+      return;
+    }
+    otaStarted_ = true;
+  } else if (upload.status == UPLOAD_FILE_WRITE) {
+    if (!otaAuthOk_ || !otaStarted_) {
+      return;
+    }
+    esp_task_wdt_reset();  // multi-MB upload can outlive one taskNet loop
+    // ESP32 app image magic (first byte of firmware.bin).
+    if (Update.progress() == 0 && upload.currentSize > 0 && upload.buf[0] != 0xE9) {
+      Update.abort();
+      otaError_ = "Not an ESP app image (magic!=0xE9); use firmware.bin not merged";
+      otaStarted_ = false;
+      Serial.println("[ota] bad magic — abort");
+      return;
+    }
+    if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+      otaError_ = String("Write failed: ") + Update.errorString();
+      Update.abort();
+      otaStarted_ = false;
+      Serial.printf("[ota] write fail: %s\n", Update.errorString());
+    }
+  } else if (upload.status == UPLOAD_FILE_END) {
+    if (!otaAuthOk_) {
+      return;
+    }
+    if (!otaStarted_) {
+      if (otaError_.isEmpty()) {
+        otaError_ = "Upload aborted";
+      }
+      return;
+    }
+    if (Update.end(true)) {
+      otaSuccess_ = true;
+      Serial.printf("[ota] success %u bytes\n", static_cast<unsigned>(upload.totalSize));
+    } else {
+      otaError_ = String("Update.end failed: ") + Update.errorString();
+      otaStarted_ = false;
+      Serial.printf("[ota] end fail: %s\n", Update.errorString());
+    }
+  } else if (upload.status == UPLOAD_FILE_ABORTED) {
+    if (otaStarted_) {
+      Update.abort();
+    }
+    otaStarted_ = false;
+    otaSuccess_ = false;
+    if (otaError_.isEmpty()) {
+      otaError_ = "Upload aborted";
+    }
+    Serial.println("[ota] client aborted");
+  }
+}
+
+void WebPortal::handleOtaDone() {
+  sendNoCache();
+  server_.sendHeader("Connection", "close");
+  if (!otaAuthOk_) {
+    server_.send(401, "text/plain", otaError_.isEmpty() ? "Unauthorized" : otaError_);
+    otaAuthOk_ = false;
+    otaStarted_ = false;
+    otaSuccess_ = false;
+    return;
+  }
+  if (!otaSuccess_) {
+    if (Update.isRunning()) {
+      Update.abort();
+    }
+    const String msg = otaError_.isEmpty() ? String("OTA failed") : otaError_;
+    server_.send(400, "text/plain", msg);
+    otaAuthOk_ = false;
+    otaStarted_ = false;
+    otaSuccess_ = false;
+    return;
+  }
+  server_.send(200, "text/plain", "OK — rebooting into new firmware");
+  Serial.println("[ota] reboot in 400ms");
+  delay(400);
+  ESP.restart();
+}
+
 void WebPortal::handleStatus() {
   JsonDocument doc;
+  doc["fwVersion"] = FW_VERSION;
+  doc["otaRunning"] = otaRunningPartitionLabel();
+  doc["otaNext"] = otaNextPartitionLabel();
+  doc["otaState"] = otaImageStateLabel();
   doc["sta"] = wifi_->isStaConnected();
   doc["ip"] = wifi_->localIp().toString();
   doc["ssid"] = WiFi.SSID();

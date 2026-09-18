@@ -22,6 +22,8 @@ class WebPortal {
   void handleLogout();
   void handleScan();
   void handleSave();
+  void handleOtaDone();
+  void handleOtaUpload();
   void handleStatus();
   void handleMetrics();
   bool sessionCookieOk();
@@ -42,4 +44,9 @@ class WebPortal {
   String pendingPass_;
   String sessionToken_;
   uint32_t sessionUntilMs_ = 0;
+  // OTA upload state (single in-flight multipart; task-net only).
+  bool otaAuthOk_ = false;
+  bool otaStarted_ = false;
+  bool otaSuccess_ = false;
+  String otaError_;
 };

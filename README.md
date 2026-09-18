@@ -21,6 +21,7 @@ GNSS：大夏龙雀 DX-GP22（GPS/北斗/GLONASS 多模，9600 8N1，定位后 1
 8. **状态灯**：C3 双色 LED（D4 网络/D5 GNSS）；S3 板载 RGB 三通道（R=网络 / G=时钟 / B=NTP 授时中），语义见下
 9. **B4 可观测**：OLED NTP Stats、串口 60s 摘要、`/metrics` Prometheus 文本
 10. **多目标构建**：PlatformIO 多环境，源码 100% 共享，引脚差异集中在 `include/config.h` 目标条件宏
+11. **Web OTA**：登录 `/cfg` 后上传 `firmware.bin` 写下一 app 槽并重启；启动后确认有效取消回滚；NVS 配置保留；串口升级仍为兜底
 
 ## 硬件连接
 
@@ -110,9 +111,9 @@ esptool --chip esp32s3 --port COM5 --baud 921600 write_flash 0x0 merged_firmware
 
 1. **限流（B1）**：每 IP 4 req/s → KoD `RATE`；持续超限 → `DENY` 冷却 ~60s；全局 ~32 pkt/s 静默丢弃
 2. **ACL（B3）**：默认 Off；AllowList 只放行可信 IP（≤8 条），空名单=拒绝全部
-3. **管理面**：`/` `/status` `/metrics` 只读；`/cfg` `/save` `/scan` 需登录会话 Cookie；`/setup` 仅登录页
-4. **升级保配置**：只刷 app `@0x10000`，勿全片擦除（NVS 里的 WiFi/口令/ACL 会丢）
-5. **观测**：OLED NTP Stats、串口 `[ntp]` 摘要（60s）、`/metrics`；`/status` 字段含 `served` / `rateLimited` / `denied` / `dropped` / `clients` / `ntpAclMode` / `clock.tempRefC`
+3. **管理面**：`/` `/status` `/metrics` 只读；`/cfg` `/save` `/scan` `/ota` 需登录会话 Cookie；`/setup` 仅登录页
+4. **升级保配置**：优先 Web OTA（`/cfg` 上传 app `firmware.bin`）或串口只刷 app `@0x10000`；勿全片擦除（NVS 里的 WiFi/口令/ACL 会丢）
+5. **观测**：OLED NTP Stats、串口 `[ntp]` 摘要（60s）、`/metrics`；`/status` 字段含 `served` / `rateLimited` / `denied` / `dropped` / `clients` / `ntpAclMode` / `clock.tempRefC` / `fwVersion` / `otaRunning`
 
 ## 实测表现
 
