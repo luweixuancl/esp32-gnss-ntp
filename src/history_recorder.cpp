@@ -17,9 +17,6 @@ void HistoryRecorder::begin() {
   buf_ = static_cast<HistorySample*>(
       heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   if (buf_ == nullptr) {
-    buf_ = static_cast<HistorySample*>(malloc(bytes));
-  }
-  if (buf_ == nullptr) {
     enabled_ = false;
     reason_ = "alloc failed";
     capacity_ = 0;

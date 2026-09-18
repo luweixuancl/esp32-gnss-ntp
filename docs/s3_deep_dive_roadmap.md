@@ -24,10 +24,11 @@
 - **重开条件**：迁移 Arduino 3.x / IDF 5（新 `rmt` 驱动 + S3 RX 专属通道模型）后再评估；代码保留（`GPS_PPS_RMT_EN` 置 1 即回实验态），探索过程全部入档。
 - **验收准则/工作量**：见下（供重开时引用）
 
-## 2. 项目二：PSRAM 诊断环形缓冲 + `/history`（第 3 位）——**已实现（v1.1.8 / 打磨 v1.1.9），待板测**
+## 2. 项目二：PSRAM 诊断环形缓冲 + `/history`（第 3 位）——**已实现（v1.1.8–1.1.10），待板测**
 
 - **方案文档**：[psram_history_design.md](psram_history_design.md)
-- **代码**：`HistoryRecorder`；`GET /history`、`GET /history.csv`；`/metrics` `history_*`；OTA 停采；C3 `enabled:false`
+- **板测执行单**：[psram_history_board_test.md](psram_history_board_test.md)
+- **代码**：`HistoryRecorder`；`GET /history`、`GET /history.csv`；`/metrics` `history_*`；OTA 停采；C3 `enabled:false`；PSRAM 分配失败不回退 DRAM
 - **工具**：`tools/history_pull.py`（只读拉 JSON/CSV）
 - **验收**：见方案 §9（S3 自录 + CSV；C3 关闭）
 
@@ -56,6 +57,6 @@
 
 ## 6. 排序备忘
 
-**① RMT 捕获（已封存）→ ② OTA（已验收）→ ③ PSRAM 历史（方案已定 → 实现）→ ④ 外部时钟（硬件、最后）**
+**① RMT 捕获（已封存）→ ② OTA（已验收）→ ③ PSRAM 历史（已实现，待板测）→ ④ 外部时钟（草案，待采购）**
 
 > 纯软件项（①②③）全部可在现有两块板+现有工具链完成，无需购件；④ 启动前需采购与方案调研。

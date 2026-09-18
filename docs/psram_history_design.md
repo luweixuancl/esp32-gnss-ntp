@@ -1,6 +1,6 @@
 # PSRAM 诊断历史缓冲 + `/history`（方案）
 
-> 状态：**已实现（v1.1.8+），v1.1.9 打磨 O(1) 概要；待板测**（2026-09-18）  
+> 状态：**已实现（v1.1.8+ / v1.1.10）；待板测**（执行单：[psram_history_board_test.md](psram_history_board_test.md)）  
 > 路线图项：③（原暂缓；OTA 板测通过后启动）  
 > 相关：[s3_deep_dive_roadmap.md](s3_deep_dive_roadmap.md)、[module_boundaries.md](module_boundaries.md)、`tools/clock_drift_monitor.py`、`tools/history_pull.py`
 

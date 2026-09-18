@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pull device-side PSRAM history (/history + /history.csv).
 
-Read-only. Useful after flashing v1.1.9+ on ESP32-S3 to verify the ring
+Read-only. Useful after flashing v1.1.10+ on ESP32-S3 to verify the ring
 and dump a window for offline analysis (alongside clock_drift_monitor).
 
 Examples:

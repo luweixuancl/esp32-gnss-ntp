@@ -129,7 +129,7 @@ esptool --chip esp32s3 --port COM5 --baud 921600 write_flash 0x0 merged_firmware
 | 失效链（两芯） | 断电 1.5–2.5s 进 HLD → 300s 准时 UNS 诚实拒绝 → 恢复 3–20s 无跳秒 |
 | C3 6.7h / S3 6.1h 长测 | LCK ≈100%、residual 零漏、无老化漂移 |
 
-详细数据：[docs/](docs/)——模块边界 [module_boundaries.md](docs/module_boundaries.md)、PSRAM 历史 [psram_history_design.md](docs/psram_history_design.md)、外部时钟草案 [ext_clock_design.md](docs/ext_clock_design.md)、时钟设计 [local_clock_gps_check.md](docs/local_clock_gps_check.md)、WiFi FSM [wifi_event_fsm.md](docs/wifi_event_fsm.md)、两次 NTP 比对评价 [clock_eval_two_ntp_cmp.md](docs/clock_eval_two_ntp_cmp.md)、C3 长测 [clock_drift_20260916.md](docs/clock_drift_20260916.md)、S3 验收 [esp32s3_flash_test_20260917.md](docs/esp32s3_flash_test_20260917.md)、S3 长测 [s3_clock_drift_20260917.md](docs/s3_clock_drift_20260917.md)。
+详细数据：[docs/](docs/)——模块边界 [module_boundaries.md](docs/module_boundaries.md)、PSRAM 历史 [psram_history_design.md](docs/psram_history_design.md) / [板测单](docs/psram_history_board_test.md)、外部时钟草案 [ext_clock_design.md](docs/ext_clock_design.md)、时钟设计 [local_clock_gps_check.md](docs/local_clock_gps_check.md)、WiFi FSM [wifi_event_fsm.md](docs/wifi_event_fsm.md)、两次 NTP 比对评价 [clock_eval_two_ntp_cmp.md](docs/clock_eval_two_ntp_cmp.md)、C3 长测 [clock_drift_20260916.md](docs/clock_drift_20260916.md)、S3 验收 [esp32s3_flash_test_20260917.md](docs/esp32s3_flash_test_20260917.md)、S3 长测 [s3_clock_drift_20260917.md](docs/s3_clock_drift_20260917.md)。
 
 ## 客户端测试
 
