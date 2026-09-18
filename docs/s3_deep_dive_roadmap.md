@@ -36,10 +36,11 @@
 ## 3. 项目三：OTA 双分区升级（第 2 位）——**本分支已实现（待板测验收）**
 
 - **现状**：`POST /ota`（登录会话）+ `/cfg` 上传 UI；`Update` 写下一 app 槽；启动后延迟 `esp_ota_mark_app_valid_cancel_rollback`（任务存活 ≥30s）；串口升级仍为兜底。
-- **健壮性**：OTA busy 期间 `ipcKickNet`+TWDT 喂狗，LED stale panic / heap-low 重启豁免；镜像 magic+chip_id 校验拒绝跨 C3/S3；未授权断连；Content-Length 超槽拒绝。
-- **方案**：见实现（`src/web_portal.cpp` OTA handlers、`src/ota_support.cpp`）。
+- **升级窗口策略**：OTA busy 期间拒绝 NTP（KoD `RSTR`）、暂停 GPS/UI/WiFi 扫描以让出 CPU/Flash；状态灯琥珀快闪→绿常亮→红闪失败。
+- **健壮性**：LED stale panic / heap-low 重启豁免；镜像 magic+chip_id 校验拒绝跨 C3/S3；未授权断连；Content-Length 超槽拒绝。
+- **方案**：见实现（`src/web_portal.cpp`、`src/ota_support.cpp`、`src/ntp_server.cpp` `loopRefuseOta`、`src/status_leds.cpp`）。
 - **价值**：产品化远程升级，运维体验质变。
-- **验收**：S3/C3 各完成一次 Web OTA 往返（新→旧→新），断电/坏包场景回滚验证；NVS 配置跨升级保留；错芯片镜像被拒且不重启。
+- **验收**：S3/C3 各完成一次 Web OTA 往返；升级中 `ntpdate` 见 kiss/拒绝且灯色正确；断电/坏包回滚；NVS 保留；错芯片镜像被拒。
 - **注意**：C3 app 槽 `0x140000`（1.25MB）；当前固件 ~923KB，余量约 350KB——超限由 `Update.begin(next->size)` 硬拒。勿换分区表以免动已部署 NVS。
 
 ## 4. 项目四：外部高品质时钟源（最后，硬件依赖）
