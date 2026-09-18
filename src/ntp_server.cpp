@@ -162,9 +162,10 @@ void NtpServer::sendKiss(const char kiss[4], uint8_t vn, uint8_t poll) {
 }
 
 void NtpServer::sendNormal(const GpsService& gps, bool haveTime, uint32_t recvSec, uint32_t recvFrac) {
+  // Prefer LocalClock / ppsFresh over a full GpsStatus snapshot (same task).
   const bool ppsOk = gps.ppsFresh();
   const uint32_t qMs = gps.qualityMs();
-  const ClockState clk = gps.snapshot().clockState;
+  const ClockState clk = gps.localClock().state();
 
   const bool syncOk =
       haveTime && (clk == ClockState::Locked || clk == ClockState::Degraded ||
@@ -240,6 +241,29 @@ void NtpServer::loop(const GpsService& gps) {
       break;
     }
     handlePacket(gps);
+  }
+}
+
+void NtpServer::loopRefuseOta() {
+  // Minimal path while flash/WiFi serve OTA: empty the socket, tell clients
+  // the server is restarting (KoD RSTR). First packet gets a kiss; the rest
+  // are silent drops to keep CPU off the upload path.
+  bool kissed = false;
+  for (int i = 0; i < NTP_MAX_PACKETS_PER_LOOP; ++i) {
+    if (!udp_.parsePacket()) {
+      break;
+    }
+    const int len = udp_.read(packet_, sizeof(packet_));
+    requestCount_++;
+    otaRefuseCount_++;
+    if (!kissed && len >= 48) {
+      const uint8_t vn = (packet_[0] >> 3) & 0x07;
+      const uint8_t poll = packet_[2];
+      sendKiss("RSTR", vn, poll);
+      kissed = true;
+    } else {
+      droppedCount_++;
+    }
   }
 }
 

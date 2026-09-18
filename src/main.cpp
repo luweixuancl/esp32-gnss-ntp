@@ -14,6 +14,8 @@
 #include "encoder.h"
 #include "display_ui.h"
 #include "status_leds.h"
+#include "ota_service.h"
+#include "ext_clock.h"
 
 SettingsStore gStore;
 AppSettings gSettings;
@@ -103,7 +105,7 @@ static void checkFactoryReset() {
     delay(10);
   }
   Serial.println("[reset] released early - normal boot");
-  gUi.bootMessage("GNSS NTP Server", "Booting...");
+  gUi.bootMessage("GNSS NTP Server", FW_MARK);
 }
 
 static void openSetupApIfNeeded(const char* uiMsg) {
@@ -112,9 +114,9 @@ static void openSetupApIfNeeded(const char* uiMsg) {
   }
   gWifi.cancelAutoReconnect();
   String apPass;
-  if (settingsLock(pdMS_TO_TICKS(50))) {
-    apPass = effectiveSoftApPassword(gSettings);
-    settingsUnlock();
+  AppSettings s;
+  if (settingsCopy(pdMS_TO_TICKS(50), &s)) {
+    apPass = effectiveSoftApPassword(s);
   } else {
     apPass = derivedSoftApPassword();
   }
@@ -295,17 +297,18 @@ static void finishConnect(WifiConnectState st) {
 }
 
 static void handleConnect(const char* ssid, const char* pass) {
-  if (!settingsLock(pdMS_TO_TICKS(500))) {
+  AppSettings s;
+  if (!settingsCopy(pdMS_TO_TICKS(500), &s)) {
     postUiText("Settings busy");
     return;
   }
-  gSettings.wifiSsid = ssid;
-  gSettings.wifiPass = pass;
-  AppSettings copy = gSettings;
-  settingsUnlock();
-  gStore.save(copy);
-
-  startStaConnect(copy, gIpc.setupAp);
+  s.wifiSsid = ssid;
+  s.wifiPass = pass;
+  if (!settingsCommit(pdMS_TO_TICKS(500), s)) {
+    postUiText("Settings busy");
+    return;
+  }
+  startStaConnect(s, gIpc.setupAp);
 }
 
 static void handleNetRequest(const NetRequest& req) {
@@ -326,12 +329,11 @@ static void handleNetRequest(const NetRequest& req) {
       break;
     }
     case NetReqType::ApplyStaticIp: {
-      if (!settingsLock(pdMS_TO_TICKS(200))) {
+      AppSettings copy;
+      if (!settingsCopy(pdMS_TO_TICKS(200), &copy)) {
         postUiText("Settings busy");
         break;
       }
-      AppSettings copy = gSettings;
-      settingsUnlock();
       if (!gWifi.isStaConnected() && copy.wifiSsid.isEmpty()) {
         postUiText("Connect WiFi first");
       } else if (gNetWork != NetWork::Idle || gWifi.isBusy()) {
@@ -352,14 +354,16 @@ static void handleNetRequest(const NetRequest& req) {
       break;
     }
     case NetReqType::UseDhcp: {
-      if (!settingsLock(pdMS_TO_TICKS(200))) {
+      AppSettings copy;
+      if (!settingsCopy(pdMS_TO_TICKS(200), &copy)) {
         postUiText("Settings busy");
         break;
       }
-      gSettings.useStaticIp = false;
-      AppSettings copy = gSettings;
-      settingsUnlock();
-      gStore.save(copy);
+      copy.useStaticIp = false;
+      if (!settingsCommit(pdMS_TO_TICKS(200), copy)) {
+        postUiText("Settings busy");
+        break;
+      }
       if (!copy.wifiSsid.isEmpty()) {
         startStaConnect(copy, false);
       }
@@ -367,9 +371,9 @@ static void handleNetRequest(const NetRequest& req) {
     }
     case NetReqType::StartWebSetup: {
       String apPass;
-      if (settingsLock(pdMS_TO_TICKS(50))) {
-        apPass = effectiveSoftApPassword(gSettings);
-        settingsUnlock();
+      AppSettings s;
+      if (settingsCopy(pdMS_TO_TICKS(50), &s)) {
+        apPass = effectiveSoftApPassword(s);
       } else {
         apPass = derivedSoftApPassword();
       }
@@ -426,9 +430,8 @@ static void pollDisconnectAndReconnect() {
   // retry-forever there is no SoftAP fallback, so re-arm from saved creds.
   if (!gWifi.isStaConnected() && !gIpc.setupAp && !gWifi.autoReconnectArmed() &&
       !gWifi.isBusy()) {
-    if (settingsLock(pdMS_TO_TICKS(50))) {
-      AppSettings snap = gSettings;
-      settingsUnlock();
+    AppSettings snap;
+    if (settingsCopy(pdMS_TO_TICKS(50), &snap)) {
       if (snap.autoReconnect && !snap.wifiSsid.isEmpty()) {
         gWifi.armReconnect(snap, WIFI_RECONNECT_BACKOFF_1_MS, /*linkLoss=*/true);
         Serial.println("[wifi] link-loss retry re-armed");
@@ -512,6 +515,16 @@ static void taskTime(void* /*arg*/) {
   gGps.setTempComp(cachedTempComp, cachedTempCoeff);
 
   for (;;) {
+    // OTA window: refuse NTP, skip GPS/settings work, yield CPU/Flash to the
+    // upload on task-net (especially critical on single-core C3).
+    if (ipcOtaBusy()) {
+      gNtp.loopRefuseOta();
+      ipcKickTime();
+      esp_task_wdt_reset();
+      vTaskDelay(pdMS_TO_TICKS(OTA_TIME_TASK_YIELD_MS));
+      continue;
+    }
+
     ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1));
 
     if (settingsLock(0)) {
@@ -544,13 +557,14 @@ static void taskTime(void* /*arg*/) {
         const GpsStatus st = gGps.snapshot();
         Serial.printf(
             "[ntp] req=%lu served=%lu RATE=%lu DENY=%lu drop=%lu aclDeny=%lu "
-            "clients=%u acl=%s/%u clk=%s T=%.1f dppm=%.2f\n",
+            "otaRefuse=%lu clients=%u acl=%s/%u clk=%s T=%.1f dppm=%.2f\n",
             static_cast<unsigned long>(gNtp.requestCount()),
             static_cast<unsigned long>(gNtp.servedCount()),
             static_cast<unsigned long>(gNtp.rateLimitedCount()),
             static_cast<unsigned long>(gNtp.deniedCount()),
             static_cast<unsigned long>(gNtp.droppedCount()),
             static_cast<unsigned long>(gNtp.aclDeniedCount()),
+            static_cast<unsigned long>(gNtp.otaRefuseCount()),
             static_cast<unsigned>(gNtp.activeClientCount()),
             ntpAclModeMenuLabel(gNtp.aclMode()), static_cast<unsigned>(gNtp.aclCount()),
             clockStateLabel(st.clockState), static_cast<double>(st.tempC),
@@ -569,9 +583,8 @@ static void taskNet(void* /*arg*/) {
   ipcKickNet();
 
   AppSettings boot;
-  if (settingsLock(pdMS_TO_TICKS(500))) {
-    boot = gSettings;
-    settingsUnlock();
+  if (!settingsCopy(pdMS_TO_TICKS(500), &boot)) {
+    boot = AppSettings{};
   }
 
   gWifi.setAutoReconnect(boot.autoReconnect);
@@ -601,24 +614,32 @@ static void taskNet(void* /*arg*/) {
   }
 
   for (;;) {
-    // Harvest SCAN_DONE before any new scanNetworks() (which scanDelete()s).
-    driveScan();
+    // During OTA, skip WiFi scan/reconnect churn so the HTTP upload owns the radio.
+    if (!ipcOtaBusy()) {
+      driveScan();
 
-    NetRequest req;
-    while (xQueueReceive(gIpc.netReq, &req, 0) == pdTRUE) {
-      handleNetRequest(req);
+      NetRequest req;
+      while (xQueueReceive(gIpc.netReq, &req, 0) == pdTRUE) {
+        handleNetRequest(req);
+      }
+
+      String ssid, pass;
+      if (gPortal.consumeConnectRequest(ssid, pass)) {
+        handleConnect(ssid.c_str(), pass.c_str());
+      }
+
+      driveScan();
+      pollNetWork();
     }
 
-    String ssid, pass;
-    if (gPortal.consumeConnectRequest(ssid, pass)) {
-      handleConnect(ssid.c_str(), pass.c_str());
-    }
-
-    driveScan();
-    pollNetWork();
     gPortal.loop();
+    gOta.poll();
+    gWifi.refreshLinkSnapshot();
     static uint8_t heapLowStreak = 0;
-    if (ESP.getFreeHeap() < HEAP_RESTART_BYTES) {
+    // Skip heap-panic restart while flash is being rewritten, and during the
+    // post-OTA pending-verify window (a restart there rolls back the upgrade).
+    if (!ipcOtaBusy() && !ipcOtaPendingVerify() &&
+        ESP.getFreeHeap() < HEAP_RESTART_BYTES) {
       if (++heapLowStreak >= HEAP_RESTART_SAMPLES) {
         Serial.printf("[net] heap low (%u) x%u — restart\n",
                       static_cast<unsigned>(ESP.getFreeHeap()), heapLowStreak);
@@ -638,13 +659,20 @@ static void taskUi(void* /*arg*/) {
   esp_task_wdt_add(nullptr);
   ipcKickUi();
   for (;;) {
-    gEnc.loop();
     const GpsStatus st = gGps.snapshot();
     ipcKickUi();
+    // LEDs always run (OTA amber/green/red). Skip encoder/OLED work while
+    // uploading so I2C and UI CPU do not contend with flash writes.
     gLeds.loop(gIpc.setupAp, gWifi.isStaConnected(), st);
-    gUi.loop(gEnc, gGps, gWifi, gNtp);
-    esp_task_wdt_reset();
-    vTaskDelay(pdMS_TO_TICKS(10));
+    if (!ipcOtaBusy()) {
+      gEnc.loop();
+      gUi.loop(gEnc, gGps, gWifi, gNtp);
+      esp_task_wdt_reset();
+      vTaskDelay(pdMS_TO_TICKS(10));
+    } else {
+      esp_task_wdt_reset();
+      vTaskDelay(pdMS_TO_TICKS(OTA_TIME_TASK_YIELD_MS));
+    }
   }
 }
 
@@ -652,6 +680,7 @@ void setup() {
   Serial.begin(115200);
   delay(200);
   Serial.println("\nGNSS NTP Server (RTOS)");
+  Serial.printf("FW %s (%s)\n", FW_MARK, FW_VERSION);
 
   if (!ipcInit()) {
     Serial.println("IPC init failed — halt/restart");
@@ -670,6 +699,7 @@ void setup() {
   gEnc.begin();
   gLeds.begin();
   gUi.begin();
+  gExtClock.begin();  // after Wire (OLED); no-op when EXT_RTC_EN=0
   checkFactoryReset();  // hold SW 3s at power-on → wipe all settings, reboot
 
   gSettings = gStore.load();
@@ -677,17 +707,23 @@ void setup() {
   gGps.begin();
   gWifi.begin();
   gNtp.begin();
+  gOta.begin();
 
   Serial.printf("MAC=%s\n", WiFi.macAddress().c_str());
   Serial.printf("SoftAP default pass=%s (NVS appw overrides if set)\n",
                 derivedSoftApPassword().c_str());
 
   // Priority: time=5 > net=2 > ui=1 (all below WiFi/lwIP ~18+).
+  // During OTA, OtaService temporarily boosts net above time via vTaskPrioritySet.
   // TASK_TIME_CORE: 0 on C3 (single core), 1 on S3 (dual-core: GNSS/NTP/PPS
   // alone on core 1 for deterministic timestamping, net/ui on core 0).
-  xTaskCreatePinnedToCore(taskTime, "task-time", 6144, nullptr, 5, &gTaskTime, TASK_TIME_CORE);
-  xTaskCreatePinnedToCore(taskNet, "task-net", 8192, nullptr, 2, &gTaskNet, 0);
-  xTaskCreatePinnedToCore(taskUi, "task-ui", 4096, nullptr, 1, &gTaskUi, 0);
+  xTaskCreatePinnedToCore(taskTime, "task-time", 6144, nullptr, TASK_PRIO_TIME, &gTaskTime,
+                          TASK_TIME_CORE);
+  xTaskCreatePinnedToCore(taskNet, "task-net", 8192, nullptr, TASK_PRIO_NET, &gTaskNet, 0);
+  xTaskCreatePinnedToCore(taskUi, "task-ui", 4096, nullptr, TASK_PRIO_UI, &gTaskUi, 0);
+  gIpc.taskTime = gTaskTime;
+  gIpc.taskNet = gTaskNet;
+  gIpc.taskUi = gTaskUi;
 
   Serial.println("Tasks started: time=5 net=2 ui=1");
 }

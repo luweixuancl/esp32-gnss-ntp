@@ -30,6 +30,11 @@ struct GpsStatus {
   float tempCorrPpm = 0;
   bool tempComp = false;
   uint32_t holdoverMs = 0;
+  bool extClockEnabled = false;
+  bool extClockHealthy = false;
+  float extClockPpmFloor = NAN;
+  float extClockTempC = NAN;
+  const char* extClockDriver = "none";
   // RMT RX hardware capture diagnostics (docs/s3_deep_dive_roadmap.md #1).
   struct PpsRmtStats {
     bool ok = false;        // capture armed
@@ -83,6 +88,13 @@ class GpsService {
   void commitNmeaTime(uint32_t epochSec, AnomalyPolicy policy, uint16_t holdoverSec);
   void publishStatus(const GpsStatus& work);
   void sampleDieTemp();
+  void feedNmeaChar(char c);
+  void onNmeaLine(const char* line);
+  bool parseZdaLine(const char* line);
+  static uint8_t nmeaChecksum(const char* body);
+  void sendPcas(const char* bodyNoDollar);
+  void probeAndFilterNmea();
+  static uint32_t civilToEpoch(int year, int month, int day, int hour, int minute, int second);
 
   HardwareSerial gpsSerial_{GPS_UART_NUM};
   TinyGPSPlus gps_;
@@ -100,6 +112,16 @@ class GpsService {
   bool tempSensorOk_ = false;
   uint32_t lastTempMs_ = 0;
   uint32_t lastTempTryMs_ = 0;
+
+  // Line assembly for ZDA / talker probe (TinyGPSPlus has no native ZDA).
+  char nmeaLine_[96] = {};
+  size_t nmeaLineLen_ = 0;
+  bool zdaValid_ = false;
+  uint32_t zdaEpoch_ = 0;
+  uint32_t zdaMs_ = 0;
+  // Bitmask of seen sentence types during boot probe / runtime (for logs).
+  uint16_t nmeaSeenMask_ = 0;
+  bool nmeaFilterApplied_ = false;
 
   mutable portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
 

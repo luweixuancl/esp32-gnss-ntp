@@ -141,7 +141,7 @@
 
 ### 2.6 固件代码分析与修复（2026-09-10）
 
-**服务器固件已开源**：`github.com/luweixuancl/esp32c3-gnss-ntp`（原名 `Acode_test`，2026-09-14 更名，旧地址 301 重定向；下文涉及的历史分支现已清理），分支 `cursor/esp32c3-status-leds-5075`。硬件：合宙 CORE ESP32-C3 + DX-GP22 GNSS（1PPS + NMEA@9600）+ SSD1306 + KY-040。本地已 clone 并新建修复分支 `fix/time-alignment`（3 个提交），补丁导出于 `patches/`。
+**服务器固件已开源**：`github.com/luweixuancl/esp32c3-gnss-ntp`（原名 `Acode_test`，2026-09-14 更名，旧地址 301 重定向；下文涉及的历史分支现已清理），分支 `cursor/esp32c3-status-leds-5075`。硬件：合宙 CORE ESP32-C3 + DX-GP10 GNSS（1PPS + NMEA@9600）+ SSD1306 + KY-040。本地已 clone 并新建修复分支 `fix/time-alignment`（3 个提交），补丁导出于 `patches/`。
 
 **实测现象 ↔ 代码缺陷精确对应：**
 
@@ -162,7 +162,7 @@
 **遗留与验收：**
 - 本机无 PlatformIO 交叉编译环境，固件**未经编译验证**，烧录前建议本地 `pio run` 检查
 - **验收流程**：烧录后运行 `python3 monitor_ntp.py 1800 5 && python3 analyze_ntp.py`，目标：配对差中位数 \|diff\| < 50ms、std < 30ms、异常率 < 2%（修复前基线：51.3%，数据见 2.5 节 CSV）
-- 风险提示：若 -3~-4s 失步主因是 DX-GP22 模块自身失锁（而非固件），固件修复后 LI=3 会如实暴露该状态 → OLED/LED 可直接观察（D5 灯：常亮=Stratum-1 ready，闪烁=有定位无 PPS）
+- 风险提示：若 -3~-4s 失步主因是 DX-GP10 模块自身失锁（而非固件），固件修复后 LI=3 会如实暴露该状态 → OLED/LED 可直接观察（D5 灯：常亮=Stratum-1 ready，闪烁=有定位无 PPS）
 
 ### 2.7 RTOS 三任务化架构（2026-09-10，分支 feat/rtos-tasks）
 

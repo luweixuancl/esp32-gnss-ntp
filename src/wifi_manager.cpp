@@ -2,6 +2,7 @@
 #include "config.h"
 #include "settings.h"
 #include <WiFi.h>
+#include <cstring>
 #include <esp_wifi.h>
 #include <lwip/etharp.h>
 #include <lwip/ip4_addr.h>
@@ -81,6 +82,7 @@ void WifiManager::begin() {
   WiFi.setHostname("esp32c3-ntp");
   WiFi.onEvent(onWifiEvent);
   Serial.println("[wifi] event handler registered");
+  refreshLinkSnapshot();
 }
 
 uint32_t WifiManager::backoffMsForAttempt(uint8_t attempt) {
@@ -206,6 +208,7 @@ WifiConnectState WifiManager::pollConnect() {
     cancelAutoReconnect();
     Serial.println();
     Serial.printf("STA GOT_IP: %s\n", WiFi.localIP().toString().c_str());
+    refreshLinkSnapshot();
     return connectState_;
   }
 
@@ -216,6 +219,7 @@ WifiConnectState WifiManager::pollConnect() {
     cancelAutoReconnect();
     Serial.println();
     Serial.printf("STA connected (poll): %s\n", WiFi.localIP().toString().c_str());
+    refreshLinkSnapshot();
     return connectState_;
   }
 
@@ -301,6 +305,7 @@ bool WifiManager::healIfStaUp() {
   cancelAutoReconnect();
   expectLink_ = true;
   Serial.printf("[wifi] heal → Connected %s\n", WiFi.localIP().toString().c_str());
+  refreshLinkSnapshot();
   return true;
 }
 
@@ -432,6 +437,7 @@ void WifiManager::startSetupAp(const String& password) {
   const bool ok = WiFi.softAP(ssid.c_str(), pass.c_str(), /*channel=*/6, /*ssid_hidden=*/0, /*max_connection=*/4);
   Serial.printf("Setup AP: %s / %s  IP=%s ch=6 ok=%d mode=%d\n", ssid.c_str(), pass.c_str(),
                 WiFi.softAPIP().toString().c_str(), ok ? 1 : 0, static_cast<int>(WiFi.getMode()));
+  refreshLinkSnapshot();
 }
 
 void WifiManager::stopAp() {
@@ -442,6 +448,7 @@ void WifiManager::stopAp() {
   delay(50);
   WiFi.mode(WIFI_STA);
   Serial.println("[wifi] SoftAP stopped (STA only)");
+  refreshLinkSnapshot();
 }
 
 bool WifiManager::isStaConnected() const {
@@ -457,6 +464,43 @@ IPAddress WifiManager::localIp() const {
 
 String WifiManager::macAddress() const {
   return WiFi.macAddress();
+}
+
+void WifiManager::copySsid(char* dst, size_t dstLen, const String& src) {
+  if (dst == nullptr || dstLen == 0) {
+    return;
+  }
+  strncpy(dst, src.c_str(), dstLen - 1);
+  dst[dstLen - 1] = '\0';
+}
+
+void WifiManager::refreshLinkSnapshot() {
+  // task-net only — may call WiFi.*
+  WifiLinkSnapshot s;
+  const wifi_mode_t mode = WiFi.getMode();
+  s.apUp = (mode == WIFI_AP || mode == WIFI_AP_STA);
+  s.staUp = (WiFi.status() == WL_CONNECTED && static_cast<uint32_t>(WiFi.localIP()) != 0);
+  if (s.staUp) {
+    copySsid(s.staSsid, sizeof(s.staSsid), WiFi.SSID());
+    s.rssi = WiFi.RSSI();
+    s.staIp = WiFi.localIP();
+    s.gateway = WiFi.gatewayIP();
+  }
+  if (s.apUp) {
+    copySsid(s.apSsid, sizeof(s.apSsid), WiFi.softAPSSID());
+    s.apIp = WiFi.softAPIP();
+  }
+  portENTER_CRITICAL(&linkMux_);
+  link_ = s;
+  portEXIT_CRITICAL(&linkMux_);
+}
+
+WifiLinkSnapshot WifiManager::linkSnapshot() const {
+  WifiLinkSnapshot out;
+  portENTER_CRITICAL(&linkMux_);
+  out = link_;
+  portEXIT_CRITICAL(&linkMux_);
+  return out;
 }
 
 bool WifiManager::startScan() {

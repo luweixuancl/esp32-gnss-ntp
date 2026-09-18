@@ -1,21 +1,39 @@
-# ESP32-C3 firmware (phone flash)
+# Firmware drops (app images)
 
-| File | Flash address |
-|------|---------------|
-| `firmware_merged_0x0.bin` | `0x0` (all-in-one, **first install**) |
-| `esp32c3-firmware-phase-a.zip` | bootloader@0x0, partitions@0x8000, firmware@0x10000 |
-| `firmware.bin` (inside zip) | `0x10000` (**updates — preferred**) |
+| File | Chip | Flash offset | Notes |
+|------|------|--------------|-------|
+| `firmware.bin` | ESP32-C3 | `0x10000` | **Preferred update** (keeps NVS) |
+| `firmware_esp32s3.bin` | ESP32-S3 | `0x10000` | **Preferred update** (keeps NVS) |
+| `firmware_merged_0x0.bin` | ESP32-C3 | `0x0` | First install only (wipes NVS) |
+| `merged_firmware_esp32s3_n16r8_0x0.bin` | ESP32-S3 | `0x0` | First install only (wipes NVS) |
 
-Chip: ESP32-C3. Do not connect phone WiFi to SoftAP while flashing (keeps cellular 5G).
+## Current app build
 
-## Keep WiFi credentials across updates
+- Mark: **v1.1.20** (`FW_MARK`)
+- Branch tip when refreshed: see git history on `dist/firmware*.bin`
 
-NVS (WiFi SSID/password) lives **outside** the app image. If the flasher **erases whole flash**, credentials are wiped and the device opens SoftAP.
+## Verify before Web OTA
 
-**Recommended for updates:**
+Confirm the downloaded app image size/hash (truncated downloads often “succeed” then roll back to the previous version):
 
-1. Flash only `firmware.bin` at **`0x10000`**
-2. Turn **OFF** “Erase flash” / “全片擦除” in the Android app
-3. Do **not** rewrite bootloader/partitions unless the partition table changed
+```text
+# after download
+wc -c firmware.bin
+md5sum firmware.bin
+```
 
-Use `firmware_merged_0x0.bin` only for blank boards or when you intentionally want a clean NVS.
+Expected app sizes are recorded next to the bins in `dist/SHA256SUMS` on this branch.
+
+## Keep WiFi / settings
+
+NVS lives outside the app image. For upgrades:
+
+1. Flash only `firmware.bin` / `firmware_esp32s3.bin` at **`0x10000`**
+2. Turn **OFF** erase-flash / 全片擦除
+3. Do not rewrite bootloader/partitions unless the table changed
+
+## China mirror example
+
+```text
+https://gh-proxy.com/https://raw.githubusercontent.com/luweixuancl/esp32-gnss-ntp/<branch>/dist/firmware.bin
+```

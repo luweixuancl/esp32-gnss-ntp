@@ -22,6 +22,8 @@ class WebPortal {
   void handleLogout();
   void handleScan();
   void handleSave();
+  void handleOtaDone();
+  void handleOtaUpload();
   void handleStatus();
   void handleMetrics();
   bool sessionCookieOk();
@@ -42,4 +44,7 @@ class WebPortal {
   String pendingPass_;
   String sessionToken_;
   uint32_t sessionUntilMs_ = 0;
+  // HTTP-layer OTA session gate (flash/partition logic lives in OtaService).
+  bool otaAuthOk_ = false;
+  char otaError_[96] = {};
 };

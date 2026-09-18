@@ -1,5 +1,36 @@
 #pragma once
 
+// Firmware identity — bump PATCH (or MINOR) on every flashable build so the
+// OLED mark is unambiguous after OTA / serial upgrade.
+#define FW_VER_MAJOR         1
+#define FW_VER_MINOR         1
+#define FW_VER_PATCH         20
+// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.20").
+#define FW_MARK              "v1.1.20"
+// Full string for /status, /cfg, serial, OTA pages.
+#define FW_VERSION           "1.1.20"
+// Reject obviously truncated OTA payloads before activating the slot.
+#define OTA_MIN_IMAGE_BYTES      (200 * 1024)
+// After a pending-verify OTA boot, wait until tasks are alive this long before
+// cancelling rollback — catches crash-loops in GPS/WiFi/task bring-up.
+#define OTA_MARK_VALID_AFTER_MS  30000
+// Progress log cadence during Web OTA (bytes).
+#define OTA_PROGRESS_LOG_BYTES   (64 * 1024)
+// Failed-OTA LED linger before returning to normal status colours.
+#define OTA_FAIL_LED_MS          2000
+// While OTA busy: task-time yields this long so flash/WiFi serve the upload.
+#define OTA_TIME_TASK_YIELD_MS     50
+// S3 RGB / C3 dual-LED OTA blink half-period (amber upload ~4 Hz).
+#define OTA_LED_BLINK_HALF_MS     120
+
+// FreeRTOS task priorities (composition root creates tasks at normal values;
+// OtaService temporarily boosts net above time during upload).
+#define TASK_PRIO_TIME              5
+#define TASK_PRIO_NET               2
+#define TASK_PRIO_UI                1
+#define TASK_PRIO_NET_OTA           6   // > time while Uploading/Rebooting
+#define TASK_PRIO_TIME_OTA          3   // < net during OTA
+
 // ---------------------------------------------------------------------------
 // Hardware wiring — target-conditional (合宙 CORE ESP32-C3 default, ESP32-S3
 // DevKitC-1 + WROOM-1 N16R8 opt-in). Adjust these pins if your board differs.
@@ -12,8 +43,8 @@
 // ESP32-S3-DevKitC-1: UART0 debug = GPIO43/44 via onboard bridge (Serial
 // default pins, no macros needed). Native USB on GPIO19/20 — keep free.
 // GPIO0/3/45/46 are strapping pins: encoder B moved off C3's GPIO3.
-#define PIN_GPS_RX           1   // ESP32 RX <- GP22 TXD
-#define PIN_GPS_TX           0   // ESP32 TX -> GP22 RXD (output-only, BOOT strap safe; fallback GPIO18)
+#define PIN_GPS_RX           1   // ESP32 RX <- GP10 TXD
+#define PIN_GPS_TX           0   // ESP32 TX -> GP10 RXD (output-only, BOOT strap safe; fallback GPIO18)
 #define PIN_GPS_PPS          4   // 1PPS input (RTC-domain)
 #define PIN_OLED_SDA         8
 #define PIN_OLED_SCL        10
@@ -31,9 +62,9 @@
 #else
 
 // UART0 (合宙 CORE / CH343): GPIO20 RX, GPIO21 TX — debug via Serial @ 115200
-// DX-GP22 GNSS on UART1 (board UART1_RX=GPIO1, UART1_TX=GPIO0; 9600 8N1; 1PPS after fix)
-#define PIN_GPS_RX           1   // ESP32 RX <- GP22 TXD  (UART1_RX)
-#define PIN_GPS_TX           0   // ESP32 TX -> GP22 RXD  (UART1_TX)
+// DX-GP10 GNSS on UART1 (board UART1_RX=GPIO1, UART1_TX=GPIO0; 9600 8N1; 1PPS after fix)
+#define PIN_GPS_RX           1   // ESP32 RX <- GP10 TXD  (UART1_RX)
+#define PIN_GPS_TX           0   // ESP32 TX -> GP10 RXD  (UART1_TX)
 #define PIN_GPS_PPS          4   // 1PPS input
 #define PIN_OLED_SDA         8
 #define PIN_OLED_SCL        10
@@ -51,6 +82,12 @@
 #define GPS_UART_NUM         1
 #define GPS_DEBUG            0   // 1 = 每秒向 UART0 打印定位/PPS（time 任务内，默认关）
 #define GPS_DEBUG_NMEA       0   // 1 = 把 NMEA 原文转发到 UART0
+// Boot: sniff NMEA talkers, then $PCAS03 → only GGA + ZDA (DX-GP10 / CASIC).
+#ifndef GPS_NMEA_FILTER_EN
+#define GPS_NMEA_FILTER_EN       1
+#endif
+#define GPS_NMEA_PROBE_MS     1500
+#define GPS_NMEA_CMD_GAP_MS    120
 
 // SH1107 / SSD1107 0.96" 64x128 OLED over I2C (pins above; native portrait, setRotation(1) → 128x64 UI)
 #define OLED_I2C_ADDR     0x3C
@@ -146,12 +183,12 @@
 #define LED_PANIC_HALF_PERIOD_MS    100
 
 // Local clock / GPS cross-check (see docs/local_clock_gps_check.md)
-#define CLK_RESIDUAL_WARN_MS         50
-#define CLK_RESIDUAL_FAIL_MS        100
+#define CLK_RESIDUAL_WARN_MS         50  // quality / UI warn floor (Degraded)
+#define CLK_RESIDUAL_FAIL_MS        100  // |r| >= this → AnomalyPolicy
 #define CLK_RESIDUAL_RELOCK_MS       30
 #define CLK_RELOCK_COUNT              3
-#define CLK_PPS_INTERVAL_MAX_ERR_US 5000
-#define CLK_PPS_UNSTABLE_COUNT        3
+#define CLK_PPS_INTERVAL_MAX_ERR_US 5000  // outlier vs last accepted edge → drop edge
+#define CLK_PPS_UNSTABLE_COUNT        3   // consecutive outliers → soft unsync
 #define CLK_HOLDOVER_SHORT_SEC       30
 #define CLK_HOLDOVER_LONG_SEC       300
 #define CLK_PPS_EDGE_RING            16
@@ -194,11 +231,22 @@
 #define CLK_HOLDOVER_PHI_PPM         15.0f
 // Extra uncertainty booked when entering / while in holdover (ms).
 #define CLK_HOLDOVER_ENTRY_MS       100
-// If root-quality exceeds this in holdover, drop to Unsynced early.
+// Safety exit when already-degraded residual + growth exceeds this. Primary
+// holdover limit is still holdoverSec (30/300); at 50 ppm × 300 s growth is
+// only ~15 ms, so this mainly catches high residual on entry.
 #define CLK_HOLDOVER_MAX_QUALITY_MS 500
 // Task panic (LED stale) for this long → soft restart.
 #define LED_TASK_PANIC_RESTART_MS 15000
 // Restart if free heap stays below this (fragmentation / leak).
 #define HEAP_RESTART_BYTES         10240
 #define HEAP_RESTART_SAMPLES            5
+
+// Optional external RTC assist (docs/ext_clock_design.md). Default off until
+// a DS3231 (or similar) is wired on the OLED I2C bus (addr 0x68).
+#ifndef EXT_RTC_EN
+#define EXT_RTC_EN                      0
+#endif
+#define EXT_RTC_I2C_ADDR             0x68
+// Holdover dispersion floor when ExtClock is healthy (DS3231 TCXO-class ±2 ppm).
+#define EXT_RTC_PPM_FLOOR             2.0f
 

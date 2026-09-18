@@ -17,6 +17,8 @@ class NtpServer {
   void begin();
   // Call only from task-time.
   void loop(const GpsService& gps);
+  // OTA window: drain UDP, refuse with KoD RSTR (no stratum-1 answers).
+  void loopRefuseOta();
   // Cached from settings by task-time (no mutex in packet path).
   void setAcl(const NtpAclSnapshot& snap);
 
@@ -26,6 +28,7 @@ class NtpServer {
   uint32_t deniedCount() const { return deniedCount_; }
   uint32_t droppedCount() const { return droppedCount_; }
   uint32_t aclDeniedCount() const { return aclDeniedCount_; }
+  uint32_t otaRefuseCount() const { return otaRefuseCount_; }
   uint8_t activeClientCount() const;
   NtpAclMode aclMode() const { return acl_.mode; }
   uint8_t aclCount() const { return acl_.count; }
@@ -64,6 +67,7 @@ class NtpServer {
   uint32_t deniedCount_ = 0;
   uint32_t droppedCount_ = 0;
   uint32_t aclDeniedCount_ = 0;
+  uint32_t otaRefuseCount_ = 0;
 
   uint32_t globalWindowStartMs_ = 0;
   uint16_t globalWindowCount_ = 0;

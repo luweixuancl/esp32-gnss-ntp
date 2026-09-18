@@ -6,8 +6,8 @@
 #if defined(ARDUINO_ESP32S3_DEV)
 // Three logical channels share the onboard SK6812-mini (GPIO48): R = network
 // (D4 semantics), G = clock/GNSS (D5 semantics), B = NTP serving-ready
-// (steady while Locked/Degraded/Holdover, off otherwise). The C3 discrete-
-// LED version keeps byte-identical patterns on GPIO12/13.
+// (steady while Locked/Degraded/Holdover, off otherwise). OTA overrides all
+// three with dedicated colours from the AppIpc OTA snapshot.
 static bool rgbD4On_ = false;
 static bool rgbD5On_ = false;
 static bool rgbBOn_ = false;
@@ -16,8 +16,17 @@ static void flushRgb() {
   const uint8_t v = LED_RGB_BRIGHTNESS;
   neopixelWrite(PIN_LED_RGB, rgbD4On_ ? v : 0, rgbD5On_ ? v : 0, rgbBOn_ ? v : 0);
 }
+
+static void setRgb(bool r, bool g, bool b) {
+  rgbD4On_ = r;
+  rgbD5On_ = g;
+  rgbBOn_ = b;
+  flushRgb();
+}
 #else
 static void flushRgb() {
+}
+static void setRgb(bool /*r*/, bool /*g*/, bool /*b*/) {
 }
 #endif
 
@@ -35,14 +44,13 @@ static void setLed(uint8_t pin, bool on) {
 
 void StatusLeds::begin() {
 #if defined(ARDUINO_ESP32S3_DEV)
-  flushRgb();  // RGB off (boot default is off; be explicit)
+  flushRgb();
 #else
   pinMode(PIN_LED_D4, OUTPUT);
   pinMode(PIN_LED_D5, OUTPUT);
   digitalWrite(PIN_LED_D4, LOW);
   digitalWrite(PIN_LED_D5, LOW);
 #endif
-  // Leave kicks at 0 until each task actually runs (see tasksStale).
 }
 
 void StatusLeds::writeBlink(uint8_t pin, uint32_t nowMs, uint32_t halfPeriodMs) {
@@ -56,11 +64,53 @@ void StatusLeds::writeHeartbeat(uint8_t pin, uint32_t nowMs) {
   setLed(pin, on);
 }
 
+bool StatusLeds::writeOtaPattern(uint32_t nowMs) {
+  // Observe IPC snapshot only — no dependency on OtaService.
+  const OtaPhase phase = ipcOtaPhase();
+  if (phase == OtaPhase::Idle) {
+    return false;
+  }
+  const bool on = ((nowMs / OTA_LED_BLINK_HALF_MS) % 2) == 0;
+  switch (phase) {
+    case OtaPhase::Uploading:
+#if defined(ARDUINO_ESP32S3_DEV)
+      setRgb(on, on, false);  // amber
+#else
+      setLed(PIN_LED_D4, on);
+      setLed(PIN_LED_D5, on);
+#endif
+      return true;
+    case OtaPhase::Rebooting:
+#if defined(ARDUINO_ESP32S3_DEV)
+      setRgb(false, true, false);  // solid green
+#else
+      setLed(PIN_LED_D4, false);
+      setLed(PIN_LED_D5, true);
+#endif
+      return true;
+    case OtaPhase::Failed:
+#if defined(ARDUINO_ESP32S3_DEV)
+      setRgb(on, false, false);  // red blink
+#else
+      setLed(PIN_LED_D4, on);
+      setLed(PIN_LED_D5, false);
+#endif
+      return true;
+    case OtaPhase::Idle:
+    default:
+      return false;
+  }
+}
+
 bool StatusLeds::tasksStale(uint32_t nowMs) {
+  // OTA blocks task-net inside handleClient; IPC busy + kickNetAlive cover it.
+  // Pending-verify: never panic-restart — that would roll back a fresh OTA.
+  if (ipcOtaBusy() || ipcOtaPendingVerify()) {
+    return false;
+  }
   const uint32_t t = gIpc.kickTimeMs;
   const uint32_t n = gIpc.kickNetMs;
   const uint32_t u = gIpc.kickUiMs;
-  // Ignore until all tasks have kicked at least once (0 = not started).
   if (t == 0 || n == 0 || u == 0) {
     return false;
   }
@@ -77,7 +127,11 @@ void StatusLeds::loop(bool apMode, bool wifiStaOk, const GpsStatus& st) {
   }
   lastUpdateMs_ = now;
 
-  // Panic: another task stopped kicking — alternate D4/D5 ~5 Hz; then soft-restart.
+  if (writeOtaPattern(now)) {
+    panicSinceMs_ = 0;
+    return;
+  }
+
   if (tasksStale(now)) {
     if (panicSinceMs_ == 0) {
       panicSinceMs_ = now;
@@ -107,10 +161,9 @@ void StatusLeds::loop(bool apMode, bool wifiStaOk, const GpsStatus& st) {
 
   if (st.validFix && st.ppsFresh && st.timeValid &&
       (st.clockState == ClockState::Locked || st.clockState == ClockState::Degraded)) {
-    // Opposite phase to D4 so dual-heartbeat is easier to see as "alive".
     writeHeartbeat(PIN_LED_D5, now + LED_HEARTBEAT_ON_MS / 2);
   } else if (st.clockState == ClockState::Holdover) {
-    writeBlink(PIN_LED_D5, now, 200);  // fast blink = holdover
+    writeBlink(PIN_LED_D5, now, 200);
   } else if (st.validFix || st.satellites > 0 || st.clockState == ClockState::Acquiring) {
     writeBlink(PIN_LED_D5, now, 400);
   } else {
@@ -118,8 +171,6 @@ void StatusLeds::loop(bool apMode, bool wifiStaOk, const GpsStatus& st) {
   }
 
 #if defined(ARDUINO_ESP32S3_DEV)
-  // B = NTP serving-ready: steady while the server answers stratum 1
-  // (Locked/Degraded/Holdover), off while acquiring or refusing (UNS).
   rgbBOn_ = (st.clockState == ClockState::Locked ||
              st.clockState == ClockState::Degraded ||
              st.clockState == ClockState::Holdover);

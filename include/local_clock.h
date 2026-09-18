@@ -51,6 +51,9 @@ class LocalClock {
 
   void setTempComp(bool enabled, int16_t coeffCenti);
   void updateDieTemp(float tempC);
+  // Optional ExtClock assist: tighter holdover dispersion floor when healthy.
+  // Does not replace GNSS as the Locked time source.
+  void setExtAssist(bool healthy, float ppmFloorHint);
 
   ClockState state() const { return state_; }
   int32_t residualMs() const { return residualMs_; }
@@ -68,6 +71,8 @@ class LocalClock {
   bool extrapolate(uint64_t atUs, uint32_t& sec, uint32_t& frac) const;
   void setAnchor(uint32_t utcSec, uint64_t edgeUs, uint32_t ppsCount);
   void enterHoldover();
+  // Soft unsync: drop phase anchor but keep PPS edge ring / ppm so re-lock
+  // after a glitch burst does not cold-start the second scale.
   void enterUnsynced();
   void applyFail(AnomalyPolicy policy);
   void pushEdge(uint64_t edgeUs);
@@ -104,4 +109,7 @@ class LocalClock {
   bool haveTempRef_ = false;
   float tempC_ = 0.0f;
   float tempRefC_ = 0.0f;
+
+  bool extHealthy_ = false;
+  float extPpmFloor_ = NAN;
 };

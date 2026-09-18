@@ -2,7 +2,6 @@
 #include "app_ipc.h"
 #include "ntp_server.h"
 #include <Wire.h>
-#include <WiFi.h>
 #include <Fonts/FreeMono9pt7b.h>
 #include <Fonts/FreeMonoBold12pt7b.h>
 
@@ -122,9 +121,9 @@ void DisplayUi::begin() {
     Serial.println("SH1107 init failed");
   }
   display_.setRotation(OLED_ROTATION);
-  bootMessage("GNSS NTP Server", "Booting...");
+  bootMessage("GNSS NTP Server", FW_MARK);
   lastInputMs_ = millis();
-  Serial.printf("[ui] OLED menu FreeMono9pt rows=%u rowH=%u mark=%s\n",
+  Serial.printf("[ui] OLED %s menu FreeMono9pt rows=%u rowH=%u uiMark=%s\n", FW_MARK,
                 static_cast<unsigned>(OLED_MENU_ROWS),
                 static_cast<unsigned>(OLED_MENU_ROW_H), OLED_UI_MARK);
 }
@@ -254,7 +253,7 @@ void DisplayUi::loop(EncoderInput& enc, GpsService& gps, WifiManager& wifi, NtpS
       handlePassword(rot, click, longPress);
       break;
     case UiMode::SetIp:
-      handleSetIp(rot, click, longPress);
+      handleSetIp(rot, click, longPress, wifi);
       break;
     case UiMode::SetTimezone:
       handleTimezone(rot, click);
@@ -292,9 +291,7 @@ void DisplayUi::loop(EncoderInput& enc, GpsService& gps, WifiManager& wifi, NtpS
   lastDrawMs_ = millis();
 
   AppSettings settings;
-  if (settingsLock(pdMS_TO_TICKS(20))) {
-    settings = gSettings;
-    settingsUnlock();
+  if (settingsCopy(pdMS_TO_TICKS(20), &settings)) {
     idleOffMs_ = settings.oledIdleOffMs;
   }
 
@@ -340,7 +337,7 @@ void DisplayUi::loop(EncoderInput& enc, GpsService& gps, WifiManager& wifi, NtpS
       drawNtpStats(ntp);
       break;
     case UiMode::WebSetupHint:
-      drawWebHint();
+      drawWebHint(wifi);
       break;
     case UiMode::Message:
       drawMessage();
@@ -350,15 +347,16 @@ void DisplayUi::loop(EncoderInput& enc, GpsService& gps, WifiManager& wifi, NtpS
 }
 
 void DisplayUi::drawHome(const GpsStatus& st, const WifiManager& wifi, const AppSettings& settings) {
-  // Scheme A (128×64): top status chips · large time · SSID · IP+SYNC
+  // Scheme A (128×64): top status chips · large time · SSID · IP+S1/HLD/WAIT
   // Built-in font: size1 = 6×8, size2 = 12×16.
 
   static const uint8_t kIconSat[] PROGMEM = {
       0b00011000, 0b00111100, 0b01100110, 0b11011011,
       0b01100110, 0b00111100, 0b00011000, 0b00100100,
   };
-  const bool sta = wifi.isStaConnected();
-  const bool ap = gIpc.setupAp;
+  const WifiLinkSnapshot link = wifi.linkSnapshot();
+  const bool sta = link.staUp;
+  const bool ap = link.apUp || gIpc.setupAp;
 
   // --- Top bar (y=0..8) ---
   display_.drawBitmap(0, 0, kIconSat, 8, 8, SH110X_WHITE);
@@ -371,7 +369,7 @@ void DisplayUi::drawHome(const GpsStatus& st, const WifiManager& wifi, const App
 
   char right[14];
   if (sta) {
-    snprintf(right, sizeof(right), "%d", static_cast<int>(WiFi.RSSI()));
+    snprintf(right, sizeof(right), "%d", static_cast<int>(link.rssi));
   } else if (ap) {
     snprintf(right, sizeof(right), "AP");
   } else if (!settings.wifiSsid.isEmpty()) {
@@ -401,51 +399,59 @@ void DisplayUi::drawHome(const GpsStatus& st, const WifiManager& wifi, const App
   }
   clockLine(display_, 12, timeBuf);
 
-  // --- SSID (secondary) ---
+  // --- SSID (left) + firmware mark (right) ---
+  // Mark is short ("v1.1.20") so a glance after flash/OTA confirms the build.
   display_.setTextSize(1);
   String ssid;
   if (sta) {
-    ssid = WiFi.SSID();
-    if (ssid.isEmpty()) {
-      ssid = settings.wifiSsid;
-    }
+    ssid = link.staSsid[0] ? String(link.staSsid) : settings.wifiSsid;
   } else if (ap) {
-    ssid = WiFi.softAPSSID();
-    if (ssid.isEmpty()) {
-      ssid = String(AP_SSID_PREFIX) + "-****";
-    }
+    ssid = link.apSsid[0] ? String(link.apSsid) : (String(AP_SSID_PREFIX) + "-****");
   } else if (!settings.wifiSsid.isEmpty()) {
     ssid = settings.wifiSsid;
   } else {
     ssid = "(no WiFi)";
   }
-  // Max ~21 chars at size1; keep 20 + NUL
-  char ssidLine[21];
+  const char* mark = FW_MARK;
+  const int16_t markW = static_cast<int16_t>(strlen(mark) * 6);
+  const int16_t ssidMaxPx = static_cast<int16_t>(128 - markW - 6);  // 1-char gap
+  const size_t ssidMax = ssidMaxPx > 0 ? static_cast<size_t>(ssidMaxPx / 6) : 0;
+  char ssidLine[22];
   const size_t n = ssid.length();
-  if (n <= 20) {
+  if (n <= ssidMax) {
     memcpy(ssidLine, ssid.c_str(), n);
     ssidLine[n] = '\0';
+  } else if (ssidMax >= 4) {
+    memcpy(ssidLine, ssid.c_str(), ssidMax - 3);
+    ssidLine[ssidMax - 3] = '.';
+    ssidLine[ssidMax - 2] = '.';
+    ssidLine[ssidMax - 1] = '.';
+    ssidLine[ssidMax] = '\0';
   } else {
-    memcpy(ssidLine, ssid.c_str(), 17);
-    ssidLine[17] = '.';
-    ssidLine[18] = '.';
-    ssidLine[19] = '.';
-    ssidLine[20] = '\0';
+    ssidLine[0] = '\0';
   }
   display_.setCursor(0, 38);
   display_.print(ssidLine);
+  display_.setCursor(128 - markW, 38);
+  display_.print(mark);
 
-  // --- IP + SYNC ---
+  // --- IP + sync chip (same S1/HLD/WAIT vocabulary as web badge) ---
   display_.setCursor(0, 52);
   if (sta) {
-    display_.print(wifi.localIp());
+    display_.print(link.staIp);
   } else if (ap) {
-    display_.print(WiFi.softAPIP());
+    display_.print(link.apIp);
   } else {
     display_.print("--.--.--.--");
   }
 
-  const char* sync = st.timeValid ? "SYNC" : "WAIT";
+  const bool otaBusy = ipcOtaBusy();
+  const bool s1 = !otaBusy && st.timeValid && st.clockState == ClockState::Locked && st.ppsFresh;
+  const bool serving =
+      !otaBusy && st.timeValid &&
+      (st.clockState == ClockState::Locked || st.clockState == ClockState::Degraded ||
+       st.clockState == ClockState::Holdover);
+  const char* sync = s1 ? "S1" : (serving ? "HLD" : "WAIT");
   display_.setCursor(128 - static_cast<int16_t>(strlen(sync) * 6), 52);
   display_.print(sync);
 }
@@ -723,7 +729,7 @@ void DisplayUi::drawMessage() {
   }
 }
 
-void DisplayUi::drawWebHint() {
+void DisplayUi::drawWebHint(const WifiManager& wifi) {
   display_.setCursor(0, 0);
   display_.println("Web WiFi Setup");
   display_.setCursor(0, 16);
@@ -731,9 +737,9 @@ void DisplayUi::drawWebHint() {
   display_.setCursor(0, 28);
   display_.print("Pass:");
   String apPass;
-  if (settingsLock(pdMS_TO_TICKS(20))) {
-    apPass = effectiveSoftApPassword(gSettings);
-    settingsUnlock();
+  AppSettings s;
+  if (settingsCopy(pdMS_TO_TICKS(20), &s)) {
+    apPass = effectiveSoftApPassword(s);
   } else {
     apPass = derivedSoftApPassword();
   }
@@ -741,7 +747,8 @@ void DisplayUi::drawWebHint() {
   display_.setCursor(0, 40);
   display_.println("then /setup login");
   display_.setCursor(0, 52);
-  display_.print(WiFi.softAPIP());
+  const WifiLinkSnapshot link = wifi.linkSnapshot();
+  display_.print(link.apUp ? link.apIp : IPAddress(192, 168, 4, 1));
 }
 
 void DisplayUi::handleHome(int8_t rot, bool click) {
@@ -781,22 +788,26 @@ void DisplayUi::handleMenu(int8_t rot, bool click, bool longPress, WifiManager& 
       mode_ = UiMode::WebSetupHint;
       break;
     }
-    case MenuItem::SetStaticIp:
+    case MenuItem::SetStaticIp: {
       // Prefer the live STA address so the user edits the LAN IP they already have,
       // not SoftAP 192.168.4.1 or a stale NVS placeholder.
-      if (wifi.isStaConnected()) {
-        editIp_ = wifi.localIp();
-      } else if (settingsLock(pdMS_TO_TICKS(50))) {
-        editIp_ = gSettings.staticIp;
-        settingsUnlock();
-        // SoftAP subnet is never a useful static-IP seed.
-        if (editIp_[0] == 192 && editIp_[1] == 168 && editIp_[2] == 4) {
-          editIp_ = IPAddress(192, 168, 1, 50);
+      const WifiLinkSnapshot link = wifi.linkSnapshot();
+      if (link.staUp) {
+        editIp_ = link.staIp;
+      } else {
+        AppSettings s;
+        if (settingsCopy(pdMS_TO_TICKS(50), &s)) {
+          editIp_ = s.staticIp;
+          // SoftAP subnet is never a useful static-IP seed.
+          if (editIp_[0] == 192 && editIp_[1] == 168 && editIp_[2] == 4) {
+            editIp_ = IPAddress(192, 168, 1, 50);
+          }
         }
       }
       ipOctet_ = 0;
       mode_ = UiMode::SetIp;
       break;
+    }
     case MenuItem::UseDhcp: {
       NetRequest req;
       req.type = NetReqType::UseDhcp;
@@ -807,35 +818,39 @@ void DisplayUi::handleMenu(int8_t rot, bool click, bool longPress, WifiManager& 
     case MenuItem::Timezone:
       mode_ = UiMode::SetTimezone;
       break;
-    case MenuItem::AnomalyMode:
-      if (settingsLock(pdMS_TO_TICKS(50))) {
-        editPolicy_ = gSettings.anomalyPolicy;
-        settingsUnlock();
+    case MenuItem::AnomalyMode: {
+      AppSettings s;
+      if (settingsCopy(pdMS_TO_TICKS(50), &s)) {
+        editPolicy_ = s.anomalyPolicy;
       }
       mode_ = UiMode::SetAnomaly;
       break;
-    case MenuItem::NtpAcl:
-      if (settingsLock(pdMS_TO_TICKS(50))) {
-        editAclMode_ = gSettings.ntpAclMode;
-        editAclCount_ = gSettings.ntpAclCount;
-        settingsUnlock();
+    }
+    case MenuItem::NtpAcl: {
+      AppSettings s;
+      if (settingsCopy(pdMS_TO_TICKS(50), &s)) {
+        editAclMode_ = s.ntpAclMode;
+        editAclCount_ = s.ntpAclCount;
       }
       mode_ = UiMode::SetAcl;
       break;
-    case MenuItem::TempComp:
-      if (settingsLock(pdMS_TO_TICKS(50))) {
-        editTempComp_ = gSettings.tempComp;
-        settingsUnlock();
+    }
+    case MenuItem::TempComp: {
+      AppSettings s;
+      if (settingsCopy(pdMS_TO_TICKS(50), &s)) {
+        editTempComp_ = s.tempComp;
       }
       mode_ = UiMode::SetTempComp;
       break;
-    case MenuItem::ScreenOff:
-      if (settingsLock(pdMS_TO_TICKS(50))) {
-        editScreenIdx_ = oledIdleIndexForMs(gSettings.oledIdleOffMs);
-        settingsUnlock();
+    }
+    case MenuItem::ScreenOff: {
+      AppSettings s;
+      if (settingsCopy(pdMS_TO_TICKS(50), &s)) {
+        editScreenIdx_ = oledIdleIndexForMs(s.oledIdleOffMs);
       }
       mode_ = UiMode::SetScreen;
       break;
+    }
     case MenuItem::NtpStats:
       mode_ = UiMode::NtpStats;
       break;
@@ -920,7 +935,7 @@ void DisplayUi::handlePassword(int8_t rot, bool click, bool longPress) {
   }
 }
 
-void DisplayUi::handleSetIp(int8_t rot, bool click, bool longPress) {
+void DisplayUi::handleSetIp(int8_t rot, bool click, bool longPress, const WifiManager& wifi) {
   if (rot != 0) {
     int v = editIp_[ipOctet_] + rot;
     if (v < 0) {
@@ -935,15 +950,15 @@ void DisplayUi::handleSetIp(int8_t rot, bool click, bool longPress) {
     ipOctet_ = (ipOctet_ + 1) % 4;
   }
   if (longPress) {
-    AppSettings copy;
-    bool locked = false;
-    if (settingsLock(pdMS_TO_TICKS(100))) {
-      gSettings.staticIp = editIp_;
-      gSettings.useStaticIp = true;
+    AppSettings s;
+    if (settingsCopy(pdMS_TO_TICKS(100), &s)) {
+      s.staticIp = editIp_;
+      s.useStaticIp = true;
       // Prefer live STA gateway when editing on the same /24; else keep NVS or .1.
-      IPAddress gw = gSettings.gateway;
-      if (WiFi.status() == WL_CONNECTED) {
-        const IPAddress curGw = WiFi.gatewayIP();
+      IPAddress gw = s.gateway;
+      const WifiLinkSnapshot link = wifi.linkSnapshot();
+      if (link.staUp) {
+        const IPAddress curGw = link.gateway;
         if (curGw[0] == editIp_[0] && curGw[1] == editIp_[1] && curGw[2] == editIp_[2] &&
             static_cast<uint32_t>(curGw) != 0) {
           gw = curGw;
@@ -952,13 +967,8 @@ void DisplayUi::handleSetIp(int8_t rot, bool click, bool longPress) {
       if (gw[0] != editIp_[0] || gw[1] != editIp_[1] || gw[2] != editIp_[2]) {
         gw = IPAddress(editIp_[0], editIp_[1], editIp_[2], 1);
       }
-      gSettings.gateway = gw;
-      copy = gSettings;
-      settingsUnlock();
-      locked = true;
-    }
-    if (locked) {
-      gStore.save(copy);
+      s.gateway = gw;
+      settingsCommit(pdMS_TO_TICKS(100), s);
     }
     NetRequest req;
     req.type = NetReqType::ApplyStaticIp;
@@ -969,27 +979,34 @@ void DisplayUi::handleSetIp(int8_t rot, bool click, bool longPress) {
 }
 
 void DisplayUi::handleTimezone(int8_t rot, bool click) {
-  if (!settingsLock(pdMS_TO_TICKS(50))) {
+  if (rot == 0 && !click) {
+    return;
+  }
+  AppSettings s;
+  if (!settingsCopy(pdMS_TO_TICKS(50), &s)) {
     return;
   }
   if (rot != 0) {
-    int v = gSettings.timezoneHours + rot;
+    int v = s.timezoneHours + rot;
     if (v < -12) {
       v = 14;
     }
     if (v > 14) {
       v = -12;
     }
-    gSettings.timezoneHours = static_cast<int8_t>(v);
+    s.timezoneHours = static_cast<int8_t>(v);
   }
   if (click) {
-    AppSettings copy = gSettings;
-    settingsUnlock();
-    gStore.save(copy);
-    showMessage("TZ saved");
+    if (settingsCommit(pdMS_TO_TICKS(100), s)) {
+      showMessage("TZ saved");
+    }
     return;
   }
-  settingsUnlock();
+  // Live preview: RAM only (no NVS) so drawTimezone sees the new value.
+  if (settingsLock(pdMS_TO_TICKS(50))) {
+    gSettings.timezoneHours = s.timezoneHours;
+    settingsUnlock();
+  }
 }
 
 void DisplayUi::handleAnomaly(int8_t rot, bool click, bool longPress) {
@@ -1008,20 +1025,14 @@ void DisplayUi::handleAnomaly(int8_t rot, bool click, bool longPress) {
     editPolicy_ = static_cast<AnomalyPolicy>(v);
   }
   if (click) {
-    AppSettings copy;
-    bool locked = false;
-    if (settingsLock(pdMS_TO_TICKS(100))) {
-      gSettings.anomalyPolicy = editPolicy_;
+    AppSettings s;
+    if (settingsCopy(pdMS_TO_TICKS(100), &s)) {
+      s.anomalyPolicy = editPolicy_;
       const uint16_t defHold = anomalyPolicyDefaultHoldoverSec(editPolicy_);
       if (defHold > 0) {
-        gSettings.holdoverSec = defHold;
+        s.holdoverSec = defHold;
       }
-      copy = gSettings;
-      settingsUnlock();
-      locked = true;
-    }
-    if (locked) {
-      gStore.save(copy);
+      settingsCommit(pdMS_TO_TICKS(100), s);
     }
     showMessage(String("A:") + anomalyPolicyShortLabel(editPolicy_));
   }
@@ -1036,17 +1047,11 @@ void DisplayUi::handleAcl(int8_t rot, bool click, bool longPress) {
     editAclMode_ = (editAclMode_ == NtpAclMode::Off) ? NtpAclMode::AllowList : NtpAclMode::Off;
   }
   if (click) {
-    AppSettings copy;
-    bool locked = false;
-    if (settingsLock(pdMS_TO_TICKS(100))) {
-      gSettings.ntpAclMode = editAclMode_;
-      editAclCount_ = gSettings.ntpAclCount;
-      copy = gSettings;
-      settingsUnlock();
-      locked = true;
-    }
-    if (locked) {
-      gStore.save(copy);
+    AppSettings s;
+    if (settingsCopy(pdMS_TO_TICKS(100), &s)) {
+      s.ntpAclMode = editAclMode_;
+      editAclCount_ = s.ntpAclCount;
+      settingsCommit(pdMS_TO_TICKS(100), s);
     }
     showMessage(String("ACL:") + ntpAclModeMenuLabel(editAclMode_));
   }
@@ -1061,16 +1066,10 @@ void DisplayUi::handleTempComp(int8_t rot, bool click, bool longPress) {
     editTempComp_ = !editTempComp_;
   }
   if (click) {
-    AppSettings copy;
-    bool locked = false;
-    if (settingsLock(pdMS_TO_TICKS(100))) {
-      gSettings.tempComp = editTempComp_;
-      copy = gSettings;
-      settingsUnlock();
-      locked = true;
-    }
-    if (locked) {
-      gStore.save(copy);
+    AppSettings s;
+    if (settingsCopy(pdMS_TO_TICKS(100), &s)) {
+      s.tempComp = editTempComp_;
+      settingsCommit(pdMS_TO_TICKS(100), s);
     }
     showMessage(editTempComp_ ? "Tcomp On" : "Tcomp Off");
   }
@@ -1086,19 +1085,14 @@ void DisplayUi::handleScreen(int8_t rot, bool click, bool longPress) {
                      kOledIdleOptionCount;
   }
   if (click) {
-    AppSettings copy;
-    bool locked = false;
-    if (settingsLock(pdMS_TO_TICKS(100))) {
-      gSettings.oledIdleOffMs = kOledIdleOptions[editScreenIdx_];
-      copy = gSettings;
-      settingsUnlock();
-      locked = true;
+    AppSettings s;
+    if (settingsCopy(pdMS_TO_TICKS(100), &s)) {
+      s.oledIdleOffMs = kOledIdleOptions[editScreenIdx_];
+      if (settingsCommit(pdMS_TO_TICKS(100), s)) {
+        idleOffMs_ = s.oledIdleOffMs;  // effective immediately
+      }
+      showMessage(String("Screen ") + oledIdleMenuLabel(s.oledIdleOffMs));
     }
-    if (locked) {
-      gStore.save(copy);
-      idleOffMs_ = copy.oledIdleOffMs;  // effective immediately
-    }
-    showMessage(String("Screen ") + oledIdleMenuLabel(copy.oledIdleOffMs));
   }
 }
 
