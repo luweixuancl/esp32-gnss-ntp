@@ -4,7 +4,6 @@
 #include "gps_service.h"
 #include "ntp_server.h"
 #include "ota_service.h"
-#include "history_recorder.h"
 #include <ArduinoJson.h>
 #include <esp_system.h>
 #include <math.h>
@@ -90,10 +89,6 @@ void WebPortal::begin(WifiManager* wifi, GpsService* gps, NtpServer* ntp) {
       "/ota", HTTP_POST, [this]() { handleOtaDone(); }, [this]() { handleOtaUpload(); });
   server_.on("/status", HTTP_GET, [this]() { handleStatus(); });
   server_.on("/metrics", HTTP_GET, [this]() { handleMetrics(); });
-  server_.on("/history", HTTP_GET, [this]() { handleHistory(); });
-  server_.on("/history.csv", HTTP_GET, [this]() { handleHistoryCsv(); });
-  server_.on("/history/ctrl", HTTP_GET, [this]() { handleHistoryCtrl(); });
-  server_.on("/history/ctrl", HTTP_POST, [this]() { handleHistoryCtrl(); });
   server_.onNotFound([this]() {
     sendNoCache();
     const WifiLinkSnapshot link = wifi_ ? wifi_->linkSnapshot() : WifiLinkSnapshot{};
@@ -108,8 +103,7 @@ void WebPortal::begin(WifiManager* wifi, GpsService* gps, NtpServer* ntp) {
   });
   server_.begin();
   started_ = true;
-  Serial.println(
-      "HTTP on :80  (/ /status /metrics /history open; /cfg+/ota need login)");
+  Serial.println("HTTP on :80  (/ /status /metrics open; /cfg+/ota need login)");
 }
 
 void WebPortal::loop() {
@@ -334,16 +328,6 @@ void WebPortal::handleRoot() {
       "<div class='row'><span class='k'>内存</span><span class='v' id='heap'>--</span></div>"
       "<div class='row'><span class='k'>温度</span><span class='v' id='temp'>--</span></div>"
       "</div>"
-      "<div class='card'>"
-      "<div class='row'><span class='k'>历史录制</span><span class='v' id='histRec'>--</span></div>"
-      "<div class='row'><span class='k'>样本</span><span class='v' id='histCnt'>--</span></div>"
-      "<div class='row'><span class='k'>间隔</span><span class='v' id='histInt'>--</span></div>"
-      "<p style='margin:8px 0 0'>"
-      "<button type='button' id='histBtn' onclick='toggleHist()'>--</button> "
-      "<a href='/history'>JSON</a> · "
-      "<a href='/history.csv?last=3600'>CSV(1h)</a> · "
-      "<a href='/history.csv'>CSV(全部)</a></p>"
-      "</div>"
       "<p style='color:#64748b'>自动更新 1 Hz · JSON: <a href='/status'>/status</a> · "
       "指标: <a href='/metrics'>/metrics</a></p>"
       "<script>"
@@ -358,24 +342,7 @@ void WebPortal::handleRoot() {
       " const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60),x=s%60;"
       " return (d?d+'d ':'')+pad(h)+':'+pad(m)+':'+pad(x)}"
       "function setCls(el,c){el.className='v '+(c||'')}"
-      "let tickBusy=false, baseEpoch=0, baseMono=0, tzHours=0, histOn=false, histHw=false;"
-      "function paintHist(){"
-      " const rec=document.getElementById('histRec');"
-      " const btn=document.getElementById('histBtn');"
-      " if(!histHw){rec.textContent='不可用';setCls(rec,'');btn.disabled=true;btn.textContent='无 PSRAM';return;}"
-      " rec.textContent=histOn?'录制中':'已停止'; setCls(rec,histOn?'ok':'warn');"
-      " btn.disabled=false; btn.textContent=histOn?'停止录制':'开始录制';"
-      "}"
-      "async function toggleHist(){"
-      " if(!histHw)return;"
-      " try{"
-      "  const r=await fetch('/history/ctrl',{method:'POST',"
-      "   headers:{'Content-Type':'application/json'},"
-      "   body:JSON.stringify({recording:!histOn})});"
-      "  const j=await r.json();"
-      "  if(j.ok){histOn=!!j.recording; paintHist();}"
-      " }catch(e){}"
-      "}"
+      "let tickBusy=false, baseEpoch=0, baseMono=0, tzHours=0;"
       "function paintTime(){"
       " if(!baseEpoch)return;"
       " const ep=baseEpoch+Math.floor((Date.now()-baseMono)/1000);"
@@ -442,12 +409,6 @@ void WebPortal::handleRoot() {
       "  const tp=document.getElementById('temp');"
       "  tp.textContent=(c.tempC!=null)?(Number(c.tempC).toFixed(1)+'°C · '"
       "    +(c.tempComp?('补偿 '+Number(c.tempCorrPpm||0).toFixed(2)+' ppm'):'补偿关')):'--';"
-      "  histHw=!!j.historyEnabled; histOn=!!j.historyRecording;"
-      "  document.getElementById('histCnt').textContent="
-      "    (j.historyCount!=null?j.historyCount:'--')+' / '+(j.historyCapacity!=null?j.historyCapacity:'--');"
-      "  document.getElementById('histInt').textContent="
-      "    (j.historyIntervalSec!=null?(j.historyIntervalSec+' s'):'--');"
-      "  paintHist();"
       " }catch(e){}"
       " tickBusy=false;"
       "}"
@@ -1061,11 +1022,6 @@ void WebPortal::handleStatus() {
   JsonDocument doc;
   doc["fwVersion"] = FW_VERSION;
   doc["fwMark"] = FW_MARK;
-  doc["historyEnabled"] = gHistory.enabled();
-  doc["historyRecording"] = gHistory.recording();
-  doc["historyCount"] = gHistory.count();
-  doc["historyCapacity"] = gHistory.capacity();
-  doc["historyIntervalSec"] = gHistory.intervalSec();
   doc["otaRunning"] = gOta.runningLabel();
   doc["otaNext"] = gOta.nextLabel();
   doc["otaNextSize"] = gOta.nextSlotSize();
@@ -1205,278 +1161,9 @@ void WebPortal::handleStatus() {
   server_.send(200, "application/json", out);
 }
 
-void WebPortal::handleHistory() {
-  const HistorySummary s = gHistory.summary();
-  JsonDocument doc;
-  doc["enabled"] = s.enabled;
-  doc["recording"] = s.recording;
-  doc["reason"] = s.reason;
-  doc["version"] = s.version;
-  doc["capacity"] = s.capacity;
-  doc["count"] = s.count;
-  doc["intervalSec"] = s.intervalSec;
-  doc["seq"] = s.seq;
-  doc["oldestUtc"] = s.oldestUtc;
-  doc["newestUtc"] = s.newestUtc;
-  doc["psramBytes"] = s.psramBytes;
-  doc["gaps"] = s.gaps;
-  doc["otaSkipped"] = s.otaSkipped;
-  if (s.enabled) {
-    JsonObject sc = doc["stateCounts"].to<JsonObject>();
-    sc["ACQ"] = s.stateCounts[static_cast<uint8_t>(ClockState::Acquiring)];
-    sc["LCK"] = s.stateCounts[static_cast<uint8_t>(ClockState::Locked)];
-    sc["DEG"] = s.stateCounts[static_cast<uint8_t>(ClockState::Degraded)];
-    sc["HLD"] = s.stateCounts[static_cast<uint8_t>(ClockState::Holdover)];
-    sc["UNS"] = s.stateCounts[static_cast<uint8_t>(ClockState::Unsynced)];
-    if (s.haveFreq) {
-      JsonObject f = doc["freqPpm"].to<JsonObject>();
-      f["min"] = s.freqMin;
-      f["max"] = s.freqMax;
-      f["mean"] = s.freqMean;
-    }
-  }
-  String out;
-  serializeJson(doc, out);
-  sendNoCache();
-  server_.send(200, "application/json", out);
-}
-
-void WebPortal::handleHistoryCtrl() {
-  sendNoCache();
-  if (!gHistory.enabled()) {
-    server_.send(400, "application/json",
-                 "{\"ok\":false,\"error\":\"history unavailable (no PSRAM)\"}");
-    return;
-  }
-
-  bool want = gHistory.recording();
-  bool have = false;
-  if (server_.hasArg("recording")) {
-    const String v = server_.arg("recording");
-    want = !(v == "0" || v == "false" || v == "off" || v == "no");
-    have = true;
-  }
-  if (server_.method() == HTTP_POST && server_.hasArg("plain")) {
-    JsonDocument doc;
-    if (!deserializeJson(doc, server_.arg("plain")) && !doc["recording"].isNull()) {
-      want = doc["recording"].as<bool>();
-      have = true;
-    }
-  }
-  if (!have) {
-    JsonDocument out;
-    out["ok"] = true;
-    out["recording"] = gHistory.recording();
-    out["enabled"] = true;
-    out["count"] = gHistory.count();
-    String body;
-    serializeJson(out, body);
-    server_.send(200, "application/json", body);
-    return;
-  }
-
-  gHistory.setRecording(want);
-  AppSettings s;
-  if (settingsCopy(pdMS_TO_TICKS(100), &s)) {
-    s.historyRecord = want;
-    settingsCommit(pdMS_TO_TICKS(200), s);
-  }
-
-  JsonDocument out;
-  out["ok"] = true;
-  out["recording"] = gHistory.recording();
-  out["enabled"] = true;
-  out["count"] = gHistory.count();
-  String body;
-  serializeJson(out, body);
-  server_.send(200, "application/json", body);
-}
-
-namespace {
-
-constexpr char kHistoryCsvHeader[] =
-    "utcEpoch,state,holdoverSec,residualMs,freqPpm,tempC,tempRefC,tempCorrPpm,"
-    "tempComp,qualityMs,ppsCount,ppsFresh,satellites,fix,rssi,gap\n";
-
-int formatHistoryCsvLine(char* line, size_t lineCap, const HistorySample& s,
-                         int16_t coeffCenti) {
-  const float freq = static_cast<float>(s.freqPpmX100) * 0.01f;
-  const bool haveT = s.tempCenti != INT16_MIN;
-  const bool haveTr = s.tempRefCenti != INT16_MIN;
-  float tempC = haveT ? (s.tempCenti * 0.01f) : NAN;
-  float tempRef = haveTr ? (s.tempRefCenti * 0.01f) : NAN;
-  float tempCorr = 0.0f;
-  if ((s.flags & HistTempComp) && haveT && haveTr) {
-    tempCorr = tempCoeffPpmPerC(coeffCenti) * (tempC - tempRef);
-    if (tempCorr > CLK_TEMP_CORR_MAX_PPM) {
-      tempCorr = CLK_TEMP_CORR_MAX_PPM;
-    }
-    if (tempCorr < -CLK_TEMP_CORR_MAX_PPM) {
-      tempCorr = -CLK_TEMP_CORR_MAX_PPM;
-    }
-  }
-  const char* stLabel = clockStateLabel(static_cast<ClockState>(s.state));
-  char tBuf[16] = "";
-  char trBuf[16] = "";
-  if (haveT) {
-    snprintf(tBuf, sizeof(tBuf), "%.2f", static_cast<double>(tempC));
-  }
-  if (haveTr) {
-    snprintf(trBuf, sizeof(trBuf), "%.2f", static_cast<double>(tempRef));
-  }
-  return snprintf(
-      line, lineCap,
-      "%lu,%s,%u,%d,%.4f,%s,%s,%.4f,%u,%u,%lu,%u,%u,%u,%d,%u\n",
-      static_cast<unsigned long>(s.utcEpoch), stLabel,
-      static_cast<unsigned>(s.holdoverSec), static_cast<int>(s.residualMs),
-      static_cast<double>(freq), tBuf, trBuf, static_cast<double>(tempCorr),
-      (s.flags & HistTempComp) ? 1u : 0u, static_cast<unsigned>(s.qualityMs),
-      static_cast<unsigned long>(s.ppsCount), (s.flags & HistPpsFresh) ? 1u : 0u,
-      static_cast<unsigned>(s.satellites), (s.flags & HistFix) ? 1u : 0u,
-      static_cast<int>(s.rssi), (s.flags & HistGap) ? 1u : 0u);
-}
-
-size_t copyHistoryBatchRetry(const HistoryExportCursor& cur, uint32_t i,
-                             HistorySample* batch, size_t cap) {
-  for (int attempt = 0; attempt < 25; ++attempt) {
-    const size_t got = gHistory.copyLogical(cur, i, batch, cap);
-    if (got > 0) {
-      return got;
-    }
-    delay(2);
-    yield();
-  }
-  return 0;
-}
-
-}  // namespace
-
-void WebPortal::handleHistoryCsv() {
-  sendNoCache();
-  if (ipcOtaBusy()) {
-    server_.send(503, "text/plain", "OTA busy");
-    return;
-  }
-  if (!gHistory.enabled()) {
-    server_.sendHeader("Content-Length", String(strlen(kHistoryCsvHeader)));
-    server_.send(200, "text/csv; charset=utf-8", kHistoryCsvHeader);
-    return;
-  }
-
-  uint32_t lastSec = 0;
-  uint32_t maxRows = 0;
-  if (server_.hasArg("last")) {
-    lastSec = static_cast<uint32_t>(strtoul(server_.arg("last").c_str(), nullptr, 10));
-  }
-  if (server_.hasArg("max")) {
-    maxRows = static_cast<uint32_t>(strtoul(server_.arg("max").c_str(), nullptr, 10));
-  }
-
-  // ?last=<seconds of wall time> → sample rows at HISTORY_INTERVAL_SEC.
-  uint32_t lastRows = 0;
-  if (lastSec > 0) {
-    lastRows = lastSec / HISTORY_INTERVAL_SEC;
-    if (lastRows == 0) {
-      lastRows = 1;
-    }
-  }
-
-  int16_t coeffCenti = CLK_TEMP_COEFF_CENTI;
-  AppSettings settings;
-  if (settingsCopy(pdMS_TO_TICKS(50), &settings)) {
-    coeffCenti = settings.tempCoeffCenti;
-  }
-
-  const HistoryExportCursor cur = gHistory.beginExport(lastRows, maxRows);
-
-  char line[192];
-  HistorySample batch[HISTORY_CSV_BATCH_ROWS];
-
-  // Pass 1: measure exact body length so browsers get Content-Length (avoids
-  // chunked-transfer hangs that stall mid-download with unknown size).
-  size_t totalBytes = strlen(kHistoryCsvHeader);
-  for (uint32_t i = 0; i < cur.limit;) {
-    const size_t got = copyHistoryBatchRetry(cur, i, batch, HISTORY_CSV_BATCH_ROWS);
-    if (got == 0) {
-      server_.send(503, "text/plain", "history busy");
-      return;
-    }
-    for (size_t k = 0; k < got; ++k) {
-      const int n = formatHistoryCsvLine(line, sizeof(line), batch[k], coeffCenti);
-      if (n > 0) {
-        totalBytes += static_cast<size_t>(n);
-      }
-    }
-    i += static_cast<uint32_t>(got);
-    ipcKickNet();
-    yield();
-  }
-
-  server_.sendHeader("Connection", "close");
-  server_.sendHeader("Content-Disposition", "attachment; filename=\"history.csv\"");
-  server_.setContentLength(totalBytes);
-  server_.send(200, "text/csv; charset=utf-8", "");
-  if (!server_.client().connected()) {
-    return;
-  }
-  server_.sendContent(kHistoryCsvHeader);
-
-  // Pass 2: emit the same window.
-  String chunk;
-  chunk.reserve(HISTORY_CSV_CHUNK_BYTES + 192);
-  size_t sent = strlen(kHistoryCsvHeader);
-  for (uint32_t i = 0; i < cur.limit;) {
-    if (!server_.client().connected()) {
-      return;
-    }
-    const size_t got = copyHistoryBatchRetry(cur, i, batch, HISTORY_CSV_BATCH_ROWS);
-    if (got == 0) {
-      break;
-    }
-    for (size_t k = 0; k < got; ++k) {
-      const int n = formatHistoryCsvLine(line, sizeof(line), batch[k], coeffCenti);
-      if (n <= 0) {
-        continue;
-      }
-      chunk += line;
-      sent += static_cast<size_t>(n);
-      if (chunk.length() >= HISTORY_CSV_CHUNK_BYTES) {
-        server_.sendContent(chunk);
-        chunk = "";
-        ipcKickNet();
-        yield();
-      }
-    }
-    i += static_cast<uint32_t>(got);
-    ipcKickNet();
-    yield();
-  }
-  if (!chunk.isEmpty() && server_.client().connected()) {
-    server_.sendContent(chunk);
-  }
-  // If we undershot Content-Length (busy mid-pass2), pad with spaces so the
-  // client can finish; prefer empty lines that keep CSV parseable-ish.
-  if (sent < totalBytes && server_.client().connected()) {
-    const size_t pad = totalBytes - sent;
-    String filler;
-    filler.reserve(pad > 256 ? 256 : pad);
-    while (filler.length() < pad && filler.length() < 256) {
-      filler += '\n';
-    }
-    size_t left = pad;
-    while (left > 0 && server_.client().connected()) {
-      const size_t n = left < filler.length() ? left : filler.length();
-      server_.sendContent(filler.c_str(), n);
-      left -= n;
-      yield();
-    }
-  }
-  server_.client().stop();
-}
-
 void WebPortal::handleMetrics() {
   // Prometheus-ish text; no auth (read-only, same as /status).
-  char buf[1280];
+  char buf[768];
   const uint32_t served = ntp_ ? ntp_->servedCount() : 0;
   const uint32_t rate = ntp_ ? ntp_->rateLimitedCount() : 0;
   const uint32_t denied = ntp_ ? ntp_->deniedCount() : 0;
@@ -1489,12 +1176,6 @@ void WebPortal::handleMetrics() {
   const unsigned aclMode = ntp_ ? static_cast<unsigned>(ntp_->aclMode()) : 0;
   const unsigned aclCount = ntp_ ? ntp_->aclCount() : 0;
   const unsigned otaBusy = ipcOtaBusy() ? 1 : 0;
-  const unsigned histEn = gHistory.enabled() ? 1 : 0;
-  const unsigned histRec = gHistory.recording() ? 1 : 0;
-  const unsigned histCount = gHistory.count();
-  const unsigned histCap = gHistory.capacity();
-  const unsigned histGaps = gHistory.gaps();
-  const unsigned histInt = gHistory.intervalSec();
   snprintf(buf, sizeof(buf),
            "# TYPE ntp_requests_total counter\n"
            "ntp_requests_total %lu\n"
@@ -1518,25 +1199,13 @@ void WebPortal::handleMetrics() {
            "ntp_clients %u\n"
            "# TYPE ota_busy gauge\n"
            "ota_busy %u\n"
-           "# TYPE history_enabled gauge\n"
-           "history_enabled %u\n"
-           "# TYPE history_recording gauge\n"
-           "history_recording %u\n"
-           "# TYPE history_count gauge\n"
-           "history_count %u\n"
-           "# TYPE history_capacity gauge\n"
-           "history_capacity %u\n"
-           "# TYPE history_interval_seconds gauge\n"
-           "history_interval_seconds %u\n"
-           "# TYPE history_gaps_total counter\n"
-           "history_gaps_total %u\n"
            "# TYPE esp_free_heap_bytes gauge\n"
            "esp_free_heap_bytes %u\n",
            static_cast<unsigned long>(reqs), static_cast<unsigned long>(served),
            static_cast<unsigned long>(rate), static_cast<unsigned long>(denied),
            static_cast<unsigned long>(dropped), static_cast<unsigned long>(aclDenied),
            static_cast<unsigned long>(otaRefused), aclMode, aclCount,
-           static_cast<unsigned>(clients), otaBusy, histEn, histRec, histCount, histCap,
-           histInt, histGaps, heap);
+           static_cast<unsigned>(clients), otaBusy, heap);
   server_.send(200, "text/plain; charset=utf-8", buf);
 }
+

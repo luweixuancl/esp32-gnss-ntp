@@ -9,7 +9,7 @@
 
 ## Current app build
 
-- Mark: **v1.1.13** (`FW_MARK`)
+- Mark: **v1.1.14** (`FW_MARK`)
 - Branch tip when refreshed: see git history on `dist/firmware*.bin`
 
 ## Keep WiFi / settings

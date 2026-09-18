@@ -15,14 +15,13 @@ GNSS：大夏龙雀 DX-GP22（GPS/北斗/GLONASS 多模，9600 8N1，定位后 1
 2. **本地时钟**：PPS 驯服 + NMEA 交叉检核（residual 告警）+ EMA 频偏估计 + Holdover 守时外推；异常策略可选 Refuse / Holdover 30s / 300s（NVS 持久化）
 3. **OLED 状态页**：大字体本地时间、WiFi SSID/IP、星数·时钟态 / RSSI·AP 角标、SYNC/WAIT；无操作自动息屏防烧屏（档位可调，旋钮唤醒）
 4. **旋转编码器菜单**：扫 WiFi、网页配网、静态 IP（ARP 冲突探测）、时区、异常策略、NTP ACL、温度补偿、息屏、NTP 统计、重启
-5. **网页门户**：`/` 只读状态页（1 Hz 刷新）；`/setup` `/login` 登录后进 `/cfg` 设置（会话 Cookie ~30 min）；`/status` `/metrics` `/history` 只读开放
+5. **网页门户**：`/` 只读状态页（1 Hz 刷新）；`/setup` `/login` 登录后进 `/cfg` 设置（会话 Cookie ~30 min）；`/status` `/metrics` 只读开放
 6. **WiFi 永久重连**：掉线后 30s 封顶退避无限重试；**绝不自动切 SoftAP**——配网仅在「开机无已存 SSID」或「菜单 Web Setup 手动触发」时开启
 7. **NTP B1 限流 + B3 ACL**：每 IP 4 req/s 超限 KoD `RATE`、持续超限 `DENY` 冷却、全局 32 pkt/s 静默丢弃；ACL AllowList（默认 Off，最多 8 条）
 8. **状态灯**：C3 双色 LED（D4 网络/D5 GNSS）；S3 板载 RGB 三通道（R=网络 / G=时钟 / B=NTP 授时中），语义见下
 9. **B4 可观测**：OLED NTP Stats、串口 60s 摘要、`/metrics` Prometheus 文本
 10. **多目标构建**：PlatformIO 多环境，源码 100% 共享，引脚差异集中在 `include/config.h` 目标条件宏
 11. **Web OTA**：登录 `/cfg` 上传 `firmware.bin`；升级期间拒绝 NTP（KoD `RSTR`）并让出 CPU/Flash；琥珀/绿/红状态灯；启动确认后取消回滚；NVS 保留；串口升级仍为兜底
-12. **PSRAM 诊断历史（S3）**：约 7 天 × 1/min 环形缓冲；状态页可开始/停止录制；`GET /history` 概要、`GET /history.csv?last=`（秒）流式导出（带 Content-Length）；C3 返回 `enabled:false`；OTA 期间停采
 
 ## 硬件连接
 
@@ -115,9 +114,9 @@ esptool --chip esp32s3 --port COM5 --baud 921600 write_flash 0x0 merged_firmware
 
 1. **限流（B1）**：每 IP 4 req/s → KoD `RATE`；持续超限 → `DENY` 冷却 ~60s；全局 ~32 pkt/s 静默丢弃
 2. **ACL（B3）**：默认 Off；AllowList 只放行可信 IP（≤8 条），空名单=拒绝全部
-3. **管理面**：`/` `/status` `/metrics` `/history` 只读；`/cfg` `/save` `/scan` `/ota` 需登录会话 Cookie；`/setup` 仅登录页
+3. **管理面**：`/` `/status` `/metrics` 只读；`/cfg` `/save` `/scan` `/ota` 需登录会话 Cookie；`/setup` 仅登录页
 4. **升级保配置**：优先 Web OTA（`/cfg` 上传 app `firmware.bin`）或串口只刷 app `@0x10000`；勿全片擦除（NVS 里的 WiFi/口令/ACL 会丢）
-5. **观测**：OLED NTP Stats、串口 `[ntp]` 摘要（60s）、`/metrics`；`/status` 字段含 `served` / `rateLimited` / `denied` / `dropped` / `clients` / `ntpAclMode` / `clock.tempRefC` / `fwVersion` / `otaRunning`；S3 可用 `tools/history_pull.py --host <IP>` 拉 `/history`
+5. **观测**：OLED NTP Stats、串口 `[ntp]` 摘要（60s）、`/metrics`；`/status` 字段含 `served` / `rateLimited` / `denied` / `dropped` / `clients` / `ntpAclMode` / `clock.tempRefC` / `fwVersion` / `otaRunning`
 
 ## 实测表现
 
@@ -129,7 +128,7 @@ esptool --chip esp32s3 --port COM5 --baud 921600 write_flash 0x0 merged_firmware
 | 失效链（两芯） | 断电 1.5–2.5s 进 HLD → 300s 准时 UNS 诚实拒绝 → 恢复 3–20s 无跳秒 |
 | C3 6.7h / S3 6.1h 长测 | LCK ≈100%、residual 零漏、无老化漂移 |
 
-详细数据：[docs/](docs/)——模块边界 [module_boundaries.md](docs/module_boundaries.md)、PSRAM 历史 [psram_history_design.md](docs/psram_history_design.md) / [板测单](docs/psram_history_board_test.md)、外部时钟草案 [ext_clock_design.md](docs/ext_clock_design.md)、时钟设计 [local_clock_gps_check.md](docs/local_clock_gps_check.md)、WiFi FSM [wifi_event_fsm.md](docs/wifi_event_fsm.md)、两次 NTP 比对评价 [clock_eval_two_ntp_cmp.md](docs/clock_eval_two_ntp_cmp.md)、C3 长测 [clock_drift_20260916.md](docs/clock_drift_20260916.md)、S3 验收 [esp32s3_flash_test_20260917.md](docs/esp32s3_flash_test_20260917.md)、S3 长测 [s3_clock_drift_20260917.md](docs/s3_clock_drift_20260917.md)。
+详细数据：[docs/](docs/)——模块边界 [module_boundaries.md](docs/module_boundaries.md)、外部时钟草案 [ext_clock_design.md](docs/ext_clock_design.md)、时钟设计 [local_clock_gps_check.md](docs/local_clock_gps_check.md)、WiFi FSM [wifi_event_fsm.md](docs/wifi_event_fsm.md)、两次 NTP 比对评价 [clock_eval_two_ntp_cmp.md](docs/clock_eval_two_ntp_cmp.md)、C3 长测 [clock_drift_20260916.md](docs/clock_drift_20260916.md)、S3 验收 [esp32s3_flash_test_20260917.md](docs/esp32s3_flash_test_20260917.md)、S3 长测 [s3_clock_drift_20260917.md](docs/s3_clock_drift_20260917.md)。
 
 ## 客户端测试
 
@@ -160,7 +159,7 @@ PlatformIO + Arduino（espressif32）。注意：工程路径含非 ASCII 时 Wi
 include/     配置与头文件（引脚目标条件宏；app_ipc 跨任务快照）
 src/         固件源码（FreeRTOS 任务：time / net / ui；OtaService 等模块）
 docs/        设计方案与测试报告（C3/S3 全系列）
-tools/       辅助脚本（NTP 比对、history_pull、失效链/长时段监测）
+tools/       辅助脚本（NTP 比对、失效链/长时段监测）
 dist/        固件产物（C3 app / S3 app / S3 整片合并）
 platformio.ini
 ```

@@ -4,11 +4,11 @@
 // OLED mark is unambiguous after OTA / serial upgrade.
 #define FW_VER_MAJOR         1
 #define FW_VER_MINOR         1
-#define FW_VER_PATCH         13
-// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.13").
-#define FW_MARK              "v1.1.13"
+#define FW_VER_PATCH         14
+// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.14").
+#define FW_MARK              "v1.1.14"
 // Full string for /status, /cfg, serial, OTA pages.
-#define FW_VERSION           "1.1.13"
+#define FW_VERSION           "1.1.14"
 // After a pending-verify OTA boot, wait until tasks are alive this long before
 // cancelling rollback — catches crash-loops in GPS/WiFi/task bring-up.
 #define OTA_MARK_VALID_AFTER_MS  30000
@@ -232,12 +232,4 @@
 // Restart if free heap stays below this (fragmentation / leak).
 #define HEAP_RESTART_BYTES         10240
 #define HEAP_RESTART_SAMPLES            5
-
-// PSRAM diagnostic ring (S3 only; see docs/psram_history_design.md).
-// 1 sample / minute — 7 days fits in ~242 KB SPIRAM.
-#define HISTORY_INTERVAL_SEC            60u
-#define HISTORY_INTERVAL_MS    (HISTORY_INTERVAL_SEC * 1000u)
-#define HISTORY_CAPACITY             10080u  // 7 d × 1/min
-#define HISTORY_CSV_BATCH_ROWS          32u
-#define HISTORY_CSV_CHUNK_BYTES       1536u
 

@@ -1,8 +1,8 @@
 # S3 特性深挖路线图（PPS 硬件捕获 / PSRAM 历史 / OTA / 外部时钟）
 
-> 状态：立项排序已定（2026-09-18：**① RMT【已封存】→ ② OTA【板测通过 v1.1.7】→ ③ PSRAM 历史【已实现 v1.1.8/1.1.9，待板测】→ ④ 外部时钟【草案，待采购】**）
+> 状态：立项排序已定（2026-09-18：**① RMT【已封存】→ ② OTA【板测通过 v1.1.7】→ ③ PSRAM 历史【已取消 v1.1.14】→ ④ 外部时钟【草案，待采购】**）
 > 背景：S3 移植转正后的特性深挖规划，基于 2026-09-18 代码/特性审查；各项目启动前按本档「验收准则」细化
-> 修订：③ 见 [psram_history_design.md](psram_history_design.md)；④ 草案见 [ext_clock_design.md](ext_clock_design.md)
+> 修订：③ 已取消；④ 草案见 [ext_clock_design.md](ext_clock_design.md)
 > 相关：[esp32s3_devkitc1_hw.md](esp32s3_devkitc1_hw.md)、[esp32s3_flash_test_20260917.md](esp32s3_flash_test_20260917.md)、[s3_clock_drift_20260917.md](s3_clock_drift_20260917.md)
 
 ## 0. 现状基线
@@ -11,7 +11,7 @@
 |---|---|
 | 双核 LX7 @240MHz | ✅ task-time 独占 core 1（移植核心收益） |
 | 16MB QIO flash | ✅ default_16MB 分区；app1/OTA 槽位经 Web `/ota` 可写 |
-| 8MB OPI PSRAM | ✅ HistoryRecorder ~2.1 MB 环（v1.1.8+）；余量约 6 MB |
+| 8MB OPI PSRAM | 闲置（history 已取消）；可留给后续特性 |
 | 新版温度传感器 | ✅ `temperatureRead()`（tcmp 显示/日志） |
 | RMT 4TX | 1 路用于 RGB 状态灯；**RX 4 路全闲置** |
 | 3× UART | 2 路在用（调试/GNSS），第 3 路闲置 |
@@ -24,13 +24,10 @@
 - **重开条件**：迁移 Arduino 3.x / IDF 5（新 `rmt` 驱动 + S3 RX 专属通道模型）后再评估；代码保留（`GPS_PPS_RMT_EN` 置 1 即回实验态），探索过程全部入档。
 - **验收准则/工作量**：见下（供重开时引用）
 
-## 2. 项目二：PSRAM 诊断环形缓冲 + `/history`（第 3 位）——**已实现（v1.1.8–1.1.10），待板测**
+## 2. 项目二：PSRAM 诊断环形缓冲 + `/history`（第 3 位）——**已取消（v1.1.14）**
 
-- **方案文档**：[psram_history_design.md](psram_history_design.md)
-- **板测执行单**：[psram_history_board_test.md](psram_history_board_test.md)
-- **代码**：`HistoryRecorder`；`GET /history`、`GET /history.csv`；`/metrics` `history_*`；OTA 停采；C3 `enabled:false`；PSRAM 分配失败不回退 DRAM
-- **工具**：`tools/history_pull.py`（只读拉 JSON/CSV）
-- **验收**：见方案 §9（S3 自录 + CSV；C3 关闭）
+- 自录环 / `/history` / CSV / 录制开关已从固件移除（用户要求取消）。
+- PSRAM 仍可留给后续特性（如外部时钟缓冲）。
 
 ## 3. 项目三：OTA 双分区升级——**已实现并板测通过（v1.1.7）**
 
@@ -47,7 +44,7 @@
 - **候选路径**：a. DS3231 类 TCXO RTC；b. 外部 OCXO；c. 第二 PPS 输入。
 - **价值**：守时从「分钟级」到「小时级」——唯一能改变产品精度等级的方向。
 - **前置**：购件确认后再写 `ExtClock` + Holdover 挂钩；未焊接时 `enabled=false`。
-- **验收**：拔 GNSS 电源 NTP offset 漂移 ≤ 目标值（DS3231 约 ±2ppm×300s≈0.6 ms）；可与 `/history.csv` 同窗对比。
+- **验收**：拔 GNSS 电源 NTP offset 漂移 ≤ 目标值（DS3231 约 ±2ppm×300s≈0.6 ms）；可用外部 drift monitor 同窗对比。
 
 ## 5. 明确不做
 

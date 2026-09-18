@@ -1,7 +1,7 @@
 # 外部高品质时钟源（方案草案）
 
 > 状态：**草案 / 未立项采购**（2026-09-18）  
-> 路线图项：④（① RMT 封存 · ② OTA 验收 · ③ PSRAM history 已实现 → 本项）  
+> 路线图项：④（① RMT 封存 · ② OTA 验收 · ③ PSRAM history 已取消 → 本项）  
 > 相关：[s3_deep_dive_roadmap.md](s3_deep_dive_roadmap.md)、[local_clock_gps_check.md](local_clock_gps_check.md)
 
 ## 1. 为什么要做
@@ -69,4 +69,4 @@ LocalClock
 1. 选定模块（推荐 DS3231 模块带电池）。  
 2. 定 S3/C3 的 I2C 引脚与是否用 SQW。  
 3. 实现 `ExtClock` + `LocalClock` Holdover 挂钩 + `/status` 字段。  
-4. 拔天线对比长测（可与 `/history.csv` 同窗）。
+4. 拔天线对比长测。
