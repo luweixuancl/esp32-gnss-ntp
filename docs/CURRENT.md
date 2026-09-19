@@ -1,7 +1,7 @@
 # 当前基线（与代码一致）
 
 > 更新日期：2026-09-19  
-> **`main` = v1.1.36**（`GPS_PPS_RMT_EN=0`，GPIO 授时）· 合入自 `cursor/work-a05e` @ `ab96148`  
+> **`main` = v1.1.36**（`GPS_PPS_RMT_EN=0`，GPIO 授时）· [Release](https://github.com/luweixuancl/esp32-gnss-ntp/releases/tag/v1.1.36)  
 > Web OTA 往返 **PASS** — [ota_deploy_v1136_20260919.md](ota_deploy_v1136_20260919.md)  
 > RMT 板测已结案 FAIL — [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)
 

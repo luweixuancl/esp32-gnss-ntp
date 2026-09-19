@@ -9,12 +9,12 @@
 
 ## Current build
 
-- Mark: **v1.1.36**
+- Mark: **v1.1.36** · [GitHub Release](https://github.com/luweixuancl/esp32-gnss-ntp/releases/tag/v1.1.36)
 - `GPS_PPS_RMT_EN=0`（RMT 板测搁置）— [`docs/rmt_pps_board_test_CLOSED_20260919.md`](../docs/rmt_pps_board_test_CLOSED_20260919.md)
 - Web OTA 往返 **PASS** — [`docs/ota_deploy_v1136_20260919.md`](../docs/ota_deploy_v1136_20260919.md)
 - Debug log: [`docs/debug_log.md`](../docs/debug_log.md)
 - Platform: pioarduino 55.03.311（Arduino 3.3.11 / IDF 5.5.5）
-- On **`main`**（及 `cursor/work-a05e`）
+- On **`main`** / tag **`v1.1.36`**
 
 ## Verify
 
