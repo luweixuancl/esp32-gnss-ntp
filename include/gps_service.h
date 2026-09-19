@@ -58,6 +58,7 @@ struct GpsStatus {
     uint32_t idfLastD1Us = 0;
     uint32_t idfEmptyFrames = 0;
     uint32_t idfDataFrames = 0;
+    uint32_t idfJunkFrames = 0;  // done cb with no usable edge (zero/odd symbols)
     uint32_t idfRawStatus = 0;  // unused on IDF5 (kept for /status schema)
     uint8_t idfStage = 0;
     int idfErr = 0;

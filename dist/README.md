@@ -9,7 +9,7 @@
 
 ## Current build
 
-- Mark: **v1.1.29**
+- Mark: **v1.1.30**
 - **`GPS_PPS_RMT_EN=1`**（RMT PPS 板测构建）— 流程见 [`docs/rmt_pps_board_test_v1129.md`](../docs/rmt_pps_board_test_v1129.md)
 - Platform: pioarduino 55.03.311（Arduino 3.3.11 / IDF 5.5.5）
 - Branch tip: `cursor/work-a05e`
@@ -17,7 +17,7 @@
 ## Verify
 
 ```text
-wc -c firmware_esp32s3.bin   # 1094432
+wc -c firmware_esp32s3.bin   # 1094608
 sha256sum -c SHA256SUMS
 ```
 

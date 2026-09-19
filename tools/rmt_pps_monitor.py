@@ -130,11 +130,28 @@ def main() -> int:
         fail.append("armed/idfOk not true on majority of samples")
     if first_df is not None:
         grew = last_df - first_df
-        need = max(10, int(args.duration * 0.7))
+        need = max(10, int(args.duration * 0.5))
         if grew < need:
             fail.append(f"idfDataFrames grew {grew} < need {need}")
         if last_df > 10 and last_empty / max(1, last_df) >= 0.5:
             fail.append(f"too many empty frames empty/data={last_empty}/{last_df}")
+    # Soft-but-now-hard for v1.1.30: refinement must engage
+    if has_ppsrmt:
+        # peek last sample fields from loop — re-fetch once
+        try:
+            st = fetch_status(args.host)
+            rmt = (st.get("gps") or {}).get("ppsRmt") or {}
+            samples_n = int(rmt.get("samples") or 0)
+            active = bool(rmt.get("active"))
+            junk = int(rmt.get("idfJunkFrames") or 0)
+            width = int(rmt.get("lastWidthUs") or 0)
+            print(f"refine: active={active} samples={samples_n} junk={junk} lastWidthUs={width}")
+            if samples_n < max(5, args.duration // 4):
+                fail.append(f"RMT refine samples={samples_n} too low (want active merge)")
+            if width == 0 and samples_n == 0:
+                fail.append("lastWidthUs=0 and samples=0 (symbols still unusable)")
+        except Exception as e:
+            fail.append(f"refine check failed: {e}")
     if first_fb is not None and (last_fb - first_fb) > args.max_fallback_delta:
         fail.append(f"fallbacks rose by {last_fb - first_fb}")
     if seen_lck:

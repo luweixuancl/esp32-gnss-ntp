@@ -1,0 +1,30 @@
+RMT PPS 板测原始记录包（v1.1.29 · 2026-09-19）
+=================================================
+
+设备: ESP32-S3 DevKitC-1 N16R8 @ 192.168.1.24 (STA H3C_LuxYang, MAC C4:9E:7E:07:33:F4)
+固件: cursor/work-a05e · v1.1.29 (GPS_PPS_RMT_EN=1), app-only 烧录(用户 PC 侧执行)
+流程: docs/rmt_pps_board_test_v1129.md (§7 判定)
+
+结果: RESULT: PASS（§7 硬项 A/C/D/E/F 全过, G 建议项过, B 串口行待操作者补贴）
+  - monitor: VERDICT: PASS (samples=75, armed 75/75, LCK=74/75≈98.7%,
+    idfDataFrames 1320->1680 (+2.0/s), idfEmptyFrames=0, fallbacks Δ0)
+  - NTP 抽检: stratum=1 refid=GPSS LI=0
+  - ⚠ 发现: active=false / samples=0 / deltaMeanUs=0 全程未变 ——
+    RMT RX 硬件捕获正常(2 帧/PPS 秒, 零空帧), 但 GPIO↔RMT 合路精化
+    从未匹配(pend 超时静默过期, active 未置位故不计数为 fallback)。
+    §7 硬项不含此字段, 但 §0-2/§4 期望 active=true 未达成, 待主 AI 排查
+    GPS_PPS_RMT_HOLD_MS 窗口与 ref[]/pend count 匹配逻辑。
+
+文件清单
+  rmt_pps.jsonl       monitor 1/2s 采样的完整 /status JSON 流(75 记录)
+  rmt_pps_console.log monitor 控制台输出(进度行 + RMT SUMMARY + VERDICT: PASS)
+  rmt_pps_monitor.py  实际使用的监控脚本 —— 本机副本, 与仓库 tools/ 版本的唯一差异:
+                      轮询 except 子句放宽为 Exception(捕获 Termux WiFi 瞬态
+                      ConnectionAbortedError), 判定逻辑未改动
+  MANIFEST.txt        本文件
+
+备注
+  - B 项(串口 [pps-rmt] idf5 armed pin=4 ... 行)由烧录操作者 PC 侧取证, 尚未归档;
+    /status 旁证: idfOk=true / idfStage=31(全阶段) / idfErr=0, 无 init failed。
+  - 1/76 次 HTTP 轮询失败(LCK=74/75 的唯一非绿样本)。
+  - 固件本体不入包: 见仓库 dist/firmware_esp32s3.bin (sha256 536d8101…)。
