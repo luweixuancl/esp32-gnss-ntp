@@ -2,7 +2,8 @@
 
 基于 **ESP32 + GNSS 模块（PPS 驯服）** 的局域网一级（Stratum-1）NTP 时间服务器。同一份固件源码支持两个目标，通过 PlatformIO 多环境构建。
 
-**当前基线：v1.1.28** · pioarduino Arduino 3.3.11 / ESP-IDF 5.5.5 — 详见 [`docs/CURRENT.md`](docs/CURRENT.md)。
+**当前基线：v1.1.39** · pioarduino Arduino 3.3.11 / ESP-IDF 5.5.5 — 详见 [`docs/CURRENT.md`](docs/CURRENT.md)。  
+发布页：[v1.1.36](https://github.com/luweixuancl/esp32-gnss-ntp/releases/tag/v1.1.36)（其后变更已合入 `main`，以本页 / `dist/` 为准）。
 
 | 目标 | 板卡 | 核 | 状态 |
 |------|------|----|------|
@@ -14,17 +15,18 @@ GNSS：大夏龙雀 DX-GP10（GPS/北斗/GLONASS 多模，9600 8N1，定位后 1
 ## 功能
 
 1. **诚实 Stratum-1**：锁定/守时/未同步三态元数据如实在 NTP 报头呈现——锁定 `li=0 st=1 refid=GPSS`；守时仍 `st=1` 但色散随时间线性抬高；未同步 `li=3 st=16 refid=INIT` 拒绝授时
-2. **本地时钟**：PPS 驯服 + NMEA 交叉检核（residual 告警）+ EMA 频偏估计 + Holdover 守时外推；异常策略可选 Refuse / Holdover 30s / 300s（NVS 持久化）
+2. **本地时钟**：GPIO PPS 驯服 + NMEA 交叉检核（residual 告警）+ EMA 频偏估计 + Holdover 守时外推；异常策略可选 Refuse / Holdover 30s / 300s（NVS 持久化）。RMT PPS 板测搁置（`GPS_PPS_RMT_EN=0`）
 3. **OLED 状态页**：大字体本地时间、WiFi SSID/IP、星数·时钟态 / RSSI·AP 角标、SYNC/WAIT；无操作自动息屏防烧屏（档位可调，旋钮唤醒）
 4. **旋转编码器菜单**：扫 WiFi、网页配网、静态 IP（ARP 冲突探测）、时区、异常策略、NTP ACL、温度补偿、息屏、NTP 统计、重启
 5. **网页门户**：`/` 产品态状态页（徽章 S1/HLD/WAIT + 大时间外推；工程细节折叠）；`/setup` `/login` 登录后进 `/cfg`；`/status?view=ui` 瘦包 / `/status` 全量 / `/metrics` 只读开放
 6. **WiFi 永久重连**：掉线后 30s 封顶退避无限重试；**绝不自动切 SoftAP**——配网仅在「开机无已存 SSID」或「菜单 Web Setup 手动触发」时开启
 7. **NTP B1 限流 + B3 ACL**：每 IP 4 req/s 超限 KoD `RATE`、持续超限 `DENY` 冷却、全局 32 pkt/s 静默丢弃；ACL AllowList（默认 Off，最多 8 条）
 8. **状态灯**：C3 双色 LED（D4 网络/D5 GNSS）；S3 板载 RGB 三通道（R=网络 / G=时钟 / B=NTP 授时中），语义见下
-9. **B4 可观测**：OLED NTP Stats、串口 60s 摘要、`/metrics` Prometheus 文本
+9. **B4 可观测**：OLED NTP Stats、串口 60s 摘要、`/metrics` Prometheus 文本；`GET /debug/log` RAM 环（免串口）
 10. **多目标构建**：PlatformIO 多环境，源码 100% 共享，引脚差异集中在 `include/config.h` 目标条件宏
-11. **Web OTA**：登录 `/cfg` 上传 `firmware.bin`；升级期间拒绝 NTP（KoD `RSTR`）并让出 CPU/Flash；琥珀/绿/红状态灯；启动确认后取消回滚；NVS 保留；串口升级仍为兜底
-12. **外部时钟接口（可选）**：`ExtClock`（DS3231）；默认 `EXT_RTC_EN=0`；使能后改善 Holdover 色散地板；见 [ext_clock_design.md](docs/ext_clock_design.md)
+11. **Web OTA**：登录 `/cfg` 上传对应芯片 app；升级期间拒绝 NTP（KoD `RSTR`）；IDF5→IDF5 往返板测 PASS（v1.1.36）
+12. **时钟长测环（PSRAM）**：`/debug/clock` start/stop；停止后二进制下载（下载期停 NTP）；CSV 由 `tools/clock_trace_client.py` 本地生成 — [clock_trace.md](docs/clock_trace.md)
+13. **外部时钟接口（可选）**：`ExtClock`（DS3231）；默认 `EXT_RTC_EN=0`；见 [ext_clock_design.md](docs/ext_clock_design.md)
 
 ## 硬件连接
 
@@ -122,21 +124,20 @@ esptool --chip esp32s3 --port COM5 --baud 921600 write_flash 0x0 merged_firmware
 1. **限流（B1）**：每 IP 4 req/s → KoD `RATE`；持续超限 → `DENY` 冷却 ~60s；全局 ~32 pkt/s 静默丢弃
 2. **ACL（B3）**：默认 Off；AllowList 只放行可信 IP（≤8 条），空名单=拒绝全部
 3. **管理面**：`/` `/status` `/metrics` 只读；`/cfg` `/save` `/scan` `/ota` 需登录会话 Cookie；`/setup` 仅登录页
-4. **升级保配置**（仅已在 IDF5 / v1.1.28+ 时）：优先 Web OTA（`/cfg` 上传对应芯片 app：`firmware.bin` 或 `firmware_esp32s3.bin`）或串口只刷 app `@0x10000`；勿全片擦除。自 IDF4 迁入则必须整片（见上）
-5. **观测**：OLED NTP Stats、串口 `[ntp]` 摘要（60s）、`/metrics`；`/status` 含 `served` / `rateLimited` / `denied` / `dropped` / `clients` / `ntpAclMode` / `clock.tempRefC` / `fwMark` / `otaRunning` / `otaChip`
+4. **升级保配置**（仅已在 IDF5 时）：优先 Web OTA（`/cfg` 上传对应芯片 app：`firmware.bin` 或 `firmware_esp32s3.bin`）或串口只刷 app `@0x10000`；勿全片擦除。自 IDF4 迁入则必须整片（见上）
+5. **观测**：OLED NTP Stats、串口 `[ntp]` 摘要（60s）、`/metrics`；`/status` 含 `fwMark` / `otaChip` / `clockTrace`；调试 `GET /debug/log`、长测 `tools/clock_trace_client.py`
 
 ## 实测表现
 
 | 场景 | 结果 |
 |------|------|
 | S3 IDF5 冒烟（v1.1.28，13 min） | S1 / LCK 100%；NTP offset 均值 −2.83 ms（modem sleep 开） |
-| 锁定态 NTP 比对（C3，10 min，历史） | 配对差 stdev 1.3–2.6 ms |
-| 锁定态 NTP 比对（S3，10 min，历史） | median −2.41 ms / stdev 4.34 ms / 异常 0/60 |
-| Holdover 守时（拔模块电源 2 min，两芯） | 相位漂移 <0.5 ms |
-| 失效链（两芯） | 断电 1.5–2.5s 进 HLD → 300s 准时 UNS 诚实拒绝 → 恢复 3–20s 无跳秒 |
-| C3 6.7h / S3 6.1h 长测（历史 IDF4） | LCK ≈100%、residual 零漏、无老化漂移 |
+| Web OTA IDF5→IDF5（v1.1.36） | PASS（&lt;45 s，热启动 LCK）— [ota_deploy](docs/ota_deploy_v1136_20260919.md) |
+| 时钟长测环（v1.1.38，10 min） | 647 样本 / 1 Hz / LCK 100%；二进制下载 0.1 s — [boardtest](docs/clock_trace_boardtest_20260919.md) |
+| 锁定态 NTP 比对（C3 / S3，历史） | 配对差 ms 级；见 docs 归档 |
+| Holdover / 失效链（历史） | 断电进 HLD → 超时 UNS 诚实拒绝 → 恢复无跳秒 |
 
-详细数据入口：[docs/CURRENT.md](docs/CURRENT.md)；历史归档见 [docs/](docs/)。
+详细数据入口：[docs/CURRENT.md](docs/CURRENT.md)。
 
 ## 客户端测试
 
@@ -167,7 +168,13 @@ PlatformIO + pioarduino Arduino-ESP32 **3.3.11** / ESP-IDF **5.5.5**（`platform
 include/     配置与头文件（引脚目标条件宏；app_ipc 跨任务快照）
 src/         固件源码（FreeRTOS 任务：time / net / ui；OtaService 等模块）
 docs/        设计与测试（入口 CURRENT.md；带日期文件多为历史归档）
-tools/       辅助脚本（NTP 比对、失效链/长时段监测）
-dist/        固件产物（C3/S3 app 与整片合并）
+tools/       辅助脚本（NTP 比对、失效链/长时段监测、clock_trace_client）
+dist/        固件产物（C3/S3 app 与整片合并；见 dist/README.md）
 platformio.ini
+```
+
+现成固件镜像（`main`）：
+
+```text
+https://gh-proxy.com/https://raw.githubusercontent.com/luweixuancl/esp32-gnss-ntp/main/dist/firmware_esp32s3.bin
 ```
