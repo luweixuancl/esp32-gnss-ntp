@@ -148,7 +148,7 @@ python ntp_cmp_termux.py --gps <设备IP>     # 默认 10 min；--quick 冒烟 1
 
 ## 编译环境
 
-PlatformIO + Arduino（espressif32）。注意：工程路径含非 ASCII 时 Windows `ld` 可能失败，用 ASCII junction（如 `C:\acode_leds`）再构建。
+PlatformIO + pioarduino Arduino-ESP32 **3.3.11** / ESP-IDF **5.5.5**（`platformio.ini`）。注意：工程路径含非 ASCII 时 Windows `ld` 可能失败，用 ASCII junction（如 `C:\acode_leds`）再构建。
 
 ## 范围界定
 
