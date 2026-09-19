@@ -12,6 +12,9 @@
 #include "esp_private/rmt.h"
 #include <soc/soc_caps.h>
 #include <freertos/queue.h>
+#if defined(ARDUINO_ESP32S3_DEV)
+#include "driver/rtc_io.h"
+#endif
 #endif
 
 portMUX_TYPE GpsService::ppsMux_ = portMUX_INITIALIZER_UNLOCKED;
@@ -341,6 +344,12 @@ void GpsService::rmtRxTask(void* arg) {
 
 void GpsService::begin() {
   localClock_.reset();
+#if GPS_PPS_RMT_EN && defined(ARDUINO_ESP32S3_DEV)
+  // GPIO4 is RTC-capable on S3 — leave RTC domain before digital/RMT use (v1.1.35).
+  if (rtc_gpio_is_valid_gpio(static_cast<gpio_num_t>(PIN_GPS_PPS))) {
+    rtc_gpio_deinit(static_cast<gpio_num_t>(PIN_GPS_PPS));
+  }
+#endif
   pinMode(PIN_GPS_PPS, INPUT_PULLDOWN);
   gpsSerial_.setRxBufferSize(2048);
   gpsSerial_.begin(GPS_UART_BAUD, SERIAL_8N1, PIN_GPS_RX, PIN_GPS_TX);
@@ -367,16 +376,29 @@ void GpsService::begin() {
     cfg.gpio_num = static_cast<gpio_num_t>(PIN_GPS_PPS);
     cfg.clk_src = RMT_CLK_SRC_DEFAULT;
     cfg.resolution_hz = 1000000000UL / GPS_PPS_RMT_TICK_NS;  // 1 MHz @ 1 µs
-    // Native S3 channel depth (48). Requesting 64 forced a 2-block invade.
+#if GPS_PPS_RMT_DMA
+    // DMA mode: mem_block_symbols sizes the DMA/user buffer, not HW block count.
     cfg.mem_block_symbols = GPS_PPS_RMT_SYM_CAP;
+    cfg.flags.with_dma = 1;
+#else
+    cfg.mem_block_symbols = GPS_PPS_RMT_SYM_CAP;
+    cfg.flags.with_dma = 0;
+#endif
     cfg.intr_priority = 0;
-    cfg.flags.with_dma = 0;  // copy-safe; S3 DMA optional later
 
     esp_err_t err = ESP_ERR_INVALID_STATE;
     if (gIdf.doneQ == nullptr) {
       err = ESP_ERR_NO_MEM;
     } else {
       err = rmt_new_rx_channel(&cfg, &gIdf.chan);
+#if GPS_PPS_RMT_DMA
+      if (err != ESP_OK) {
+        debugLogf("[pps-rmt] DMA channel alloc failed err=%d — fallback non-DMA",
+                  static_cast<int>(err));
+        cfg.flags.with_dma = 0;
+        err = rmt_new_rx_channel(&cfg, &gIdf.chan);
+      }
+#endif
     }
     if (err == ESP_OK) {
       gIdf.stage |= 1;

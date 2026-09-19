@@ -4,11 +4,11 @@
 // OLED mark is unambiguous after OTA / serial upgrade.
 #define FW_VER_MAJOR         1
 #define FW_VER_MINOR         1
-#define FW_VER_PATCH         34
-// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.34").
-#define FW_MARK              "v1.1.34"
+#define FW_VER_PATCH         35
+// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.35").
+#define FW_MARK              "v1.1.35"
 // Full string for /status, /cfg, serial, OTA pages.
-#define FW_VERSION           "1.1.34"
+#define FW_VERSION           "1.1.35"
 // Reject obviously truncated OTA payloads before activating the slot.
 #define OTA_MIN_IMAGE_BYTES      (200 * 1024)
 // After a pending-verify OTA boot, wait until tasks are alive this long before
@@ -239,19 +239,23 @@
 #define GPS_PPS_ISR_QUEUE             8
 // RMT RX hardware capture of the PPS edge (docs/s3_deep_dive_roadmap.md #1):
 // IDF5 path (pioarduino Arduino 3.3.11 / ESP-IDF 5.5.5, driver/rmt_rx.h).
+// v1.1.35: no RGB RMT TX while PPS RX on; rtc_gpio_deinit; DMA RX try.
 // v1.1.33: dump raw symbol hex; native mem block (48); filter off; GPIO ISR after RMT.
 // v1.1.32: defer first rmt_receive until GPIO sees PPS (GNSS cold-start safe).
-// WINDOW_MS ≤32 @1µs tick (IDF5 15-bit cap). ISR copies symbols; non-DMA RX.
+// WINDOW_MS ≤32 @1µs tick (IDF5 15-bit cap). ISR copies symbols.
 #define GPS_PPS_RMT_EN                1   // 0 = GPIO ISR only; 1 = IDF5 rmt_rx
 #define GPS_PPS_RMT_QUEUE             8
 #define GPS_PPS_RMT_TICK_NS        1000   // 1 µs symbols (resolution_hz = 1e9/tick)
 #define GPS_PPS_RMT_WINDOW_MS        20   // idle end-of-receive; must be ≤32 @1µs tick
-#define GPS_PPS_RMT_FILTER_NS         0   // 0 = disable glitch filter (v1.1.32 used 1000)
+#define GPS_PPS_RMT_FILTER_NS         0   // 0 = disable glitch filter
 #define GPS_PPS_RMT_HOLD_MS         700    // hold a GPIO edge for its refinement
 #define GPS_PPS_RMT_STALE_MS        2100   // no RMT edges for this long -> fall back to GPIO
 #define GPS_PPS_RMT_MATCH_US        5000   // |rmt-gpio| time match window (µs)
 #define GPS_PPS_RMT_ARM_RETRY_MS    1000   // retry deferred arm while waiting for PPS
 #define GPS_PPS_RMT_DUMP_FRAMES      16   // serial-dump first N frames (raw hex)
+#ifndef GPS_PPS_RMT_DMA
+#define GPS_PPS_RMT_DMA               1   // v1.1.35: try DMA path (ISR still copies)
+#endif
 // RAM debug ring (tee to Serial; fetch via GET /debug/log after WiFi).
 #ifndef DEBUG_LOG_EN
 #define DEBUG_LOG_EN                    1

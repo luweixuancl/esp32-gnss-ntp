@@ -711,14 +711,22 @@ void setup() {
   gStore.begin();
 
   gEnc.begin();
+#if GPS_PPS_RMT_EN
+  // PPS RMT must claim the RMT group before any rgbLedWrite (10 MHz TX).
+  gUi.begin();
+  gExtClock.begin();
+  checkFactoryReset();
+  gSettings = gStore.load();
+  gGps.begin();
+  gLeds.begin();  // RGB flush is a no-op while GPS_PPS_RMT_EN
+#else
   gLeds.begin();
   gUi.begin();
   gExtClock.begin();  // after Wire (OLED); no-op when EXT_RTC_EN=0
   checkFactoryReset();  // hold SW 3s at power-on → wipe all settings, reboot
-
   gSettings = gStore.load();
-
   gGps.begin();
+#endif
   gWifi.begin();
   gNtp.begin();
   gOta.begin();

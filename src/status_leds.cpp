@@ -13,9 +13,16 @@ static bool rgbD5On_ = false;
 static bool rgbBOn_ = false;
 
 static void flushRgb() {
+#if GPS_PPS_RMT_EN
+  // v1.1.35: onboard RGB uses RMT TX @10 MHz; sharing the RMT group with PPS
+  // RX left every frame as 1×zero-duration symbols (see v1.1.34 dump). Skip
+  // rgbLedWrite entirely while PPS RMT board builds are enabled.
+  return;
+#else
   const uint8_t v = LED_RGB_BRIGHTNESS;
   // Arduino-ESP32 3.x: neopixelWrite() is deprecated.
   rgbLedWrite(PIN_LED_RGB, rgbD4On_ ? v : 0, rgbD5On_ ? v : 0, rgbBOn_ ? v : 0);
+#endif
 }
 
 static void setRgb(bool r, bool g, bool b) {

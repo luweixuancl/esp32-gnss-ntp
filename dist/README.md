@@ -9,8 +9,8 @@
 
 ## Current build
 
-- Mark: **v1.1.34**
-- **`GPS_PPS_RMT_EN=1`** + RAM debug log — [`docs/rmt_pps_retest_v1133.md`](../docs/rmt_pps_retest_v1133.md) · [`docs/debug_log.md`](../docs/debug_log.md)
+- Mark: **v1.1.35**
+- RMT PPS board test + debug log — [`docs/rmt_pps_retest_v1135.md`](../docs/rmt_pps_retest_v1135.md) · [`docs/debug_log.md`](../docs/debug_log.md)
 - Platform: pioarduino 55.03.311（Arduino 3.3.11 / IDF 5.5.5）
 - Branch tip: `cursor/work-a05e`
 
