@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RMT PPS board monitor for fw v1.1.29 (GPS_PPS_RMT_EN=1).
+"""RMT PPS board monitor for fw v1.1.32 (GPS_PPS_RMT_EN=1).
 
 Polls GET /status and prints a compact line every --period seconds.
 Exits 0 on PASS criteria after --duration, else 1.
@@ -9,12 +9,13 @@ Usage (device already on WiFi, GNSS locked):
   python3 tools/rmt_pps_monitor.py --host 192.168.1.24 --quick
 
 PASS (default thresholds):
-  - fwMark contains 1.1.29 (or --skip-fw)
-  - gps.ppsRmt present, armed=true, idfOk=true
-  - idfDataFrames increases by >= (duration_s * 0.7) over the run
+  - fwMark contains 1.1.32 (or --skip-fw)
+  - gps.ppsRmt present; idfOk=true early; armed=true after first PPS / by end if LCK
+  - idfDataFrames increases over the run
   - idfEmptyFrames / idfDataFrames < 0.5 at end (when dataFrames>10)
   - clock.state == LCK for >= 90% of samples after first LCK
   - fallbacks does not grow by more than --max-fallback-delta
+  - refine samples / lastWidthUs engaged
 """
 
 from __future__ import annotations
@@ -101,10 +102,12 @@ def main() -> int:
             last_fb = fb
             if armed and idf_ok:
                 armed_ok += 1
+            # Also count idfOk+ready phase before first PPS as healthy init
             line += (
                 f" armed={int(armed)} idfOk={int(idf_ok)} active={int(active)}"
                 f" df={df} ef={ef} fb={fb} meanUs={mean} width={rmt.get('lastWidthUs')}"
                 f" stage={rmt.get('idfStage')} err={rmt.get('idfErr')}"
+                f" junk={rmt.get('idfJunkFrames')}"
             )
 
         print(line)
@@ -122,12 +125,24 @@ def main() -> int:
     fail = []
     if samples < 5:
         fail.append("too few samples")
-    if not args.skip_fw and "1.1.29" not in str(fw):
-        fail.append(f"fwMark want 1.1.29 got {fw}")
+    if not args.skip_fw and "1.1.32" not in str(fw):
+        fail.append(f"fwMark want 1.1.32 got {fw}")
     if not has_ppsrmt:
         fail.append("gps.ppsRmt missing (build without GPS_PPS_RMT_EN?)")
-    if armed_ok < max(1, samples // 2):
-        fail.append("armed/idfOk not true on majority of samples")
+    # v1.1.32: idfOk early; armed only after first PPS — require armed by end if LCK
+    try:
+        st_end = fetch_status(args.host)
+        rmt_end = (st_end.get("gps") or {}).get("ppsRmt") or {}
+        idf_ok_end = bool(rmt_end.get("idfOk"))
+        armed_end = bool(rmt_end.get("armed"))
+        if not idf_ok_end:
+            fail.append("idfOk false at end (channel not ready)")
+        if seen_lck and not armed_end:
+            fail.append("LCK seen but armed still false (deferred arm failed?)")
+    except Exception as e:
+        fail.append(f"end-status check failed: {e}")
+    if armed_ok < 1 and seen_lck:
+        fail.append("never observed armed=1 while LCK expected")
     if first_df is not None:
         grew = last_df - first_df
         need = max(10, int(args.duration * 0.5))

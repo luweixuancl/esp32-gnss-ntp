@@ -30,11 +30,13 @@ struct RmtPpsEdge {
   uint32_t widthUs;
 };
 struct RmtPpsState {
-  bool armed = false;   // rmt_new_rx_channel + first rmt_receive ok
+  bool armed = false;   // first rmt_receive ok (deferred until GPIO PPS)
+  bool ready = false;   // channel+task enabled; waiting for first PPS to arm
   bool alive = false;   // refinements still flowing
   bool active = false;  // currently the merge source
   bool reportedFallback = false;  // one log line per fallback episode
   uint64_t lastEdgeUs = 0;
+  uint32_t lastArmTryMs = 0;
   uint8_t head = 0, tail = 0;
   RmtPpsEdge q[GPS_PPS_RMT_QUEUE];
   // statistics (task-context writers only)
@@ -246,6 +248,29 @@ bool GpsService::rmtArmReceive() {
   return true;
 }
 
+void GpsService::tryArmRmtAfterFirstPps() {
+  if (!gRmt.ready || gRmt.armed || !gIdf.ok) {
+    return;
+  }
+  // GNSS modules do not emit 1PPS until they have time/fix; keep GPIO-only
+  // until the ISR has seen at least one edge, then start RMT receive.
+  if (!ppsSeen_ && ppsCount_ == 0) {
+    return;
+  }
+  const uint32_t nowMs = millis();
+  if (gRmt.lastArmTryMs != 0 && (nowMs - gRmt.lastArmTryMs) < GPS_PPS_RMT_ARM_RETRY_MS) {
+    return;
+  }
+  gRmt.lastArmTryMs = nowMs;
+  if (rmtArmReceive()) {
+    gRmt.armed = true;
+    Serial.printf("[pps-rmt] idf5 armed after first PPS (count=%u)\n",
+                  static_cast<unsigned>(ppsCount_));
+  } else {
+    Serial.printf("[pps-rmt] arm defer failed err=%d (retry)\n", gIdf.err);
+  }
+}
+
 // Task-context RX: drain copied frames → symbol parser → re-arm receive.
 void GpsService::rmtRxTask(void* arg) {
   (void)arg;
@@ -333,18 +358,18 @@ void GpsService::begin() {
         err = ESP_ERR_NO_MEM;
       }
     }
-    if (err == ESP_OK && rmtArmReceive()) {
-      gRmt.armed = true;
+    if (err == ESP_OK) {
+      // Do NOT rmt_receive yet: PPS pin is idle-low until GNSS has a fix.
+      // signal_range_max would end empty receives every WINDOW_MS while waiting.
+      // Arm on first GPIO PPS from loop() (see tryArmRmtAfterFirstPps).
       gIdf.ok = true;
-      Serial.printf("[pps-rmt] idf5 armed pin=%d tick=%uns win=%ums filter=%uns dma=%u\n",
+      gRmt.ready = true;
+      Serial.printf("[pps-rmt] idf5 ready pin=%d tick=%uns win=%ums filter=%uns dma=%u "
+                    "(arm on first PPS)\n",
                     PIN_GPS_PPS, GPS_PPS_RMT_TICK_NS, GPS_PPS_RMT_WINDOW_MS,
                     GPS_PPS_RMT_FILTER_NS, static_cast<unsigned>(cfg.flags.with_dma));
     } else {
-      // rmtArmReceive() already stores the real esp_err in gIdf.err — do not
-      // clobber it with outer ESP_OK when only the arm step failed (v1.1.30).
-      if (err != ESP_OK) {
-        gIdf.err = err;
-      }
+      gIdf.err = err;
       Serial.printf("[pps-rmt] idf5 init failed stage=%u err=%d -> GPIO ISR only\n",
                     gIdf.stage, gIdf.err);
     }
@@ -605,6 +630,10 @@ void GpsService::sampleDieTemp() {
 void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
   sampleDieTemp();
   parseNmea();
+
+#if GPS_PPS_RMT_EN
+  tryArmRmtAfterFirstPps();
+#endif
 
   // Drain every queued PPS edge (WiFi may delay task-time by >1s). With RMT
   // capture armed, GPIO edges are held briefly until their refined hardware

@@ -92,6 +92,7 @@ class GpsService {
                                     void* user_data);
   static void rmtRxTask(void* arg);
   static bool rmtArmReceive();
+  void tryArmRmtAfterFirstPps();
 #endif
   void parseNmea();
   void commitNmeaTime(uint32_t epochSec, AnomalyPolicy policy, uint16_t holdoverSec);

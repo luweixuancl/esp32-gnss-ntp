@@ -4,11 +4,11 @@
 // OLED mark is unambiguous after OTA / serial upgrade.
 #define FW_VER_MAJOR         1
 #define FW_VER_MINOR         1
-#define FW_VER_PATCH         31
-// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.31").
-#define FW_MARK              "v1.1.31"
+#define FW_VER_PATCH         32
+// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.32").
+#define FW_MARK              "v1.1.32"
 // Full string for /status, /cfg, serial, OTA pages.
-#define FW_VERSION           "1.1.31"
+#define FW_VERSION           "1.1.32"
 // Reject obviously truncated OTA payloads before activating the slot.
 #define OTA_MIN_IMAGE_BYTES      (200 * 1024)
 // After a pending-verify OTA boot, wait until tasks are alive this long before
@@ -239,8 +239,8 @@
 #define GPS_PPS_ISR_QUEUE             8
 // RMT RX hardware capture of the PPS edge (docs/s3_deep_dive_roadmap.md #1):
 // IDF5 path (pioarduino Arduino 3.3.11 / ESP-IDF 5.5.5, driver/rmt_rx.h).
-// v1.1.31: keep WINDOW_MS ≤32 (IDF5 signal_range_max_ns 15-bit @1µs = 32767µs).
-// v1.1.30 used 50ms and rmt_receive refused to arm.
+// v1.1.32: defer first rmt_receive until GPIO sees PPS (GNSS cold-start safe).
+// WINDOW_MS ≤32 @1µs tick (IDF5 15-bit cap). ISR copies symbols; non-DMA RX.
 #define GPS_PPS_RMT_EN                1   // 0 = GPIO ISR only; 1 = IDF5 rmt_rx
 #define GPS_PPS_RMT_QUEUE             8
 #define GPS_PPS_RMT_TICK_NS        1000   // 1 µs symbols (resolution_hz = 1e9/tick)
@@ -249,6 +249,7 @@
 #define GPS_PPS_RMT_HOLD_MS         700    // hold a GPIO edge for its refinement
 #define GPS_PPS_RMT_STALE_MS        2100   // no RMT edges for this long -> fall back to GPIO
 #define GPS_PPS_RMT_MATCH_US        5000   // |rmt-gpio| time match window (µs)
+#define GPS_PPS_RMT_ARM_RETRY_MS    1000   // retry deferred arm while waiting for PPS
 // Missed PPS seconds ≥ this → Unsynced (not silent catch-up only).
 #define CLK_PPS_MISS_UNSYNC           3
 // Holdover dispersion: floor crystal error (ppm) when EMA is still small.
