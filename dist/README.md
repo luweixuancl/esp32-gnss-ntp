@@ -9,15 +9,16 @@
 
 ## Current build
 
-- Mark: **v1.1.35**
-- RMT PPS board test + debug log — [`docs/rmt_pps_retest_v1135.md`](../docs/rmt_pps_retest_v1135.md) · [`docs/debug_log.md`](../docs/debug_log.md)
+- Mark: **v1.1.36**
+- `GPS_PPS_RMT_EN=0`（RMT 板测搁置）— [`docs/rmt_pps_board_test_CLOSED_20260919.md`](../docs/rmt_pps_board_test_CLOSED_20260919.md)
+- Debug log: [`docs/debug_log.md`](../docs/debug_log.md)
 - Platform: pioarduino 55.03.311（Arduino 3.3.11 / IDF 5.5.5）
 - Branch tip: `cursor/work-a05e`
 
 ## Verify
 
 ```text
-wc -c firmware_esp32s3.bin   # 1097520
+wc -c firmware_esp32s3.bin   # 1091520
 sha256sum -c SHA256SUMS
 ```
 
