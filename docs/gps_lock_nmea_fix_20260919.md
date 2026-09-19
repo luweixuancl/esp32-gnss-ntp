@@ -34,4 +34,4 @@ PPS 仍会计数（GPIO），故会出现「PPS 正常但时间无效」。
 
 ## 板测
 
-S3 上 v1.1.27 用户已确认 **正常锁定**（2026-09-19）。完整清单见 [board_test_s3_idf5_20260919.md](board_test_s3_idf5_20260919.md)。
+S3 上 v1.1.27+ 在成功进入 IDF5 固件后可锁定。若设备仍显示 v1.1.20，先按 [upgrade_idf5_from_1120.md](upgrade_idf5_from_1120.md) **整片刷入**，再测锁定。完整清单见 [board_test_s3_idf5_20260919.md](board_test_s3_idf5_20260919.md)。

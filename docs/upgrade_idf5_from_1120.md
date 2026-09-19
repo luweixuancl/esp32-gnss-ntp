@@ -42,7 +42,7 @@ esptool.py --chip esp32s3 -p <PORT> -b 921600 write_flash 0x0 merged_firmware_es
 …/dist/firmware_merged_0x0.bin
 ```
 
-（大小约 **1262720** B；C3 还换了更大 OTA 分区表，同样必须整片。）
+（大小约 **1263040** B；C3 还换了更大 OTA 分区表，同样必须整片。）
 
 ## 迁移成功之后
 
