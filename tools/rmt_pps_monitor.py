@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RMT PPS board monitor for fw v1.1.32 (GPS_PPS_RMT_EN=1).
+"""RMT PPS board monitor for fw v1.1.33 (GPS_PPS_RMT_EN=1).
 
 Polls GET /status and prints a compact line every --period seconds.
 Exits 0 on PASS criteria after --duration, else 1.
@@ -9,7 +9,7 @@ Usage (device already on WiFi, GNSS locked):
   python3 tools/rmt_pps_monitor.py --host 192.168.1.24 --quick
 
 PASS (default thresholds):
-  - fwMark contains 1.1.32 (or --skip-fw)
+  - fwMark contains 1.1.33 (or --skip-fw)
   - gps.ppsRmt present; idfOk=true early; armed=true after first PPS / by end if LCK
   - idfDataFrames increases over the run
   - idfEmptyFrames / idfDataFrames < 0.5 at end (when dataFrames>10)
@@ -125,8 +125,8 @@ def main() -> int:
     fail = []
     if samples < 5:
         fail.append("too few samples")
-    if not args.skip_fw and "1.1.32" not in str(fw):
-        fail.append(f"fwMark want 1.1.32 got {fw}")
+    if not args.skip_fw and "1.1.33" not in str(fw):
+        fail.append(f"fwMark want 1.1.33 got {fw}")
     if not has_ppsrmt:
         fail.append("gps.ppsRmt missing (build without GPS_PPS_RMT_EN?)")
     # v1.1.32: idfOk early; armed only after first PPS — require armed by end if LCK
