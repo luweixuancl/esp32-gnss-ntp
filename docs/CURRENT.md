@@ -1,7 +1,7 @@
 # 当前基线（与代码一致）
 
 > 更新日期：2026-09-19  
-> **`main` 发布 = v1.1.36** · 本分支开发 **v1.1.37**（PSRAM 时钟长测环）  
+> **`main` 发布 = v1.1.36** · 本分支开发 **v1.1.38**（PSRAM 时钟长测环）  
 > Web OTA 往返 **PASS** — [ota_deploy_v1136_20260919.md](ota_deploy_v1136_20260919.md)  
 > RMT 板测已结案 FAIL — [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)  
 > 时钟长测环 — [clock_trace.md](clock_trace.md)
@@ -25,7 +25,7 @@
 | Web OTA / S3 160 MHz + modem sleep | ✅ **v1.1.36 OTA 往返 PASS** |
 | **RMT PPS** | ❌ 板测搁置（EN=0）— [CLOSED](rmt_pps_board_test_CLOSED_20260919.md) |
 | Web 调试 log | ✅ `GET /debug/log?pass=` — [debug_log.md](debug_log.md) |
-| 时钟长测环 | ✅ v1.1.37 PSRAM/RAM · start/stop · 停后拉 CSV — [clock_trace.md](clock_trace.md) |
+| 时钟长测环 | ✅ v1.1.38 PSRAM/RAM · start/stop · 停后拉 CSV — [clock_trace.md](clock_trace.md) |
 | 外置 RTC | `EXT_RTC_EN=0`，待购件 |
 
 ## 升级

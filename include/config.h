@@ -4,11 +4,11 @@
 // OLED mark is unambiguous after OTA / serial upgrade.
 #define FW_VER_MAJOR         1
 #define FW_VER_MINOR         1
-#define FW_VER_PATCH         37
-// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.37").
-#define FW_MARK              "v1.1.37"
+#define FW_VER_PATCH         38
+// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.38").
+#define FW_MARK              "v1.1.38"
 // Full string for /status, /cfg, serial, OTA pages.
-#define FW_VERSION           "1.1.37"
+#define FW_VERSION           "1.1.38"
 // Reject obviously truncated OTA payloads before activating the slot.
 #define OTA_MIN_IMAGE_BYTES      (200 * 1024)
 // After a pending-verify OTA boot, wait until tasks are alive this long before
@@ -277,7 +277,14 @@
 #endif
 #endif
 #ifndef CLOCK_TRACE_FETCH_DEFAULT
-#define CLOCK_TRACE_FETCH_DEFAULT    4000u  // samples per incremental GET
+#define CLOCK_TRACE_FETCH_DEFAULT   8000u  // samples per binary page (~336 KB)
+#endif
+#ifndef CLOCK_TRACE_FETCH_MAX
+#define CLOCK_TRACE_FETCH_MAX      12000u  // hard cap per HTTP response
+#endif
+// While clock-trace download busy: task-time yields like OTA (NTP shed).
+#ifndef CLOCK_TRACE_XFER_YIELD_MS
+#define CLOCK_TRACE_XFER_YIELD_MS      20
 #endif
 // Missed PPS seconds ≥ this → Unsynced (not silent catch-up only).
 #define CLK_PPS_MISS_UNSYNC           3

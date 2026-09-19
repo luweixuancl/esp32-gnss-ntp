@@ -34,9 +34,23 @@ struct ClockTraceSample {
   uint8_t satellites;
   uint8_t reserved;
 };
+
+// On-wire page header for GET /debug/clock/data?format=bin (little-endian).
+struct ClockTraceBinHeader {
+  char magic[4];       // 'C','T','R','B'
+  uint16_t version;    // 1
+  uint16_t sampleSize; // sizeof(ClockTraceSample)
+  uint32_t seqFrom;
+  uint32_t count;      // samples in this page
+  uint32_t seqNext;    // next seq after this page
+  uint32_t seqEnd;     // session end (info.seqNext)
+  uint32_t dropped;
+  uint32_t flags;      // bit0 = done (seqNext >= seqEnd)
+};
 #pragma pack(pop)
 
 static_assert(sizeof(ClockTraceSample) == 42, "ClockTraceSample size");
+static_assert(sizeof(ClockTraceBinHeader) == 32, "ClockTraceBinHeader size");
 
 struct ClockTraceInfo {
   ClockTraceState state = ClockTraceState::Idle;

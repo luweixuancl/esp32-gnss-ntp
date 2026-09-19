@@ -517,13 +517,14 @@ static void taskTime(void* /*arg*/) {
   gGps.setTempComp(cachedTempComp, cachedTempCoeff);
 
   for (;;) {
-    // OTA window: refuse NTP, skip GPS/settings work, yield CPU/Flash to the
-    // upload on task-net (especially critical on single-core C3).
-    if (ipcOtaBusy()) {
+    // OTA / clock-trace xfer: refuse NTP, skip GPS/settings work, yield CPU
+    // to task-net (especially critical on single-core C3).
+    if (ipcShedNtp()) {
       gNtp.loopRefuseOta();
       ipcKickTime();
       esp_task_wdt_reset();
-      vTaskDelay(pdMS_TO_TICKS(OTA_TIME_TASK_YIELD_MS));
+      vTaskDelay(pdMS_TO_TICKS(ipcOtaBusy() ? OTA_TIME_TASK_YIELD_MS
+                                            : CLOCK_TRACE_XFER_YIELD_MS));
       continue;
     }
 

@@ -8,7 +8,11 @@
 #include "ota_service.h"
 #include <ArduinoJson.h>
 #include <esp_system.h>
+#include <esp_task_wdt.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include <math.h>
+#include <string.h>
 #include <time.h>
 #include <stdlib.h>
 
@@ -373,6 +377,9 @@ void WebPortal::handleClockTraceData() {
   if (server_.hasArg("from")) {
     fromSeq = static_cast<uint32_t>(strtoul(server_.arg("from").c_str(), nullptr, 10));
   }
+  if (fromSeq < info.seqFirst) {
+    fromSeq = info.seqFirst;
+  }
   uint32_t limit = CLOCK_TRACE_FETCH_DEFAULT;
   if (server_.hasArg("limit")) {
     limit = static_cast<uint32_t>(strtoul(server_.arg("limit").c_str(), nullptr, 10));
@@ -380,16 +387,107 @@ void WebPortal::handleClockTraceData() {
   if (limit == 0) {
     limit = CLOCK_TRACE_FETCH_DEFAULT;
   }
-  if (limit > 2000u) {
-    limit = 2000u;  // cap per request to keep heap calm
+  if (limit > CLOCK_TRACE_FETCH_MAX) {
+    limit = CLOCK_TRACE_FETCH_MAX;
+  }
+  const uint32_t avail = (fromSeq >= info.seqNext) ? 0u : (info.seqNext - fromSeq);
+  const uint32_t nSend = (avail < limit) ? avail : limit;
+  if (nSend == 0) {
+    server_.send(204, "text/plain", "");
+    return;
   }
 
+  // Default binary (fast). format=csv keeps legacy text for browsers.
+  String fmt = server_.hasArg("format") ? server_.arg("format") : String("bin");
+  fmt.toLowerCase();
+  const bool wantCsv = (fmt == "csv");
+
+  // Shed NTP + boost net for the transfer window (same idea as OTA).
+  UBaseType_t savedPrioTime = 0;
+  UBaseType_t savedPrioNet = 0;
+  bool prioBoosted = false;
+  gIpc.xferBusy = true;
+  if (gIpc.taskTime) {
+    savedPrioTime = uxTaskPriorityGet(gIpc.taskTime);
+    vTaskPrioritySet(gIpc.taskTime, TASK_PRIO_TIME_OTA);
+  }
+  if (gIpc.taskNet) {
+    savedPrioNet = uxTaskPriorityGet(gIpc.taskNet);
+    vTaskPrioritySet(gIpc.taskNet, TASK_PRIO_NET_OTA);
+    prioBoosted = true;
+  }
+  auto xferEnd = [&]() {
+    gIpc.xferBusy = false;
+    if (prioBoosted) {
+      if (gIpc.taskTime) {
+        vTaskPrioritySet(gIpc.taskTime, savedPrioTime);
+      }
+      if (gIpc.taskNet) {
+        vTaskPrioritySet(gIpc.taskNet, savedPrioNet);
+      }
+    }
+  };
+
+  constexpr size_t kChunk = 256;  // samples per sendContent (~10.5 KB)
+  ClockTraceSample* batch =
+      static_cast<ClockTraceSample*>(malloc(kChunk * sizeof(ClockTraceSample)));
+  if (batch == nullptr) {
+    xferEnd();
+    server_.send(500, "text/plain", "oom\n");
+    return;
+  }
+
+  if (!wantCsv) {
+    ClockTraceBinHeader hdr{};
+    hdr.magic[0] = 'C';
+    hdr.magic[1] = 'T';
+    hdr.magic[2] = 'R';
+    hdr.magic[3] = 'B';
+    hdr.version = 1;
+    hdr.sampleSize = static_cast<uint16_t>(sizeof(ClockTraceSample));
+    hdr.seqFrom = fromSeq;
+    hdr.count = nSend;
+    hdr.seqNext = fromSeq + nSend;
+    hdr.seqEnd = info.seqNext;
+    hdr.dropped = info.dropped;
+    hdr.flags = (hdr.seqNext >= info.seqNext) ? 1u : 0u;
+
+    const size_t bodyLen = sizeof(hdr) + static_cast<size_t>(nSend) * sizeof(ClockTraceSample);
+    server_.setContentLength(bodyLen);
+    server_.send(200, "application/octet-stream", "");
+    server_.sendContent(reinterpret_cast<const char*>(&hdr), sizeof(hdr));
+
+    uint32_t next = fromSeq;
+    uint32_t produced = 0;
+    while (produced < nSend) {
+      const size_t want = ((nSend - produced) < kChunk) ? (nSend - produced) : kChunk;
+      int errCode = 0;
+      uint32_t nxt = next;
+      const size_t n = clockTraceRead(next, batch, want, &nxt, &errCode);
+      if (errCode != 0 || n == 0) {
+        break;
+      }
+      server_.sendContent(reinterpret_cast<const char*>(batch), n * sizeof(ClockTraceSample));
+      produced += static_cast<uint32_t>(n);
+      next = nxt;
+      esp_task_wdt_reset();
+      ipcKickNet();
+      if (n < want) {
+        break;
+      }
+    }
+    free(batch);
+    xferEnd();
+    return;
+  }
+
+  // CSV path: buffer many lines, fewer TCP writes than per-row sendContent.
   const bool wantHeader = (!server_.hasArg("from")) || (fromSeq <= info.seqFirst);
+  // Approximate length — client tolerates chunked; still shed NTP.
   server_.setContentLength(CONTENT_LENGTH_UNKNOWN);
   server_.send(200, "text/csv; charset=utf-8", "");
-  // Chunked CSV. Header only on first page (no from= or from<=seqFirst).
   if (wantHeader) {
-    char meta[192];
+    char meta[220];
     snprintf(meta, sizeof(meta),
              "# clock_trace fw=%s state=STOP count=%u dropped=%u seqFirst=%u seqNext=%u "
              "psram=%d cap=%u\n"
@@ -401,21 +499,32 @@ void WebPortal::handleClockTraceData() {
     server_.sendContent(meta);
   }
 
-  constexpr size_t kChunk = 64;
-  ClockTraceSample* batch =
-      static_cast<ClockTraceSample*>(malloc(kChunk * sizeof(ClockTraceSample)));
-  if (batch == nullptr) {
+  char* textBuf = static_cast<char*>(malloc(4096));
+  if (textBuf == nullptr) {
+    free(batch);
+    xferEnd();
     server_.sendContent("# error: oom\n");
     return;
   }
+  size_t textUsed = 0;
+  auto flushText = [&]() {
+    if (textUsed > 0) {
+      server_.sendContent(textBuf, textUsed);
+      textUsed = 0;
+      esp_task_wdt_reset();
+      ipcKickNet();
+    }
+  };
+
   uint32_t next = fromSeq;
   uint32_t produced = 0;
-  while (produced < limit) {
-    const size_t want = ((limit - produced) < kChunk) ? (limit - produced) : kChunk;
+  while (produced < nSend) {
+    const size_t want = ((nSend - produced) < kChunk) ? (nSend - produced) : kChunk;
     int errCode = 0;
     uint32_t nxt = next;
     const size_t n = clockTraceRead(next, batch, want, &nxt, &errCode);
     if (errCode == 1) {
+      flushText();
       server_.sendContent("# error: not stopped\n");
       break;
     }
@@ -425,18 +534,26 @@ void WebPortal::handleClockTraceData() {
     for (size_t i = 0; i < n; ++i) {
       const ClockTraceSample& s = batch[i];
       char line[160];
-      snprintf(line, sizeof(line),
-               "%u,%u,%u,%u,%ld,%u,%.4f,%.2f,%.3f,%u,%u,%u,%u,%u,%u\n",
-               static_cast<unsigned>(s.seq), static_cast<unsigned>(s.uptimeMs),
-               static_cast<unsigned>(s.utcEpoch), static_cast<unsigned>(s.ppsCount),
-               static_cast<long>(s.residualMs), static_cast<unsigned>(s.holdoverMs),
-               static_cast<double>(s.freqPpm),
-               isnan(s.tempC) ? 0.0 : static_cast<double>(s.tempC),
-               static_cast<double>(s.tempCorrPpm), static_cast<unsigned>(s.qualityMs),
-               static_cast<unsigned>(s.state), (s.flags & 0x01) ? 1u : 0u,
-               (s.flags & 0x02) ? 1u : 0u, (s.flags & 0x04) ? 1u : 0u,
-               static_cast<unsigned>(s.satellites));
-      server_.sendContent(line);
+      const int len = snprintf(
+          line, sizeof(line),
+          "%u,%u,%u,%u,%ld,%u,%.4f,%.2f,%.3f,%u,%u,%u,%u,%u,%u\n",
+          static_cast<unsigned>(s.seq), static_cast<unsigned>(s.uptimeMs),
+          static_cast<unsigned>(s.utcEpoch), static_cast<unsigned>(s.ppsCount),
+          static_cast<long>(s.residualMs), static_cast<unsigned>(s.holdoverMs),
+          static_cast<double>(s.freqPpm),
+          isnan(s.tempC) ? 0.0 : static_cast<double>(s.tempC),
+          static_cast<double>(s.tempCorrPpm), static_cast<unsigned>(s.qualityMs),
+          static_cast<unsigned>(s.state), (s.flags & 0x01) ? 1u : 0u,
+          (s.flags & 0x02) ? 1u : 0u, (s.flags & 0x04) ? 1u : 0u,
+          static_cast<unsigned>(s.satellites));
+      if (len <= 0) {
+        continue;
+      }
+      if (textUsed + static_cast<size_t>(len) > 4096) {
+        flushText();
+      }
+      memcpy(textBuf + textUsed, line, static_cast<size_t>(len));
+      textUsed += static_cast<size_t>(len);
     }
     produced += static_cast<uint32_t>(n);
     next = nxt;
@@ -444,11 +561,14 @@ void WebPortal::handleClockTraceData() {
       break;
     }
   }
-  free(batch);
+  flushText();
   char trailer[96];
   snprintf(trailer, sizeof(trailer), "# next=%u done=%u\n", static_cast<unsigned>(next),
            (next >= info.seqNext) ? 1u : 0u);
   server_.sendContent(trailer);
+  free(textBuf);
+  free(batch);
+  xferEnd();
 #endif
 }
 
@@ -845,14 +965,15 @@ void WebPortal::handleSetup() {
             "<p id='msg'></p></div>");
   body += F("<div class='card'><h2 style='font-size:1rem;margin:0 0 8px'>时钟长测 (PSRAM)</h2>"
             "<p style='color:#64748b;font-size:.85rem'>设备侧采样环：开始后按 PPS≈1 Hz 写入 RAM/PSRAM；"
-            "<strong>必须先停止</strong>才能拉取 CSV（录制中禁止下载，避免与授时竞态）。"
-            "详见 <code>docs/clock_trace.md</code> / <code>tools/clock_trace_client.py</code>。</p>"
+            "<strong>必须先停止</strong>才能下载。下载默认<strong>二进制</strong>（快，期间停 NTP / KoD RSTR）；"
+            "浏览器可下 CSV（较慢）。推荐 CLI：<code>tools/clock_trace_client.py fetch</code>。</p>"
             "<p>状态 <code id='ctState'>--</code> · 样本 <span id='ctCount'>0</span>/<span id='ctCap'>0</span>"
             " · dropped <span id='ctDrop'>0</span> · PSRAM <span id='ctPsram'>?</span></p>"
             "<button type='button' onclick='ctStart()'>开始录制</button> "
             "<button type='button' onclick='ctStop()'>停止</button> "
             "<button type='button' onclick='ctClear()'>清空</button> "
-            "<button type='button' onclick='ctFetch()'>下载 CSV</button>"
+            "<button type='button' onclick='ctFetchBin()'>下载 BIN</button> "
+            "<button type='button' onclick='ctFetchCsv()'>下载 CSV</button>"
             "<p id='ctmsg'></p></div>");
   body += F("<div class='card'><h2 style='font-size:1rem;margin:0 0 8px'>固件 OTA</h2>"
             "<p style='color:#64748b;font-size:.85rem'>上传本芯片对应的 <strong>app 镜像</strong>："
@@ -1044,11 +1165,19 @@ void WebPortal::handleSetup() {
             "async function ctStart(){await ctPost('/debug/clock/start');}"
             "async function ctStop(){await ctPost('/debug/clock/stop');}"
             "async function ctClear(){await ctPost('/debug/clock/clear');}"
-            "async function ctFetch(){"
+            "async function ctFetchBin(){"
             " const st=await ctRefresh();"
             " if(!st||st.state!=='STOP'){"
             "  document.getElementById('ctmsg').textContent='请先停止录制再下载';return;}"
-            " location.href='/debug/clock/data';"
+            " document.getElementById('ctmsg').textContent='下载中（停 NTP）…';"
+            " location.href='/debug/clock/data?format=bin';"
+            "}"
+            "async function ctFetchCsv(){"
+            " const st=await ctRefresh();"
+            " if(!st||st.state!=='STOP'){"
+            "  document.getElementById('ctmsg').textContent='请先停止录制再下载';return;}"
+            " document.getElementById('ctmsg').textContent='CSV 较慢，大包请用 CLI';"
+            " location.href='/debug/clock/data?format=csv';"
             "}"
             "ctRefresh(); setInterval(ctRefresh,2000);"
             "document.getElementById('apol').value='");
@@ -1433,11 +1562,12 @@ void WebPortal::handleStatus() {
   const WifiLinkSnapshot link = wifi_ ? wifi_->linkSnapshot() : WifiLinkSnapshot{};
   const GpsStatus st = gps_ ? gps_->snapshot() : GpsStatus{};
   const bool otaBusy = ipcOtaBusy();
-  const bool syncOk = !otaBusy && st.timeValid &&
+  const bool shedNtp = ipcShedNtp();
+  const bool syncOk = !shedNtp && st.timeValid &&
                       (st.clockState == ClockState::Locked || st.clockState == ClockState::Degraded ||
                        st.clockState == ClockState::Holdover);
   const bool s1 =
-      !otaBusy && st.timeValid && st.clockState == ClockState::Locked && st.ppsFresh;
+      !shedNtp && st.timeValid && st.clockState == ClockState::Locked && st.ppsFresh;
 
   uint32_t utcEpoch = st.utcEpoch;
   uint32_t utcFracMs = 0;
@@ -1495,9 +1625,10 @@ void WebPortal::handleStatus() {
   doc["otaNextSize"] = gOta.nextSlotSize();
   doc["otaState"] = gOta.imageStateLabel();
   doc["otaBusy"] = otaBusy;
+  doc["xferBusy"] = ipcXferBusy();
   doc["otaPhase"] = ipcOtaPhaseLabel();
   doc["otaChip"] = gOta.expectedChipName();
-  doc["ntpServing"] = !otaBusy;
+  doc["ntpServing"] = !shedNtp;
   doc["sta"] = link.staUp;
   doc["ip"] = (link.staUp ? link.staIp : link.apIp).toString();
   doc["ssid"] = link.staUp ? link.staSsid : "";
@@ -1626,10 +1757,10 @@ void WebPortal::handleStatus() {
   ntp["synced"] = syncOk;
   ntp["stratum"] = syncOk ? 1 : 16;
   ntp["stratum1Ready"] = s1;
-  ntp["refId"] = otaBusy ? "RSTR" : (syncOk ? "GPSS" : "INIT");
+  ntp["refId"] = shedNtp ? "RSTR" : (syncOk ? "GPSS" : "INIT");
   // LI is leap-second indicator only; holdover stays LI=0 with rising dispersion.
   ntp["li"] = syncOk ? 0 : 3;
-  ntp["otaRefuse"] = otaBusy;
+  ntp["otaRefuse"] = shedNtp;
   ntp["requests"] = ntp_ ? ntp_->requestCount() : 0;
   ntp["served"] = ntp_ ? ntp_->servedCount() : 0;
   ntp["rateLimited"] = ntp_ ? ntp_->rateLimitedCount() : 0;
