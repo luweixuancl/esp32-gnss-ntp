@@ -586,12 +586,16 @@ void WebPortal::handleSetup() {
             "<button type='button' onclick='saveWifi()'>连接</button>"
             "<p id='msg'></p></div>");
   body += F("<div class='card'><h2 style='font-size:1rem;margin:0 0 8px'>固件 OTA</h2>"
-            "<p style='color:#64748b;font-size:.85rem'>上传 PlatformIO 产出的 "
-            "<code>firmware.bin</code>（仅 app，勿用 merged 整片镜像）。"
-            "升级期间<strong>停止 NTP 授时</strong>（KoD <code>RSTR</code>），并让出 CPU/Flash 以尽快完成；"
-            "成功后自动重启，NVS 配置保留。状态灯："
-            "上传中<strong>琥珀快闪</strong> → 成功<strong>绿灯常亮</strong> → 失败<strong>红闪</strong>。"
-            "串口烧录仍可用作兜底。</p>"
+            "<p style='color:#64748b;font-size:.85rem'>上传本芯片对应的 <strong>app 镜像</strong>："
+            "C3 用 <code>firmware.bin</code>，S3 用 <code>firmware_esp32s3.bin</code>"
+            "（勿用 <code>merged*_0x0.bin</code>）。"
+            "升级期间<strong>停止 NTP 授时</strong>（KoD <code>RSTR</code>）；成功后自动重启，NVS 保留。"
+            "状态灯：上传<strong>琥珀快闪</strong> → 成功<strong>绿灯</strong> → 失败<strong>红闪</strong>。</p>"
+            "<p style='color:#b45309;font-size:.85rem'><strong>自 v1.1.20（IDF4）迁到本分支（IDF5）"
+            "请勿依赖 Web OTA</strong>：需 USB <strong>整片擦除</strong>后烧 "
+            "<code>merged*_0x0.bin</code> @ <code>0x0</code>（见 "
+            "<code>docs/upgrade_idf5_from_1120.md</code>）。"
+            "同 IDF5 大版本内的后续升级才可用本页 OTA。</p>"
             "<p>当前 <b>");
   body += FW_VERSION;
   body += F("</b> · 目标 <code>");
