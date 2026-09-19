@@ -1,0 +1,9 @@
+# Name,   Type, SubType, Offset,  Size, Flags
+# 4MB flash: enlarge OTA app slots to ~1.75MB each (IDF5 images are larger
+# than Arduino-2 / IDF4). NVS/otadata offsets unchanged vs stock default.csv.
+nvs,      data, nvs,     0x9000,  0x5000,
+otadata,  data, ota,     0xe000,  0x2000,
+app0,     app,  ota_0,   0x10000, 0x1C0000,
+app1,     app,  ota_1,   0x1D0000,0x1C0000,
+spiffs,   data, spiffs,  0x390000,0x60000,
+coredump, data, coredump,0x3F0000,0x10000,
