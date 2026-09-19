@@ -14,7 +14,8 @@ static bool rgbBOn_ = false;
 
 static void flushRgb() {
   const uint8_t v = LED_RGB_BRIGHTNESS;
-  neopixelWrite(PIN_LED_RGB, rgbD4On_ ? v : 0, rgbD5On_ ? v : 0, rgbBOn_ ? v : 0);
+  // Arduino-ESP32 3.x: neopixelWrite() is deprecated.
+  rgbLedWrite(PIN_LED_RGB, rgbD4On_ ? v : 0, rgbD5On_ ? v : 0, rgbBOn_ ? v : 0);
 }
 
 static void setRgb(bool r, bool g, bool b) {

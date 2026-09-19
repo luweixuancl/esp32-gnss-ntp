@@ -91,7 +91,8 @@ static bool boardTempRead(float* out) {
 void IRAM_ATTR GpsService::onPpsIsr() {
   const uint64_t edgeUs = esp_timer_get_time();
   portENTER_CRITICAL_ISR(&ppsMux_);
-  const uint32_t count = ++ppsCount_;
+  const uint32_t count = ppsCount_ + 1;
+  ppsCount_ = count;
   ppsLastEdgeUs_ = edgeUs;
 
   const uint8_t next = static_cast<uint8_t>((ppsQHead_ + 1) % GPS_PPS_ISR_QUEUE);

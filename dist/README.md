@@ -9,7 +9,7 @@
 
 ## Current app build
 
-- Mark: **v1.1.23** (`FW_MARK`)
+- Mark: **v1.1.24** (`FW_MARK`)
 - Platform: pioarduino 55.03.311 (Arduino 3.3.11 / IDF 5.5.5) — see `docs/idf5_adapt_20260919.md`
 
 ## Verify before Web OTA

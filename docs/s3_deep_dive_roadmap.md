@@ -1,6 +1,6 @@
 # S3 特性深挖路线图（PPS 硬件捕获 / PSRAM 历史 / OTA / 外部时钟）
 
-> 状态：立项排序已定（2026-09-18：**① RMT【IDF4 封存 → IDF5 路径已就绪 v1.1.23，默认 EN=0】→ ② OTA【板测通过 v1.1.7】→ ③ PSRAM 历史【已取消 v1.1.14】→ ④ 外部时钟【接口 v1.1.15，待购件开 EN】**）
+> 状态：立项排序已定（2026-09-18：**① RMT【IDF4 封存 → IDF5 路径已就绪 v1.1.24，默认 EN=0】→ ② OTA【板测通过 v1.1.7】→ ③ PSRAM 历史【已取消 v1.1.14】→ ④ 外部时钟【接口 v1.1.15，待购件开 EN】**）
 > 背景：S3 移植转正后的特性深挖规划，基于 2026-09-18 代码/特性审查；各项目启动前按本档「验收准则」细化
 > 修订：③ 已取消；④ 见 [ext_clock_design.md](ext_clock_design.md)；IDF5 适配见 [idf5_adapt_20260919.md](idf5_adapt_20260919.md)
 > 相关：[esp32s3_devkitc1_hw.md](esp32s3_devkitc1_hw.md)、[esp32s3_flash_test_20260917.md](esp32s3_flash_test_20260917.md)、[s3_clock_drift_20260917.md](s3_clock_drift_20260917.md)
@@ -17,11 +17,11 @@
 | 3× UART | 2 路在用（调试/GNSS），第 3 路闲置 |
 | USB-OTG | 刻意不用（CDC_ON_BOOT=0，走 UART 座） |
 
-## 1. 项目一：RMT RX 硬件捕获 PPS 边沿（第 1 位）——**IDF4 封存；IDF5 路径 v1.1.23**
+## 1. 项目一：RMT RX 硬件捕获 PPS 边沿（第 1 位）——**IDF4 封存；IDF5 路径 v1.1.24**
 
 - **IDF4 结局（2026-09-18）**：四轮探针后诚实封存。根因不在应用层：Arduino-ESP32 2.0.17 / IDF 4.4.7 的 **legacy RMT 驱动在 S3 上的 RX 数据通路只推送空环形缓冲项**（每边沿精确 2 个空帧、零符号数据），HAL `rmtRead(cb)` 与直驱两条路径同样空帧；`rmt_get_status` 原始寄存器恒 `0x2a8150`。
 - **附带发现**：边沿扣留机制扰动 NMEA 交叉检核；随 `GPS_PPS_RMT_EN=0` 剔除后恢复稳定。
-- **IDF5（v1.1.23）**：平台迁至 pioarduino Arduino 3.3.11 / IDF 5.5.5；应用层改为 `driver/rmt_rx.h`（`rmt_new_rx_channel` / `rmt_receive` / `on_recv_done`）。**默认仍 EN=0**，待板测再开。详见 [idf5_adapt_20260919.md](idf5_adapt_20260919.md)。
+- **IDF5（v1.1.24）**：平台迁至 pioarduino Arduino 3.3.11 / IDF 5.5.5；应用层改为 `driver/rmt_rx.h`（`rmt_new_rx_channel` / `rmt_receive` / `on_recv_done`）。**默认仍 EN=0**，待板测再开。模块兼容性审核见 [idf5_adapt_20260919.md](idf5_adapt_20260919.md)。
 - **验收准则**：开 EN=1 后 `idfDataFrames` 随 PPS 增长；`deltaMeanUx10` 量级合理；长测 LCK 不抖动。
 
 ## 2. 项目二：PSRAM 诊断环形缓冲 + `/history`（第 3 位）——**已取消（v1.1.14）**
