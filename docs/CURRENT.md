@@ -1,7 +1,7 @@
 # 当前基线（与代码一致）
 
 > 更新日期：2026-09-19  
-> **`main` 发布 = v1.1.36** · 本分支 **v1.1.39**（时钟环仅二进制下载）  
+> **`main` = v1.1.39**（PSRAM 时钟长测环，仅二进制下载）· 合入自 `cursor/clock-psram-ring-a05e`  
 > 时钟长测板测 **PASS**（v1.1.38）— [clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md)  
 > Web OTA 往返 **PASS** — [ota_deploy_v1136_20260919.md](ota_deploy_v1136_20260919.md)  
 > RMT 板测已结案 FAIL — [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)
@@ -31,7 +31,7 @@
 ## 升级
 
 - 自 IDF4（≤ v1.1.21）：整片烧录 — [upgrade_idf5_from_1120.md](upgrade_idf5_from_1120.md)  
-- 已在 IDF5：可用 `firmware_esp32s3.bin` @ `0x10000` 升到 **v1.1.39**（本分支）或 v1.1.36（`main` 发布）
+- 已在 IDF5：可用 `firmware_esp32s3.bin` @ `0x10000` 升到 **v1.1.39**
 
 ## 文档索引
 
