@@ -4,11 +4,11 @@
 // OLED mark is unambiguous after OTA / serial upgrade.
 #define FW_VER_MAJOR         1
 #define FW_VER_MINOR         1
-#define FW_VER_PATCH         25
-// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.25").
-#define FW_MARK              "v1.1.25"
+#define FW_VER_PATCH         26
+// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.26").
+#define FW_MARK              "v1.1.26"
 // Full string for /status, /cfg, serial, OTA pages.
-#define FW_VERSION           "1.1.25"
+#define FW_VERSION           "1.1.26"
 // Reject obviously truncated OTA payloads before activating the slot.
 #define OTA_MIN_IMAGE_BYTES      (200 * 1024)
 // After a pending-verify OTA boot, wait until tasks are alive this long before
@@ -104,7 +104,28 @@
 
 // On-board LEDs (合宙 CORE D4/D5 on C3; S3 merges both onto the onboard RGB @38)
 // Active HIGH on C3. RGB brightness cap: WS2812-class @3V3 is very bright.
-#define LED_RGB_BRIGHTNESS  12   // 0-255 per channel on S3 RGB
+#define LED_RGB_BRIGHTNESS   8   // 0-255 per channel on S3 RGB (was 12; heat/current)
+
+// Power (always-on NTP server — no deep sleep). These cut idle heat on S3.
+// Override per build with -D if needed. Trade-offs: docs/power_save.md
+#if defined(ARDUINO_ESP32S3_DEV)
+#ifndef CPU_FREQ_MHZ
+#define CPU_FREQ_MHZ              160   // DevKit default 240; 160 is enough for NTP/PPS
+#endif
+#else
+#ifndef CPU_FREQ_MHZ
+#define CPU_FREQ_MHZ              160   // C3 default is typically 160 already
+#endif
+#endif
+// 1 = WIFI_PS_MIN_MODEM (DTIM wake; lower STA idle current, slight NTP RTT jitter)
+// 0 = modem always awake (previous behaviour; cooler? no — hotter radio)
+#ifndef WIFI_MODEM_SLEEP
+#define WIFI_MODEM_SLEEP            1
+#endif
+// task-time idle wait between PPS notify / UDP poll (was 1 ms).
+#ifndef TASK_TIME_IDLE_MS
+#define TASK_TIME_IDLE_MS           5
+#endif
 
 // SoftAP for web WiFi setup (SSID prefix). Password default: NTP-<MAC low 16-bit hex>.
 #define AP_SSID_PREFIX      "NTP-Setup"

@@ -19,6 +19,10 @@ static void flushRgb() {
 }
 
 static void setRgb(bool r, bool g, bool b) {
+  // Skip RMT TX when the pattern is unchanged (heartbeat still toggles).
+  if (r == rgbD4On_ && g == rgbD5On_ && b == rgbBOn_) {
+    return;
+  }
   rgbD4On_ = r;
   rgbD5On_ = g;
   rgbBOn_ = b;
@@ -34,8 +38,14 @@ static void setRgb(bool /*r*/, bool /*g*/, bool /*b*/) {
 static void setLed(uint8_t pin, bool on) {
 #if defined(ARDUINO_ESP32S3_DEV)
   if (pin == PIN_LED_D4) {
+    if (rgbD4On_ == on) {
+      return;
+    }
     rgbD4On_ = on;
   } else {
+    if (rgbD5On_ == on) {
+      return;
+    }
     rgbD5On_ = on;
   }
 #else

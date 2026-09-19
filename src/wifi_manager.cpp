@@ -175,7 +175,13 @@ bool WifiManager::beginConnect(const AppSettings& settings) {
   // disconnect() posts ASSOC_LEAVE (8) asynchronously — drop it so pollConnect
   // does not treat our own leave as a failed join.
   takeEventBit(WifiEvtBits::Disc);
+#if WIFI_MODEM_SLEEP
+  // MIN_MODEM: wake on DTIM; cuts STA idle current vs setSleep(false).
+  // MAX_MODEM saves more but can miss beacons / inflate NTP RTT — keep MIN.
+  WiFi.setSleep(WIFI_PS_MIN_MODEM);
+#else
   WiFi.setSleep(false);
+#endif
 #if defined(WIFI_ALL_CHANNEL_SCAN)
   WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
   WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);

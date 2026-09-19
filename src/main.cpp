@@ -525,7 +525,7 @@ static void taskTime(void* /*arg*/) {
       continue;
     }
 
-    ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1));
+    ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(TASK_TIME_IDLE_MS));
 
     if (settingsLock(0)) {
       cachedPolicy = gSettings.anomalyPolicy;
@@ -681,6 +681,18 @@ void setup() {
   delay(200);
   Serial.println("\nGNSS NTP Server (RTOS)");
   Serial.printf("FW %s (%s)\n", FW_MARK, FW_VERSION);
+
+  // Always-on NTP cannot deep-sleep; lower CPU clock to cut S3 idle heat.
+  // PPS uses esp_timer / GPIO ISR (not CPU cycle counting), so 160 MHz is fine.
+  if (!setCpuFrequencyMhz(CPU_FREQ_MHZ)) {
+    Serial.printf("[pwr] setCpuFrequencyMhz(%u) failed — keeping default\n",
+                  static_cast<unsigned>(CPU_FREQ_MHZ));
+  } else {
+    Serial.printf("[pwr] cpu=%u MHz wifi_modem_sleep=%u time_idle=%ums\n",
+                  static_cast<unsigned>(getCpuFrequencyMhz()),
+                  static_cast<unsigned>(WIFI_MODEM_SLEEP),
+                  static_cast<unsigned>(TASK_TIME_IDLE_MS));
+  }
 
   if (!ipcInit()) {
     Serial.println("IPC init failed — halt/restart");
