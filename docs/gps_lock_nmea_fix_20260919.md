@@ -30,4 +30,8 @@ PPS 仍会计数（GPIO），故会出现「PPS 正常但时间无效」。
 
 期望在数十秒内：`nmea=1` 且 `rmc=1` 或 `zda=1`，随后 `clk=LCK`、时间有效。
 
-若 `nmea` 长期为 0：查 GNSS TX→ESP RX 接线与波特率；可临时 `-DGPS_DEBUG_NMEA=1` 看原文。
+若 `nmea`/`rmc` 长期为 0：查 GNSS TX→ESP RX 接线与波特率；可临时 `-DGPS_DEBUG_NMEA=1` 看原文。
+
+## 板测
+
+S3 上 v1.1.27 用户已确认 **正常锁定**（2026-09-19）。完整清单见 [board_test_s3_idf5_20260919.md](board_test_s3_idf5_20260919.md)。

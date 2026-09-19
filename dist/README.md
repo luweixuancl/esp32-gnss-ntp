@@ -13,6 +13,7 @@
 - Platform: pioarduino 55.03.311 (Arduino 3.3.11 / IDF 5.5.5) — see `docs/idf5_adapt_20260919.md`
 - Power: S3 defaults to 160 MHz + WiFi MIN_MODEM sleep — see `docs/power_save.md`
 - Lock fix: NMEA filter keeps RMC+ZDA — see `docs/gps_lock_nmea_fix_20260919.md`
+- Board: S3 lock confirmed on v1.1.27 — see `docs/board_test_s3_idf5_20260919.md`
 - C3 partitions: `partitions/default_ota_1750k.csv` (~1.75 MB app slots). **Full flash** (`firmware_merged_0x0.bin`) applies the new table; Web OTA alone does not.
 
 ## Verify before Web OTA
