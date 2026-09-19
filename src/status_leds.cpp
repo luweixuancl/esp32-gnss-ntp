@@ -14,10 +14,15 @@ static bool rgbBOn_ = false;
 
 static void flushRgb() {
   const uint8_t v = LED_RGB_BRIGHTNESS;
-  neopixelWrite(PIN_LED_RGB, rgbD4On_ ? v : 0, rgbD5On_ ? v : 0, rgbBOn_ ? v : 0);
+  // Arduino-ESP32 3.x: neopixelWrite() is deprecated.
+  rgbLedWrite(PIN_LED_RGB, rgbD4On_ ? v : 0, rgbD5On_ ? v : 0, rgbBOn_ ? v : 0);
 }
 
 static void setRgb(bool r, bool g, bool b) {
+  // Skip RMT TX when the pattern is unchanged (heartbeat still toggles).
+  if (r == rgbD4On_ && g == rgbD5On_ && b == rgbBOn_) {
+    return;
+  }
   rgbD4On_ = r;
   rgbD5On_ = g;
   rgbBOn_ = b;
@@ -33,8 +38,14 @@ static void setRgb(bool /*r*/, bool /*g*/, bool /*b*/) {
 static void setLed(uint8_t pin, bool on) {
 #if defined(ARDUINO_ESP32S3_DEV)
   if (pin == PIN_LED_D4) {
+    if (rgbD4On_ == on) {
+      return;
+    }
     rgbD4On_ = on;
   } else {
+    if (rgbD5On_ == on) {
+      return;
+    }
     rgbD5On_ = on;
   }
 #else

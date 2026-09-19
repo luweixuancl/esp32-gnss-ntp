@@ -4,11 +4,11 @@
 // OLED mark is unambiguous after OTA / serial upgrade.
 #define FW_VER_MAJOR         1
 #define FW_VER_MINOR         1
-#define FW_VER_PATCH         21
-// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.21").
-#define FW_MARK              "v1.1.21"
+#define FW_VER_PATCH         28
+// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.28").
+#define FW_MARK              "v1.1.28"
 // Full string for /status, /cfg, serial, OTA pages.
-#define FW_VERSION           "1.1.21"
+#define FW_VERSION           "1.1.28"
 // Reject obviously truncated OTA payloads before activating the slot.
 #define OTA_MIN_IMAGE_BYTES      (200 * 1024)
 // After a pending-verify OTA boot, wait until tasks are alive this long before
@@ -54,7 +54,7 @@
 #define PIN_LED_D4          12   // D4 RUN / WiFi
 #define PIN_LED_D5          13   // D5 GPS / PPS / NTP ready
 #define PIN_LED_RGB         48   // S3 onboard SK6812-mini RGB (D6, 3V3): D4->R / D5->G
-#define GPS_PPS_RMT_CH       7   // direct-IDF RMT RX channel (S3: 0..7; avoid HAL RGB ch0)
+#define GPS_PPS_RMT_CH       7   // legacy IDF4 hint (unused; IDF5 pool-allocates RX)
                                  // NOTE: field-measured @48 on this board; original
                                  // V1.1 schematic routes it to 38 (clone/older wiring)
 #define TASK_TIME_CORE       1   // dual-core: task-time alone on core 1
@@ -73,7 +73,7 @@
 #define PIN_ENC_SW           5
 #define PIN_LED_D4          12   // D4 RUN / WiFi
 #define PIN_LED_D5          13   // D5 GPS / PPS / NTP ready
-#define GPS_PPS_RMT_CH       1   // direct-IDF RMT RX channel (C3: 0..1; avoid HAL RGB ch0)
+#define GPS_PPS_RMT_CH       1   // legacy IDF4 hint (unused; IDF5 pool-allocates RX)
 #define TASK_TIME_CORE       0   // C3 single-core: everything on core 0
 
 #endif
@@ -82,14 +82,19 @@
 #define GPS_UART_NUM         1
 #define GPS_DEBUG            0   // 1 = 每秒向 UART0 打印定位/PPS（time 任务内，默认关）
 #define GPS_DEBUG_NMEA       0   // 1 = 把 NMEA 原文转发到 UART0
-// Boot: sniff NMEA talkers, then $PCAS03 → only GGA + ZDA (DX-GP10 / CASIC).
-// Skip PCAS entirely when probe already sees GGA+ZDA with no extras; $PCAS00
-// (FLASH) only when probe saw a wrong/incomplete set (not on empty wake).
+// Boot: sniff NMEA talkers, then $PCAS03 → GGA + RMC + ZDA (DX-GP10 / CASIC).
+// RMC is required so TinyGPSPlus keeps date/time if ZDA is missing/late; ZDA
+// remains the preferred UTC source when present. Skip PCAS when probe already
+// matches; $PCAS00 (FLASH) only when the sentence set was wrong/incomplete.
 #ifndef GPS_NMEA_FILTER_EN
 #define GPS_NMEA_FILTER_EN       1
 #endif
 #define GPS_NMEA_PROBE_MS     1500
 #define GPS_NMEA_CMD_GAP_MS    120
+// While timeValid=0, print a one-line clock diag this often (0 = off).
+#ifndef GPS_LOCK_DIAG_MS
+#define GPS_LOCK_DIAG_MS        5000
+#endif
 
 // SH1107 / SSD1107 0.96" 64x128 OLED over I2C (pins above; native portrait, setRotation(1) → 128x64 UI)
 #define OLED_I2C_ADDR     0x3C
@@ -106,7 +111,28 @@
 
 // On-board LEDs (合宙 CORE D4/D5 on C3; S3 merges both onto the onboard RGB @38)
 // Active HIGH on C3. RGB brightness cap: WS2812-class @3V3 is very bright.
-#define LED_RGB_BRIGHTNESS  12   // 0-255 per channel on S3 RGB
+#define LED_RGB_BRIGHTNESS   8   // 0-255 per channel on S3 RGB (was 12; heat/current)
+
+// Power (always-on NTP server — no deep sleep). These cut idle heat on S3.
+// Override per build with -D if needed. Trade-offs: docs/power_save.md
+#if defined(ARDUINO_ESP32S3_DEV)
+#ifndef CPU_FREQ_MHZ
+#define CPU_FREQ_MHZ              160   // DevKit default 240; 160 is enough for NTP/PPS
+#endif
+#else
+#ifndef CPU_FREQ_MHZ
+#define CPU_FREQ_MHZ              160   // C3 default is typically 160 already
+#endif
+#endif
+// 1 = WIFI_PS_MIN_MODEM (DTIM wake; lower STA idle current, slight NTP RTT jitter)
+// 0 = modem always awake (previous behaviour; cooler? no — hotter radio)
+#ifndef WIFI_MODEM_SLEEP
+#define WIFI_MODEM_SLEEP            1
+#endif
+// task-time idle wait between PPS notify / UDP poll (was 1 ms).
+#ifndef TASK_TIME_IDLE_MS
+#define TASK_TIME_IDLE_MS           5
+#endif
 
 // SoftAP for web WiFi setup (SSID prefix). Password default: NTP-<MAC low 16-bit hex>.
 #define AP_SSID_PREFIX      "NTP-Setup"
@@ -212,16 +238,14 @@
 // ISR→task PPS queue (missed edges under WiFi load).
 #define GPS_PPS_ISR_QUEUE             8
 // RMT RX hardware capture of the PPS edge (docs/s3_deep_dive_roadmap.md #1):
-// PARKED (2026-09-18) — Arduino-ESP32 2.0.17 / IDF 4.4.7 legacy RMT RX on S3
-// delivers only EMPTY ringbuf items (2 per edge, both the HAL rmtRead(cb)
-// wrapper and a direct-IDF driver path with RMT_MEM_OWNER_RX claimed; raw
-// channel status constant at 0x2a8150). Platform-level data-path defect,
-// not fixable app-side. Reopen on Arduino 3.x / IDF 5 (new RMT driver).
-#define GPS_PPS_RMT_EN                0   // 0 = legacy GPIO ISR only
+// IDF5 path ready (pioarduino Arduino 3.3.11 / ESP-IDF 5.5.5, driver/rmt_rx.h).
+// Default 0 until board re-validation — GPIO ISR remains the production source.
+// Set to 1 to reopen the RMT refinement experiment on IDF5.
+#define GPS_PPS_RMT_EN                0   // 0 = GPIO ISR only; 1 = IDF5 rmt_rx
 #define GPS_PPS_RMT_QUEUE             8
-#define GPS_PPS_RMT_TICK_NS        1000   // 1 µs symbols (80 MHz / 80)
-#define GPS_PPS_RMT_WINDOW_MS        20   // capture window after the edge
-#define GPS_PPS_RMT_FILTER_NS      1000   // hw-glitch filter: drop <1 µs pulses
+#define GPS_PPS_RMT_TICK_NS        1000   // 1 µs symbols (resolution_hz = 1e9/tick)
+#define GPS_PPS_RMT_WINDOW_MS        20   // signal_range_max_ns after last edge
+#define GPS_PPS_RMT_FILTER_NS      1000   // signal_range_min_ns glitch filter
 #define GPS_PPS_RMT_HOLD_MS         700    // hold a GPIO edge for its refinement
 #define GPS_PPS_RMT_STALE_MS        2100   // no RMT edges for this long -> fall back to GPIO
 // Missed PPS seconds ≥ this → Unsynced (not silent catch-up only).
