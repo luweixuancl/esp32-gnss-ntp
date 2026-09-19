@@ -58,6 +58,17 @@ struct GpsStatus {
     uint32_t idfRawStatus = 0;
     uint8_t idfStage = 0;
     int idfErr = 0;
+    // Register-level driver (rmt_pps_reg) — TRM Ch.37, no driver/rmt.h
+    bool regOk = false;
+    uint32_t regFrames = 0;
+    uint32_t regDataFrames = 0;
+    uint32_t regEmptyFrames = 0;
+    uint32_t regOverflows = 0;
+    uint32_t regOwnerErr = 0;
+    uint32_t regLastWidthUs = 0;
+    uint32_t regLastSymbols = 0;
+    uint32_t regLastStatus = 0;
+    uint8_t regRxChannel = 0;
   };
   PpsRmtStats ppsRmt;
 };

@@ -1,5 +1,6 @@
 #include "gps_service.h"
 #include "ext_clock.h"
+#include "rmt_pps_reg.h"
 #include <esp_timer.h>
 #include <stdlib.h>
 #include <string.h>
@@ -258,6 +259,9 @@ void GpsService::begin() {
   gpsSerial_.setRxBufferSize(2048);
   gpsSerial_.begin(GPS_UART_BAUD, SERIAL_8N1, PIN_GPS_RX, PIN_GPS_TX);
   attachInterrupt(digitalPinToInterrupt(PIN_GPS_PPS), onPpsIsr, RISING);
+#if GPS_PPS_RMT_REG_EN
+  rmtPpsRegBegin(PIN_GPS_PPS);
+#endif
 #if GPS_PPS_RMT_EN
   {
     rmt_obj_t* r = rmtInit(PIN_GPS_PPS, RMT_RX_MODE, RMT_MEM_64);
@@ -702,6 +706,32 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
   work.ppsSeen = ppsSeen_;
   work.ppsCount = ppsCount_;
   work.ppsFresh = ppsFresh();
+#if GPS_PPS_RMT_REG_EN
+  {
+    // Drain register-driver queue (observe-only until board validates edges).
+    RmtPpsRegEdge e;
+    while (rmtPpsRegPop(&e)) {
+      // Keep popping so the queue does not stall; stats come from the driver.
+      (void)e;
+    }
+    RmtPpsRegStats rs{};
+    rmtPpsRegGetStats(&rs);
+    work.ppsRmt.regOk = rs.armed;
+    work.ppsRmt.regFrames = rs.frames;
+    work.ppsRmt.regDataFrames = rs.dataFrames;
+    work.ppsRmt.regEmptyFrames = rs.emptyFrames;
+    work.ppsRmt.regOverflows = rs.overflows;
+    work.ppsRmt.regOwnerErr = rs.ownerErr;
+    work.ppsRmt.regLastWidthUs = rs.lastWidthUs;
+    work.ppsRmt.regLastSymbols = rs.lastSymbols;
+    work.ppsRmt.regLastStatus = rs.lastStatus;
+    work.ppsRmt.regRxChannel = rs.rxChannel;
+    if (rs.armed) {
+      work.ppsRmt.ok = true;
+      work.ppsRmt.lastWidthUs = rs.lastWidthUs;
+    }
+  }
+#endif
 #if GPS_PPS_RMT_EN
   work.ppsRmt.ok = gRmt.armed;
   work.ppsRmt.active = gRmt.active;

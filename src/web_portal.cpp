@@ -1251,7 +1251,7 @@ void WebPortal::handleStatus() {
   gps["lon"] = st.lon;
   gps["ppsFresh"] = st.ppsFresh;
   gps["ppsCount"] = st.ppsCount;
-#if GPS_PPS_RMT_EN
+#if GPS_PPS_RMT_EN || GPS_PPS_RMT_REG_EN
   JsonObject ppsRmt = gps["ppsRmt"].to<JsonObject>();
   ppsRmt["armed"] = st.ppsRmt.ok;
   ppsRmt["active"] = st.ppsRmt.active;
@@ -1275,6 +1275,18 @@ void WebPortal::handleStatus() {
   ppsRmt["idfRawStatus"] = rs;
   ppsRmt["idfStage"] = st.ppsRmt.idfStage;
   ppsRmt["idfErr"] = st.ppsRmt.idfErr;
+  ppsRmt["regOk"] = st.ppsRmt.regOk;
+  ppsRmt["regFrames"] = st.ppsRmt.regFrames;
+  ppsRmt["regDataFrames"] = st.ppsRmt.regDataFrames;
+  ppsRmt["regEmptyFrames"] = st.ppsRmt.regEmptyFrames;
+  ppsRmt["regOverflows"] = st.ppsRmt.regOverflows;
+  ppsRmt["regOwnerErr"] = st.ppsRmt.regOwnerErr;
+  ppsRmt["regLastWidthUs"] = st.ppsRmt.regLastWidthUs;
+  ppsRmt["regLastSymbols"] = st.ppsRmt.regLastSymbols;
+  ppsRmt["regRxChannel"] = st.ppsRmt.regRxChannel;
+  char rrs[16];
+  snprintf(rrs, sizeof(rrs), "0x%08x", st.ppsRmt.regLastStatus);
+  ppsRmt["regLastStatus"] = rrs;
 #endif
   gps["utcEpoch"] = utcEpoch;
   gps["utcFracMs"] = utcFracMs;

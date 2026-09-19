@@ -4,11 +4,11 @@
 // OLED mark is unambiguous after OTA / serial upgrade.
 #define FW_VER_MAJOR         1
 #define FW_VER_MINOR         1
-#define FW_VER_PATCH         20
-// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.20").
-#define FW_MARK              "v1.1.20"
+#define FW_VER_PATCH         22
+// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.22").
+#define FW_MARK              "v1.1.22"
 // Full string for /status, /cfg, serial, OTA pages.
-#define FW_VERSION           "1.1.20"
+#define FW_VERSION           "1.1.22"
 // Reject obviously truncated OTA payloads before activating the slot.
 #define OTA_MIN_IMAGE_BYTES      (200 * 1024)
 // After a pending-verify OTA boot, wait until tasks are alive this long before
@@ -222,6 +222,18 @@
 #define GPS_PPS_RMT_FILTER_NS      1000   // hw-glitch filter: drop <1 µs pulses
 #define GPS_PPS_RMT_HOLD_MS         700    // hold a GPIO edge for its refinement
 #define GPS_PPS_RMT_STALE_MS        2100   // no RMT edges for this long -> fall back to GPIO
+// Register-level RMT RX for PPS (docs/rmt_pps_reg_driver.md). S3 default ON
+// for pioneering bring-up; override with -DGPS_PPS_RMT_REG_EN=0 if needed.
+#ifndef GPS_PPS_RMT_REG_EN
+#  if defined(ARDUINO_ESP32S3_DEV)
+#    define GPS_PPS_RMT_REG_EN        1
+#  else
+#    define GPS_PPS_RMT_REG_EN        0
+#  endif
+#endif
+#ifndef GPS_PPS_RMT_REG_RX_CH
+#define GPS_PPS_RMT_REG_RX_CH         3   // LL RX 3 = HW ch7 (DMA-capable)
+#endif
 // Missed PPS seconds ≥ this → Unsynced (not silent catch-up only).
 #define CLK_PPS_MISS_UNSYNC           3
 // Holdover dispersion: floor crystal error (ppm) when EMA is still small.
