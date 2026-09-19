@@ -17,7 +17,7 @@
 ## Verify
 
 ```text
-wc -c firmware_esp32s3.bin
+wc -c firmware_esp32s3.bin   # 1095312
 sha256sum -c SHA256SUMS
 ```
 
