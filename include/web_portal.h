@@ -26,8 +26,11 @@ class WebPortal {
   void handleOtaUpload();
   void handleStatus();
   void handleMetrics();
+  void handleDebugLog();
+  void handleDebugLogClear();
   bool sessionCookieOk();
   bool requireSession(bool htmlLogin);
+  bool requireSessionOrPass();
   void sendLoginPage(const char* err);
   void issueSession();
   String writePassword() const;

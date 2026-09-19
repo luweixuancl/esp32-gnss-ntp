@@ -1,5 +1,6 @@
 #include "wifi_manager.h"
 #include "config.h"
+#include "debug_log.h"
 #include "settings.h"
 #include <WiFi.h>
 #include <cstring>
@@ -49,19 +50,19 @@ void WifiManager::onWifiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
 
   switch (event) {
     case ARDUINO_EVENT_WIFI_STA_CONNECTED:
-      Serial.println("[wifi-evt] STA_CONNECTED");
+      debugLogf("[wifi-evt] STA_CONNECTED");
       break;
     case ARDUINO_EVENT_WIFI_STA_GOT_IP: {
       const uint32_t ip = info.got_ip.ip_info.ip.addr;
-      Serial.printf("[wifi-evt] GOT_IP %u.%u.%u.%u\n", ip & 0xffu, (ip >> 8) & 0xffu,
-                    (ip >> 16) & 0xffu, (ip >> 24) & 0xffu);
+      debugLogf("[wifi-evt] GOT_IP %u.%u.%u.%u", ip & 0xffu, (ip >> 8) & 0xffu,
+                (ip >> 16) & 0xffu, (ip >> 24) & 0xffu);
       self->setEventBit(WifiEvtBits::GotIp);
       break;
     }
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED: {
       const uint16_t reason = info.wifi_sta_disconnected.reason;
       self->lastDiscReason_ = reason;
-      Serial.printf("[wifi-evt] DISCONNECTED reason=%u\n", reason);
+      debugLogf("[wifi-evt] DISCONNECTED reason=%u", reason);
       self->setEventBit(WifiEvtBits::Disc);
       break;
     }
@@ -212,8 +213,7 @@ WifiConnectState WifiManager::pollConnect() {
   if (takeEventBit(WifiEvtBits::GotIp)) {
     connectState_ = WifiConnectState::Connected;
     cancelAutoReconnect();
-    Serial.println();
-    Serial.printf("STA GOT_IP: %s\n", WiFi.localIP().toString().c_str());
+    debugLogf("STA GOT_IP: %s", WiFi.localIP().toString().c_str());
     refreshLinkSnapshot();
     return connectState_;
   }
@@ -223,8 +223,7 @@ WifiConnectState WifiManager::pollConnect() {
     takeEventBit(WifiEvtBits::Disc);  // stale leave from before association
     connectState_ = WifiConnectState::Connected;
     cancelAutoReconnect();
-    Serial.println();
-    Serial.printf("STA connected (poll): %s\n", WiFi.localIP().toString().c_str());
+    debugLogf("STA connected (poll): %s", WiFi.localIP().toString().c_str());
     refreshLinkSnapshot();
     return connectState_;
   }

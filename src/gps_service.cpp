@@ -1,5 +1,6 @@
 #include "gps_service.h"
 #include "ext_clock.h"
+#include "debug_log.h"
 #include <esp_timer.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,7 +8,13 @@
 // driver/temp_sensor.h removed). RMT RX uses the new driver/rmt_rx.h API.
 #if GPS_PPS_RMT_EN
 #include "driver/rmt_rx.h"
+#include "driver/gpio.h"
+#include "esp_private/rmt.h"
+#include <soc/soc_caps.h>
 #include <freertos/queue.h>
+#if defined(ARDUINO_ESP32S3_DEV)
+#include "driver/rtc_io.h"
+#endif
 #endif
 
 portMUX_TYPE GpsService::ppsMux_ = portMUX_INITIALIZER_UNLOCKED;
@@ -53,8 +60,9 @@ static RmtPpsState gRmt;
 // IDF5 driver state: channel handle + done-queue of *copied* frames.
 // v1.1.29 board fail mode: queueing edata pointers under DMA left the task
 // reading 1×zero-duration symbols (stale buffer). Always copy in the ISR.
+// v1.1.33: native mem block (48 words/ch on S3); dual RX buffers; raw hex dump.
 #ifndef GPS_PPS_RMT_SYM_CAP
-#define GPS_PPS_RMT_SYM_CAP 64
+#define GPS_PPS_RMT_SYM_CAP SOC_RMT_MEM_WORDS_PER_CHANNEL
 #endif
 struct RmtDoneFrame {
   size_t n = 0;
@@ -69,12 +77,15 @@ struct IdfPpsState {
   uint32_t lastSyms = 0;
   uint32_t lastD0Us = 0;
   uint32_t lastD1Us = 0;
+  uint32_t lastRawVal = 0;
   uint32_t emptyFrames = 0;
   uint32_t dataFrames = 0;
   uint32_t junkFrames = 0;
+  uint32_t dumpLeft = GPS_PPS_RMT_DUMP_FRAMES;
+  uint8_t rawIdx = 0;
   rmt_channel_handle_t chan = nullptr;
   QueueHandle_t doneQ = nullptr;
-  rmt_symbol_word_t raw[GPS_PPS_RMT_SYM_CAP];
+  rmt_symbol_word_t raw[2][GPS_PPS_RMT_SYM_CAP];
   rmt_receive_config_t recvCfg = {};
 };
 static IdfPpsState gIdf;
@@ -225,8 +236,11 @@ bool IRAM_ATTR GpsService::rmtRxDoneCb(rmt_channel_handle_t channel,
     n = GPS_PPS_RMT_SYM_CAP;
   }
   fr.n = n;
+  // Word-by-word copy (avoid memcpy in ISR / cache-safe builds).
   if (n > 0 && edata->received_symbols != nullptr) {
-    memcpy(fr.syms, edata->received_symbols, n * sizeof(rmt_symbol_word_t));
+    for (size_t i = 0; i < n; ++i) {
+      fr.syms[i].val = edata->received_symbols[i].val;
+    }
   }
   BaseType_t woken = pdFALSE;
   if (xQueueSendFromISR(gIdf.doneQ, &fr, &woken) != pdTRUE) {
@@ -239,7 +253,10 @@ bool GpsService::rmtArmReceive() {
   if (gIdf.chan == nullptr) {
     return false;
   }
-  const esp_err_t err = rmt_receive(gIdf.chan, gIdf.raw, sizeof(gIdf.raw), &gIdf.recvCfg);
+  gIdf.rawIdx = static_cast<uint8_t>(1u - gIdf.rawIdx);
+  rmt_symbol_word_t* buf = gIdf.raw[gIdf.rawIdx];
+  const esp_err_t err = rmt_receive(gIdf.chan, buf, GPS_PPS_RMT_SYM_CAP * sizeof(rmt_symbol_word_t),
+                                    &gIdf.recvCfg);
   if (err != ESP_OK) {
     gIdf.err = err;
     return false;
@@ -264,10 +281,10 @@ void GpsService::tryArmRmtAfterFirstPps() {
   gRmt.lastArmTryMs = nowMs;
   if (rmtArmReceive()) {
     gRmt.armed = true;
-    Serial.printf("[pps-rmt] idf5 armed after first PPS (count=%u)\n",
+    debugLogf("[pps-rmt] idf5 armed after first PPS (count=%u)\n",
                   static_cast<unsigned>(ppsCount_));
   } else {
-    Serial.printf("[pps-rmt] arm defer failed err=%d (retry)\n", gIdf.err);
+    debugLogf("[pps-rmt] arm defer failed err=%d (retry)\n", gIdf.err);
   }
 }
 
@@ -288,9 +305,32 @@ void GpsService::rmtRxTask(void* arg) {
         gIdf.firstSyms = static_cast<uint32_t>(n);
       }
       gIdf.lastSyms = static_cast<uint32_t>(n);
-      const uint32_t sym = fr.syms[0].val;
-      gIdf.lastD0Us = (sym & 0x7FFF) * (GPS_PPS_RMT_TICK_NS / 1000);
-      gIdf.lastD1Us = ((sym >> 16) & 0x7FFF) * (GPS_PPS_RMT_TICK_NS / 1000);
+      const rmt_symbol_word_t& s0 = fr.syms[0];
+      gIdf.lastRawVal = s0.val;
+      gIdf.lastD0Us = static_cast<uint32_t>(s0.duration0) * (GPS_PPS_RMT_TICK_NS / 1000);
+      gIdf.lastD1Us = static_cast<uint32_t>(s0.duration1) * (GPS_PPS_RMT_TICK_NS / 1000);
+      if (gIdf.dumpLeft > 0) {
+        --gIdf.dumpLeft;
+        // Executor-requested: raw 32-bit word(s) to distinguish all-zero vs bitfield skew.
+        if (n > 1) {
+          debugLogf("[pps-rmt] dump n=%u val0=0x%08lx d0=%u l0=%u d1=%u l1=%u val1=0x%08lx",
+                    static_cast<unsigned>(n),
+                    static_cast<unsigned long>(s0.val),
+                    static_cast<unsigned>(s0.duration0),
+                    static_cast<unsigned>(s0.level0),
+                    static_cast<unsigned>(s0.duration1),
+                    static_cast<unsigned>(s0.level1),
+                    static_cast<unsigned long>(fr.syms[1].val));
+        } else {
+          debugLogf("[pps-rmt] dump n=%u val0=0x%08lx d0=%u l0=%u d1=%u l1=%u",
+                    static_cast<unsigned>(n),
+                    static_cast<unsigned long>(s0.val),
+                    static_cast<unsigned>(s0.duration0),
+                    static_cast<unsigned>(s0.level0),
+                    static_cast<unsigned>(s0.duration1),
+                    static_cast<unsigned>(s0.level1));
+        }
+      }
       if (rmtProcessSymbols(reinterpret_cast<const uint32_t*>(fr.syms), n)) {
         ++gIdf.dataFrames;
       } else {
@@ -304,13 +344,19 @@ void GpsService::rmtRxTask(void* arg) {
 
 void GpsService::begin() {
   localClock_.reset();
+#if GPS_PPS_RMT_EN && defined(ARDUINO_ESP32S3_DEV)
+  // GPIO4 is RTC-capable on S3 — leave RTC domain before digital/RMT use (v1.1.35).
+  if (rtc_gpio_is_valid_gpio(static_cast<gpio_num_t>(PIN_GPS_PPS))) {
+    rtc_gpio_deinit(static_cast<gpio_num_t>(PIN_GPS_PPS));
+  }
+#endif
   pinMode(PIN_GPS_PPS, INPUT_PULLDOWN);
   gpsSerial_.setRxBufferSize(2048);
   gpsSerial_.begin(GPS_UART_BAUD, SERIAL_8N1, PIN_GPS_RX, PIN_GPS_TX);
-  attachInterrupt(digitalPinToInterrupt(PIN_GPS_PPS), onPpsIsr, RISING);
 #if GPS_PPS_RMT_EN
   {
-    // IDF5 rmt_rx: non-DMA by default (v1.1.29: DMA + pointer queue → junk symbols).
+    // Claim the pad for RMT *before* Arduino attachInterrupt so the GPIO
+    // matrix RX route is established first (v1.1.33).
     // signal_range_max_ns is 15-bit in tick units → max 32767 * tick_ns.
     gIdf.doneQ = xQueueCreate(4, sizeof(RmtDoneFrame));
     gIdf.recvCfg.signal_range_min_ns = GPS_PPS_RMT_FILTER_NS;
@@ -330,15 +376,29 @@ void GpsService::begin() {
     cfg.gpio_num = static_cast<gpio_num_t>(PIN_GPS_PPS);
     cfg.clk_src = RMT_CLK_SRC_DEFAULT;
     cfg.resolution_hz = 1000000000UL / GPS_PPS_RMT_TICK_NS;  // 1 MHz @ 1 µs
+#if GPS_PPS_RMT_DMA
+    // DMA mode: mem_block_symbols sizes the DMA/user buffer, not HW block count.
     cfg.mem_block_symbols = GPS_PPS_RMT_SYM_CAP;
+    cfg.flags.with_dma = 1;
+#else
+    cfg.mem_block_symbols = GPS_PPS_RMT_SYM_CAP;
+    cfg.flags.with_dma = 0;
+#endif
     cfg.intr_priority = 0;
-    cfg.flags.with_dma = 0;  // copy-safe; S3 DMA optional later
 
     esp_err_t err = ESP_ERR_INVALID_STATE;
     if (gIdf.doneQ == nullptr) {
       err = ESP_ERR_NO_MEM;
     } else {
       err = rmt_new_rx_channel(&cfg, &gIdf.chan);
+#if GPS_PPS_RMT_DMA
+      if (err != ESP_OK) {
+        debugLogf("[pps-rmt] DMA channel alloc failed err=%d — fallback non-DMA",
+                  static_cast<int>(err));
+        cfg.flags.with_dma = 0;
+        err = rmt_new_rx_channel(&cfg, &gIdf.chan);
+      }
+#endif
     }
     if (err == ESP_OK) {
       gIdf.stage |= 1;
@@ -359,23 +419,33 @@ void GpsService::begin() {
       }
     }
     if (err == ESP_OK) {
+      // Driver enables pull-up; PPS line is idle-low — restore pulldown.
+      gpio_pullup_dis(static_cast<gpio_num_t>(PIN_GPS_PPS));
+      gpio_pulldown_en(static_cast<gpio_num_t>(PIN_GPS_PPS));
       // Do NOT rmt_receive yet: PPS pin is idle-low until GNSS has a fix.
-      // signal_range_max would end empty receives every WINDOW_MS while waiting.
       // Arm on first GPIO PPS from loop() (see tryArmRmtAfterFirstPps).
       gIdf.ok = true;
       gRmt.ready = true;
-      Serial.printf("[pps-rmt] idf5 ready pin=%d tick=%uns win=%ums filter=%uns dma=%u "
-                    "(arm on first PPS)\n",
+      uint32_t realHz = 0;
+      int chId = -1;
+      (void)rmt_get_channel_resolution(gIdf.chan, &realHz);
+      (void)rmt_get_channel_id(gIdf.chan, &chId);
+      debugLogf("[pps-rmt] idf5 ready pin=%d tick=%uns win=%ums filter=%uns dma=%u "
+                    "mem=%u ch=%d realHz=%lu (arm on first PPS)\n",
                     PIN_GPS_PPS, GPS_PPS_RMT_TICK_NS, GPS_PPS_RMT_WINDOW_MS,
-                    GPS_PPS_RMT_FILTER_NS, static_cast<unsigned>(cfg.flags.with_dma));
+                    GPS_PPS_RMT_FILTER_NS, static_cast<unsigned>(cfg.flags.with_dma),
+                    static_cast<unsigned>(GPS_PPS_RMT_SYM_CAP), chId,
+                    static_cast<unsigned long>(realHz));
     } else {
       gIdf.err = err;
-      Serial.printf("[pps-rmt] idf5 init failed stage=%u err=%d -> GPIO ISR only\n",
+      debugLogf("[pps-rmt] idf5 init failed stage=%u err=%d -> GPIO ISR only\n",
                     gIdf.stage, gIdf.err);
     }
   }
 #endif
-  Serial.printf("GPS UART%d RX=%d TX=%d baud=%d buf=2048 local-clock=on ppsQ=%d tsens=%d\n",
+  // GPIO ISR after RMT matrix connect so both can share the pad.
+  attachInterrupt(digitalPinToInterrupt(PIN_GPS_PPS), onPpsIsr, RISING);
+  debugLogf("GPS UART%d RX=%d TX=%d baud=%d buf=2048 local-clock=on ppsQ=%d tsens=%d\n",
                 GPS_UART_NUM, PIN_GPS_RX, PIN_GPS_TX, GPS_UART_BAUD, GPS_PPS_ISR_QUEUE,
                 tempSensorOk_ ? 1 : 0);
 #if GPS_NMEA_FILTER_EN
@@ -399,7 +469,7 @@ void GpsService::sendPcas(const char* bodyNoDollar) {
   char frame[96];
   snprintf(frame, sizeof(frame), "$%s*%02X\r\n", bodyNoDollar, cs);
   gpsSerial_.print(frame);
-  Serial.printf("[gps] TX %s", frame);
+  debugLogf("[gps] TX %s", frame);
 }
 
 uint32_t GpsService::civilToEpoch(int year, int month, int day, int hour, int minute, int second) {
@@ -516,7 +586,7 @@ void GpsService::probeAndFilterNmea() {
   nmeaSeenMask_ = 0;
   nmeaLineLen_ = 0;
   const uint32_t start = millis();
-  Serial.printf("[gps] probing NMEA ≤%u ms...\n", static_cast<unsigned>(GPS_NMEA_PROBE_MS));
+  debugLogf("[gps] probing NMEA ≤%u ms...\n", static_cast<unsigned>(GPS_NMEA_PROBE_MS));
   while ((millis() - start) < GPS_NMEA_PROBE_MS) {
     while (gpsSerial_.available() > 0) {
       feedNmeaChar(static_cast<char>(gpsSerial_.read()));
@@ -557,9 +627,9 @@ void GpsService::probeAndFilterNmea() {
     append("ZDA");
   }
   if (n == 0) {
-    Serial.println("[gps] probe: no NMEA yet (module waking?) — apply RAM filter only");
+    debugLogf("[gps] probe: no NMEA yet (module waking?) — apply RAM filter only");
   } else {
-    Serial.printf("[gps] probe saw: %s\n", seen);
+    debugLogf("[gps] probe saw: %s\n", seen);
   }
 
   // Want GGA + RMC + ZDA. RMC backs TinyGPS date/time; ZDA is preferred when
@@ -573,7 +643,7 @@ void GpsService::probeAndFilterNmea() {
       n > 0 && (nmeaSeenMask_ & kWant) == kWant && (nmeaSeenMask_ & kExtras) == 0;
   if (alreadyOk) {
     nmeaFilterApplied_ = true;
-    Serial.println("[gps] NMEA filter: already GGA+RMC+ZDA — skip PCAS (no FLASH write)");
+    debugLogf("[gps] NMEA filter: already GGA+RMC+ZDA — skip PCAS (no FLASH write)");
     return;
   }
 
@@ -588,9 +658,9 @@ void GpsService::probeAndFilterNmea() {
   if (shouldPersist) {
     sendPcas("PCAS00");  // save to module FLASH once
     delay(GPS_NMEA_CMD_GAP_MS);
-    Serial.println("[gps] NMEA filter: GGA+RMC+ZDA (saved)");
+    debugLogf("[gps] NMEA filter: GGA+RMC+ZDA (saved)");
   } else {
-    Serial.println("[gps] NMEA filter: GGA+RMC+ZDA (RAM, not saved)");
+    debugLogf("[gps] NMEA filter: GGA+RMC+ZDA (RAM, not saved)");
   }
   nmeaFilterApplied_ = true;
 }
@@ -612,7 +682,7 @@ void GpsService::sampleDieTemp() {
     lastTempTryMs_ = nowMs;
     tempSensorOk_ = boardTempBegin();
     if (tempSensorOk_) {
-      Serial.println("[gps] tsens probe recovered");
+      debugLogf("[gps] tsens probe recovered");
     }
     return;
   }
@@ -740,7 +810,7 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
           gRmt.active = false;
         }
         if (!gRmt.reportedFallback) {
-          Serial.println("[pps-rmt] stale -> GPIO fallback");
+          debugLogf("[pps-rmt] stale -> GPIO fallback");
           gRmt.reportedFallback = true;
         }
         drainedCount = pend[i].count;
@@ -813,7 +883,7 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
   work.ppsRmt.idfEmptyFrames = gIdf.emptyFrames;
   work.ppsRmt.idfDataFrames = gIdf.dataFrames;
   work.ppsRmt.idfJunkFrames = gIdf.junkFrames;
-  work.ppsRmt.idfRawStatus = 0;  // legacy IDF4 register probe removed
+  work.ppsRmt.idfRawStatus = gIdf.lastRawVal;
   work.ppsRmt.idfStage = gIdf.stage;
   work.ppsRmt.idfErr = gIdf.err;
 #endif
@@ -870,7 +940,7 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
     const uint32_t nowDiag = millis();
     if (lastDiagMs == 0 || (nowDiag - lastDiagMs) >= GPS_LOCK_DIAG_MS) {
       lastDiagMs = nowDiag;
-      Serial.printf(
+      debugLogf(
           "[clk] wait tv=0 clk=%s pps=%u fresh=%d nmea=%d zda=%d rmc=%d "
           "anchor=%d stable=%d r=%ld commit=%lu age=%lu\n",
           clockStateLabel(work.clockState), work.ppsCount, work.ppsFresh ? 1 : 0,

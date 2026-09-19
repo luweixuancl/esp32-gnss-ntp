@@ -23,8 +23,11 @@
 
 **板测主路径全部 PASS**（`VERDICT: PASS`）。已随 PR #9 合入 `main`。
 
-## 合入后可选
+## 合入后跟进（2026-09-19）
 
-- 开 `GPS_PPS_RMT_EN=1` 做 RMT 板测  
-- 外置 RTC（`EXT_RTC_EN`）待购件  
-- 精密 NTP 比对可临时 `-DWIFI_MODEM_SLEEP=0`
+| 项 | 结果 |
+|---|---|
+| RMT PPS EN=1 板测（v1.1.29–35） | **FAIL → 搁置** — [CLOSED](rmt_pps_board_test_CLOSED_20260919.md) |
+| **v1.1.36**（EN=0）Web OTA 自动往返 | **PASS** — [ota_deploy_v1136_20260919.md](ota_deploy_v1136_20260919.md) |
+
+生产形态：GPIO 授时 + Web OTA；外置 RTC 待购件。
