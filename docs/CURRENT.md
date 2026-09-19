@@ -2,6 +2,7 @@
 
 > 更新日期：2026-09-19  
 > 工作分支：`cursor/work-a05e` · 固件 **v1.1.36**（`GPS_PPS_RMT_EN=0`，GPIO 授时）  
+> Web OTA 往返 **PASS** — [ota_deploy_v1136_20260919.md](ota_deploy_v1136_20260919.md)  
 > RMT 板测已结案 FAIL — [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)
 
 本文是文档入口；**与代码冲突时以源码与本页为准**。
@@ -20,7 +21,7 @@
 |---|---|
 | GNSS + LocalClock + Stratum-1 NTP | ✅ GPIO PPS |
 | NMEA | ✅ **GGA + RMC + ZDA** + PCAS persist-skip |
-| Web OTA / S3 160 MHz + modem sleep | ✅ |
+| Web OTA / S3 160 MHz + modem sleep | ✅ **v1.1.36 OTA 往返 PASS** |
 | **RMT PPS** | ❌ 板测搁置（EN=0）— [CLOSED](rmt_pps_board_test_CLOSED_20260919.md) |
 | Web 调试 log | ✅ `GET /debug/log?pass=` — [debug_log.md](debug_log.md) |
 | 外置 RTC | `EXT_RTC_EN=0`，待购件 |
@@ -34,7 +35,8 @@
 
 | 文档 | 用途 |
 |---|---|
-| [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md) | **RMT 板测结案** |
+| [ota_deploy_v1136_20260919.md](ota_deploy_v1136_20260919.md) | **v1.1.36 Web OTA PASS** |
+| [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md) | RMT 板测结案 |
 | [debug_log.md](debug_log.md) | 免串口 RAM log |
 | [board_test_s3_idf5_20260919.md](board_test_s3_idf5_20260919.md) | S3 v1.1.28 冒烟 PASS |
 | [idf5_adapt_20260919.md](idf5_adapt_20260919.md) | 平台迁移 |
