@@ -1,0 +1,39 @@
+[   0s] state=LCK pps=488 ppm=-10.44318 tempC=38.8 stratum=1 ref=GPSS | ntp off=+16.4ms delay=207ms
+[  30s] state=LCK pps=518 ppm=-10.50903 tempC=37.8 stratum=1 ref=GPSS | ntp off=-22.1ms delay=16ms
+[  60s] state=LCK pps=548 ppm=-10.54496 tempC=37.8 stratum=1 ref=GPSS | ntp off=-18.4ms delay=16ms
+[  90s] state=LCK pps=578 ppm=-10.5295 tempC=37.8 stratum=1 ref=GPSS | ntp off=-21.1ms delay=10ms
+[ 121s] state=LCK pps=609 ppm=-10.60979 tempC=37.8 stratum=1 ref=GPSS | ntp off=-18.7ms delay=12ms
+[ 152s] state=LCK pps=640 ppm=-10.44527 tempC=37.8 stratum=1 ref=GPSS | ntp off=-18.5ms delay=13ms
+[ 183s] state=LCK pps=671 ppm=-10.52514 tempC=37.8 stratum=1 ref=GPSS | ntp off=+23.4ms delay=108ms
+[ 213s] state=LCK pps=701 ppm=-10.56067 tempC=37.8 stratum=1 ref=GPSS | ntp off=-22.5ms delay=21ms
+[ 243s] state=LCK pps=732 ppm=-10.50024 tempC=38.8 stratum=1 ref=GPSS | ntp off=+4.0ms delay=150ms
+[ 274s] state=LCK pps=762 ppm=-10.49581 tempC=37.8 stratum=1 ref=GPSS | ntp off=+19.7ms delay=104ms
+[ 305s] state=LCK pps=793 ppm=-10.57519 tempC=38.8 stratum=1 ref=GPSS | ntp off=+20.9ms delay=110ms
+[ 335s] state=LCK pps=824 ppm=-10.52158 tempC=37.8 stratum=1 ref=GPSS | ntp off=-16.9ms delay=12ms
+[ 367s] state=LCK pps=855 ppm=-10.55607 tempC=37.8 stratum=1 ref=GPSS | ntp off=-20.1ms delay=204ms
+[ 397s] state=LCK pps=885 ppm=-10.53681 tempC=36.8 stratum=1 ref=GPSS | ntp off=+28.4ms delay=107ms
+[ 429s] state=LCK pps=917 ppm=-10.40029 tempC=37.8 stratum=1 ref=GPSS | ntp off=-18.1ms delay=14ms
+[ 459s] state=LCK pps=947 ppm=-10.4606 tempC=37.8 stratum=1 ref=GPSS | ntp off=-22.6ms delay=19ms
+[ 489s] state=LCK pps=977 ppm=-10.39845 tempC=37.8 stratum=1 ref=GPSS | ntp off=-19.0ms delay=18ms
+[ 519s] state=LCK pps=1007 ppm=-10.45696 tempC=37.8 stratum=1 ref=GPSS | ntp off=+30.6ms delay=109ms
+[ 550s] state=LCK pps=1038 ppm=-10.53986 tempC=36.8 stratum=1 ref=GPSS | ntp off=+31.7ms delay=108ms
+[ 580s] state=LCK pps=1069 ppm=-10.47557 tempC=38.8 stratum=1 ref=GPSS | ntp off=+27.5ms delay=101ms
+[ 612s] state=LCK pps=1100 ppm=-10.43162 tempC=37.8 stratum=1 ref=GPSS | ntp off=-21.9ms delay=16ms
+[ 642s] state=LCK pps=1131 ppm=-10.41911 tempC=37.8 stratum=1 ref=GPSS | ntp off=-22.8ms delay=212ms
+[ 673s] state=LCK pps=1161 ppm=-10.41248 tempC=36.8 stratum=1 ref=GPSS | ntp off=-19.7ms delay=11ms
+[ 703s] state=LCK pps=1192 ppm=-10.4328 tempC=36.8 stratum=1 ref=GPSS | ntp off=+25.3ms delay=111ms
+[ 734s] state=LCK pps=1222 ppm=-10.50848 tempC=36.8 stratum=1 ref=GPSS | ntp off=+28.7ms delay=106ms
+[ 765s] state=LCK pps=1253 ppm=-10.44297 tempC=36.8 stratum=1 ref=GPSS | ntp off=-19.0ms delay=17ms
+
+===== SOAK SUMMARY =====
+samples=574 errors=1 dur=780s
+state timeline: [(0.0, None, 'LCK')]
+LCK 574/574 = 100.0%  transitions=0
+ppsCount monotonic: OK (last=1267)
+freqPpm(LCK): mean=-10.487 min=-10.719 max=-10.153 n=574
+tempC: first=38.8 last=37.8 max=39.8
+NTP queries: ok=51/51
+stratum==1: True  refid==GPSS: True  LI==0: True
+offset_ms: mean=-2.83 stdev=22.58 min=-26.26 max=+36.32
+delay_ms: mean=96.1 max=211.6
+VERDICT: PASS

@@ -1,8 +1,9 @@
 # S3 板测记录 — IDF5 分支
 
 > 日期：2026-09-19  
-> 固件：`cursor/idf5-adapt-a05e` · 目标 **v1.1.28** · 须用整片 `merged_firmware_esp32s3_n16r8_0x0.bin`  
-> 平台：pioarduino 55.03.311（Arduino 3.3.11 / IDF 5.5.5）
+> 固件：`cursor/idf5-adapt-a05e` · **v1.1.28** · 整片 `merged_firmware_esp32s3_n16r8_0x0.bin`  
+> 平台：pioarduino 55.03.311（Arduino 3.3.11 / IDF 5.5.5）  
+> 设备：`192.168.1.24` · `H3C_LuxYang`
 
 ## 升级路径
 
@@ -12,20 +13,18 @@
 
 | 项 | 结果 |
 |---|---|
-| 整片刷入 → **fwMark v1.1.28** | **OK**（用户确认 2026-09-19） |
-| NMEA GGA+RMC+ZDA / `nmea=1 rmc=1 zda=1` | **OK**（串口 `[clk] wait`） |
-| WiFi / `[pwr] cpu=160 wifi_modem_sleep=1` | **OK** |
-| 壳温相对旧 240 MHz 固件下降 | **OK**（用户确认 2026-09-19） |
-| **PPS / LocalClock Locked / S1 授时** | **OK**（UI：`S1` + UTC 时间，192.168.1.24，RSSI −62 dBm） |
-| **Web OTA**（IDF5→IDF5，app 镜像） | **OK**（用户人工测试 2026-09-19） |
+| 整片刷入 → **fwMark v1.1.28** | **OK** |
+| NMEA / PPS / LocalClock / **S1** | **OK** |
+| `[pwr] cpu=160` + 壳温下降 | **OK** |
+| **Web OTA**（IDF5→IDF5） | **OK**（人工） |
+| **NTP 对时** | **OK** — stratum 1 / GPSS / LI=0；offset 均值 −2.83 ms（n=51） |
+| **稳态 ≥10 min**（实跑 13 min） | **OK** — LCK 574/574、跳变 0；详见 [s3_smoke_ntp_soak_20260919.md](s3_smoke_ntp_soak_20260919.md) |
 
-## 建议继续
-
-1. **NTP 客户端**：`ntpdate -q 192.168.1.24`（或等同）  
-2. **稳态**：Locked / S1 保持 ≥10 min  
+**板测主路径全部 PASS**（`VERDICT: PASS`）。
 
 ## 合入后可选
 
 - 开 `GPS_PPS_RMT_EN=1` 做 RMT 板测  
 - 废弃旁支 `gps-pcas-persist`  
-- 外置 RTC（`EXT_RTC_EN`）待购件
+- 外置 RTC（`EXT_RTC_EN`）待购件  
+- 精密 NTP 比对可临时 `-DWIFI_MODEM_SLEEP=0`（modem sleep 会抬高 RTT 散布）
