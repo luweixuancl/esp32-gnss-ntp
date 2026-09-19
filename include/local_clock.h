@@ -65,6 +65,7 @@ class LocalClock {
   float tempRefC() const { return haveTempRef_ ? tempRefC_ : NAN; }
   bool tempCompEnabled() const { return tempComp_; }
   bool ppsStable() const { return ppsStable_; }
+  bool hasAnchor() const { return haveAnchor_; }
   uint32_t holdoverElapsedMs() const;
 
  private:

@@ -509,18 +509,42 @@ void GpsService::probeAndFilterNmea() {
     append("ZDA");
   }
   if (n == 0) {
-    Serial.println("[gps] probe: no NMEA yet (module waking?) — still applying filter");
+    Serial.println("[gps] probe: no NMEA yet (module waking?) — apply RAM filter only");
   } else {
     Serial.printf("[gps] probe saw: %s\n", seen);
   }
 
-  // CASIC PCAS03: GGA,GLL,GSA,GSV,RMC,VTG,ZDA,... → only GGA + ZDA @ 1× rate.
-  sendPcas("PCAS03,1,0,0,0,0,0,1,0,0,0,,,0,0");
+  // Want GGA + RMC + ZDA. RMC backs TinyGPS date/time; ZDA is preferred when
+  // present. Strip GLL/GSA/GSV/VTG noise. (GGA-only+ZDA without RMC was a
+  // lock failure mode when ZDA did not flow after PCAS.)
+  constexpr uint16_t kWant =
+      (1u << 0) | (1u << 4) | (1u << 6);  // GGA | RMC | ZDA
+  constexpr uint16_t kExtras =
+      (1u << 1) | (1u << 2) | (1u << 3) | (1u << 5);  // GLL|GSA|GSV|VTG
+  const bool alreadyOk =
+      n > 0 && (nmeaSeenMask_ & kWant) == kWant && (nmeaSeenMask_ & kExtras) == 0;
+  if (alreadyOk) {
+    nmeaFilterApplied_ = true;
+    Serial.println("[gps] NMEA filter: already GGA+RMC+ZDA — skip PCAS (no FLASH write)");
+    return;
+  }
+
+  // CASIC PCAS03: GGA,GLL,GSA,GSV,RMC,VTG,ZDA,...
+  sendPcas("PCAS03,1,0,0,0,1,0,1,0,0,0,,,0,0");
   delay(GPS_NMEA_CMD_GAP_MS);
-  sendPcas("PCAS00");  // persist to FLASH
-  delay(GPS_NMEA_CMD_GAP_MS);
+
+  // Persist only when probe observed a wrong/incomplete set. Empty probe →
+  // RAM-only this boot (avoid FLASH wear while the module is still waking).
+  const bool shouldPersist =
+      n > 0 && ((nmeaSeenMask_ & kExtras) != 0 || (nmeaSeenMask_ & kWant) != kWant);
+  if (shouldPersist) {
+    sendPcas("PCAS00");  // save to module FLASH once
+    delay(GPS_NMEA_CMD_GAP_MS);
+    Serial.println("[gps] NMEA filter: GGA+RMC+ZDA (saved)");
+  } else {
+    Serial.println("[gps] NMEA filter: GGA+RMC+ZDA (RAM, not saved)");
+  }
   nmeaFilterApplied_ = true;
-  Serial.println("[gps] NMEA filter: GGA + ZDA only (saved)");
 }
 
 void GpsService::setTempComp(bool enabled, int16_t coeffCenti) {
@@ -769,6 +793,25 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
   work.extClockDriver = gExtClock.driver();
 
   publishStatus(work);
+
+#if GPS_LOCK_DIAG_MS > 0
+  if (!work.timeValid) {
+    static uint32_t lastDiagMs = 0;
+    const uint32_t nowDiag = millis();
+    if (lastDiagMs == 0 || (nowDiag - lastDiagMs) >= GPS_LOCK_DIAG_MS) {
+      lastDiagMs = nowDiag;
+      Serial.printf(
+          "[clk] wait tv=0 clk=%s pps=%u fresh=%d nmea=%d zda=%d rmc=%d "
+          "anchor=%d stable=%d r=%ld commit=%lu age=%lu\n",
+          clockStateLabel(work.clockState), work.ppsCount, work.ppsFresh ? 1 : 0,
+          nmeaFresh ? 1 : 0, zdaFresh ? 1 : 0, rmcTimeFresh ? 1 : 0,
+          localClock_.hasAnchor() ? 1 : 0, localClock_.ppsStable() ? 1 : 0,
+          static_cast<long>(work.residualMs),
+          static_cast<unsigned long>(commitEpoch_),
+          static_cast<unsigned long>(work.ageMs == 0xFFFFFFFFu ? 0 : work.ageMs));
+    }
+  }
+#endif
 
 #if GPS_DEBUG
   const uint32_t now = millis();

@@ -4,11 +4,11 @@
 // OLED mark is unambiguous after OTA / serial upgrade.
 #define FW_VER_MAJOR         1
 #define FW_VER_MINOR         1
-#define FW_VER_PATCH         26
-// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.26").
-#define FW_MARK              "v1.1.26"
+#define FW_VER_PATCH         27
+// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.27").
+#define FW_MARK              "v1.1.27"
 // Full string for /status, /cfg, serial, OTA pages.
-#define FW_VERSION           "1.1.26"
+#define FW_VERSION           "1.1.27"
 // Reject obviously truncated OTA payloads before activating the slot.
 #define OTA_MIN_IMAGE_BYTES      (200 * 1024)
 // After a pending-verify OTA boot, wait until tasks are alive this long before
@@ -82,12 +82,19 @@
 #define GPS_UART_NUM         1
 #define GPS_DEBUG            0   // 1 = 每秒向 UART0 打印定位/PPS（time 任务内，默认关）
 #define GPS_DEBUG_NMEA       0   // 1 = 把 NMEA 原文转发到 UART0
-// Boot: sniff NMEA talkers, then $PCAS03 → only GGA + ZDA (DX-GP10 / CASIC).
+// Boot: sniff NMEA talkers, then $PCAS03 → GGA + RMC + ZDA (DX-GP10 / CASIC).
+// RMC is required so TinyGPSPlus keeps date/time if ZDA is missing/late; ZDA
+// remains the preferred UTC source when present. Skip PCAS when probe already
+// matches; $PCAS00 (FLASH) only when the sentence set was wrong/incomplete.
 #ifndef GPS_NMEA_FILTER_EN
 #define GPS_NMEA_FILTER_EN       1
 #endif
 #define GPS_NMEA_PROBE_MS     1500
 #define GPS_NMEA_CMD_GAP_MS    120
+// While timeValid=0, print a one-line clock diag this often (0 = off).
+#ifndef GPS_LOCK_DIAG_MS
+#define GPS_LOCK_DIAG_MS        5000
+#endif
 
 // SH1107 / SSD1107 0.96" 64x128 OLED over I2C (pins above; native portrait, setRotation(1) → 128x64 UI)
 #define OLED_I2C_ADDR     0x3C
