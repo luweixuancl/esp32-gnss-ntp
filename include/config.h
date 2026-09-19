@@ -4,11 +4,11 @@
 // OLED mark is unambiguous after OTA / serial upgrade.
 #define FW_VER_MAJOR         1
 #define FW_VER_MINOR         1
-#define FW_VER_PATCH         28
-// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.28").
-#define FW_MARK              "v1.1.28"
+#define FW_VER_PATCH         29
+// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.29").
+#define FW_MARK              "v1.1.29"
 // Full string for /status, /cfg, serial, OTA pages.
-#define FW_VERSION           "1.1.28"
+#define FW_VERSION           "1.1.29"
 // Reject obviously truncated OTA payloads before activating the slot.
 #define OTA_MIN_IMAGE_BYTES      (200 * 1024)
 // After a pending-verify OTA boot, wait until tasks are alive this long before
@@ -238,10 +238,10 @@
 // ISR→task PPS queue (missed edges under WiFi load).
 #define GPS_PPS_ISR_QUEUE             8
 // RMT RX hardware capture of the PPS edge (docs/s3_deep_dive_roadmap.md #1):
-// IDF5 path ready (pioarduino Arduino 3.3.11 / ESP-IDF 5.5.5, driver/rmt_rx.h).
-// Default 0 until board re-validation — GPIO ISR remains the production source.
-// Set to 1 to reopen the RMT refinement experiment on IDF5.
-#define GPS_PPS_RMT_EN                0   // 0 = GPIO ISR only; 1 = IDF5 rmt_rx
+// IDF5 path (pioarduino Arduino 3.3.11 / ESP-IDF 5.5.5, driver/rmt_rx.h).
+// v1.1.29 board-test build: EN=1. Production fallback remains GPIO ISR if RMT
+// init fails or goes stale (see gps_service.cpp). Revert to 0 if board FAIL.
+#define GPS_PPS_RMT_EN                1   // 0 = GPIO ISR only; 1 = IDF5 rmt_rx
 #define GPS_PPS_RMT_QUEUE             8
 #define GPS_PPS_RMT_TICK_NS        1000   // 1 µs symbols (resolution_hz = 1e9/tick)
 #define GPS_PPS_RMT_WINDOW_MS        20   // signal_range_max_ns after last edge
