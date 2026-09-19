@@ -16,23 +16,13 @@
 | NMEA GGA+RMC+ZDA / `nmea=1 rmc=1 zda=1` | **OK**（串口 `[clk] wait`） |
 | WiFi / `[pwr] cpu=160 wifi_modem_sleep=1` | **OK** |
 | 壳温相对旧 240 MHz 固件下降 | **OK**（用户确认 2026-09-19） |
-| **PPS / LocalClock Locked** | **未过**：`pps=0 fresh=0` → 停在 ACQ、`tv=0`（2026-09-19 串口） |
-
-## 当前阻塞
-
-NMEA 时间已有，**缺 1PPS**（固件 GPIO4 上升沿计数为 0）。LocalClock 必须 PPS+NMEA 才能锚点锁定。
-
-请查：模组 **1PPS → ESP32-S3 GPIO4**（地共地）。万用表/示波器看 PPS 脚是否约 1 Hz 脉冲。  
-串口期望：`pps` 递增、`fresh=1`，随后 `clk=LCK`、`tv=1`。
-
-次要：`tsens=0` / `T=nan`（Die 温未读到，不影响锁定）。
+| **PPS / LocalClock Locked / S1 授时** | **OK**（UI：`S1` + UTC 时间，192.168.1.24，RSSI −62 dBm） |
 
 ## 建议继续
 
-1. 接好 PPS 后确认 LCK / `timeValid=true`  
-2. **NTP**：`ntpdate -q <设备IP>`  
-3. **稳态**：Locked ≥10 min  
-4. **Web OTA**（IDF5→IDF5）：`firmware_esp32s3.bin` 往返一次 
+1. **NTP 客户端**：`ntpdate -q 192.168.1.24`（或等同）  
+2. **稳态**：Locked / S1 保持 ≥10 min  
+3. **Web OTA**（可选，IDF5→IDF5）：`firmware_esp32s3.bin` 往返一次 
 
 ## 合入后可选
 
