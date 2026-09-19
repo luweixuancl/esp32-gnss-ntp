@@ -3,15 +3,11 @@
 #include <esp_timer.h>
 #include <stdlib.h>
 #include <string.h>
-#if defined(ARDUINO_ESP32S3_DEV)
-// S3 has the newer tsens hardware; the legacy driver below does not exist
-// for it. Arduino's temperatureRead() HAL picks the per-target API.
-#else
-#include "driver/temp_sensor.h"
-#endif
+// Arduino-ESP32 3.x / IDF 5: temperatureRead() covers C3 + S3 (legacy
+// driver/temp_sensor.h removed). RMT RX uses the new driver/rmt_rx.h API.
 #if GPS_PPS_RMT_EN
-#include "driver/rmt.h"
-#include <freertos/ringbuf.h>
+#include "driver/rmt_rx.h"
+#include <freertos/queue.h>
 #endif
 
 portMUX_TYPE GpsService::ppsMux_ = portMUX_INITIALIZER_UNLOCKED;
@@ -23,10 +19,9 @@ volatile GpsService::PpsIsrEdge GpsService::ppsQ_[GPS_PPS_ISR_QUEUE] = {};
 TaskHandle_t GpsService::timeTask_ = nullptr;
 
 // --- RMT RX hardware capture (docs/s3_deep_dive_roadmap.md #1) -----------
-// The RMT channel samples the pad at GPS_PPS_RMT_TICK_NS resolution; each
-// frame (edge + capture window) is delivered to rmtPpsCb with the exact
-// hardware-measured symbol lengths, so the edge time is reconstructed as
-// cb_entry - frame_length — immune to GPIO-ISR latency (incl. WiFi storms).
+// IDF5 rmt_rx samples the pad at GPS_PPS_RMT_TICK_NS resolution. Each
+// receive-done delivers hardware-measured symbols so the edge time is
+// reconstructed as cb_entry - trailing_length — immune to GPIO-ISR latency.
 // GPIO ISR stays attached; loop() merges by edge count and records deltas.
 #if GPS_PPS_RMT_EN
 struct RmtPpsEdge {
@@ -35,7 +30,7 @@ struct RmtPpsEdge {
   uint32_t widthUs;
 };
 struct RmtPpsState {
-  bool armed = false;   // rmtInit + rmtRead succeeded
+  bool armed = false;   // rmt_new_rx_channel + first rmt_receive ok
   bool alive = false;   // refinements still flowing
   bool active = false;  // currently the merge source
   bool reportedFallback = false;  // one log line per fallback episode
@@ -53,28 +48,31 @@ struct RmtPpsState {
 };
 static RmtPpsState gRmt;
 
-// Direct-IDF probe (Phase 1 of roadmap #1): same pad, explicit channel,
-// our own RX task — isolates HAL-vs-driver failure layers.
+// IDF5 driver state: channel handle + done-queue + static receive buffer.
+#ifndef GPS_PPS_RMT_SYM_CAP
+#define GPS_PPS_RMT_SYM_CAP 64
+#endif
 struct IdfPpsState {
   bool ok = false;
-  uint8_t stage = 0;  // 1=config 2=install 4=ringbuf 8=task
+  uint8_t stage = 0;  // 1=new_ch 2=cbs 4=enable 8=task 16=recv
   int err = 0;
   uint32_t frames = 0;
   uint32_t firstSyms = 0;
   uint32_t lastSyms = 0;
-  uint32_t lastD0Us = 0;  // first symbol of the last frame: low-level length
-  uint32_t lastD1Us = 0;  // first symbol of the last frame: high-level length
+  uint32_t lastD0Us = 0;
+  uint32_t lastD1Us = 0;
   uint32_t emptyFrames = 0;
   uint32_t dataFrames = 0;
-  uint32_t rawStatus = 0;
-  RingbufHandle_t rb = nullptr;
+  rmt_channel_handle_t chan = nullptr;
+  QueueHandle_t doneQ = nullptr;
+  rmt_symbol_word_t raw[GPS_PPS_RMT_SYM_CAP];
+  rmt_receive_config_t recvCfg = {};
 };
 static IdfPpsState gIdf;
 #endif
 
-#if defined(ARDUINO_ESP32S3_DEV)
 static bool boardTempBegin() {
-  // temperatureRead() lazily initialises the new tsens driver; gate on a
+  // temperatureRead() lazily initialises the tsens driver; gate on a
   // plausible reading. sampleDieTemp() retries this probe every 5 s when it
   // fails, so a transiently bad first read no longer disables temperature.
   float c = temperatureRead();
@@ -89,17 +87,6 @@ static bool boardTempRead(float* out) {
   *out = c;
   return true;
 }
-#else
-static bool boardTempBegin() {
-  temp_sensor_config_t tsens = TSENS_CONFIG_DEFAULT();
-  temp_sensor_set_config(tsens);
-  const esp_err_t err = temp_sensor_start();
-  return (err == ESP_OK || err == ESP_ERR_INVALID_STATE);
-}
-static bool boardTempRead(float* out) {
-  return temp_sensor_read_celsius(out) == ESP_OK;
-}
-#endif
 
 void IRAM_ATTR GpsService::onPpsIsr() {
   const uint64_t edgeUs = esp_timer_get_time();
@@ -211,28 +198,45 @@ bool GpsService::rmtProcessSymbols(const uint32_t* data, size_t len) {
 #endif
 }
 
-// HAL wrapper: rmtRead() delivers frames from _rmtRxTask (task context).
-void GpsService::rmtPpsCb(uint32_t* data, size_t len, void* arg) {
-  (void)arg;
-  rmtProcessSymbols(data, len);
+#if GPS_PPS_RMT_EN
+// IDF5 on_recv_done runs in ISR: copy edata into the queue; task parses.
+bool IRAM_ATTR GpsService::rmtRxDoneCb(rmt_channel_handle_t channel,
+                                       const rmt_rx_done_event_data_t* edata,
+                                       void* user_data) {
+  (void)channel;
+  (void)user_data;
+  if (edata == nullptr || gIdf.doneQ == nullptr) {
+    return false;
+  }
+  BaseType_t woken = pdFALSE;
+  xQueueSendFromISR(gIdf.doneQ, edata, &woken);
+  return woken == pdTRUE;
 }
 
-// Direct-IDF RX task: ringbuf -> same symbol parser as the HAL callback.
-void GpsService::rmtIdfTask(void* arg) {
-  (void)arg;
-#if GPS_PPS_RMT_EN
-  if (gIdf.rb == nullptr) {
-    vTaskDelete(nullptr);
+bool GpsService::rmtArmReceive() {
+  if (gIdf.chan == nullptr) {
+    return false;
   }
+  const esp_err_t err = rmt_receive(gIdf.chan, gIdf.raw, sizeof(gIdf.raw), &gIdf.recvCfg);
+  if (err != ESP_OK) {
+    gIdf.err = err;
+    return false;
+  }
+  gIdf.stage |= 16;
+  return true;
+}
+
+// Task-context RX: drain done-queue → symbol parser → re-arm receive.
+void GpsService::rmtRxTask(void* arg) {
+  (void)arg;
   for (;;) {
-    size_t len = 0;
-    void* item = xRingbufferReceive(gIdf.rb, &len, portMAX_DELAY);
-    if (item == nullptr) {
+    rmt_rx_done_event_data_t edata = {};
+    if (xQueueReceive(gIdf.doneQ, &edata, portMAX_DELAY) != pdTRUE) {
       continue;
     }
-    const size_t n = static_cast<size_t>(len / sizeof(rmt_item32_t));
     ++gIdf.frames;
-    if (n == 0) {
+    const size_t n = edata.num_symbols;
+    if (n == 0 || edata.received_symbols == nullptr) {
       ++gIdf.emptyFrames;
     } else {
       ++gIdf.dataFrames;
@@ -240,17 +244,16 @@ void GpsService::rmtIdfTask(void* arg) {
         gIdf.firstSyms = static_cast<uint32_t>(n);
       }
       gIdf.lastSyms = static_cast<uint32_t>(n);
-      const uint32_t sym = *static_cast<const uint32_t*>(item);
+      const uint32_t sym = edata.received_symbols[0].val;
       gIdf.lastD0Us = (sym & 0x7FFF) * (GPS_PPS_RMT_TICK_NS / 1000);
       gIdf.lastD1Us = ((sym >> 16) & 0x7FFF) * (GPS_PPS_RMT_TICK_NS / 1000);
-      rmtProcessSymbols(static_cast<const uint32_t*>(item), n);
+      rmtProcessSymbols(reinterpret_cast<const uint32_t*>(edata.received_symbols), n);
     }
-    vRingbufferReturnItem(gIdf.rb, item);
+    // Re-arm for the next PPS window (non-blocking; next done via ISR).
+    (void)rmtArmReceive();
   }
-#else
-  vTaskDelete(nullptr);
-#endif
 }
+#endif
 
 void GpsService::begin() {
   localClock_.reset();
@@ -260,73 +263,67 @@ void GpsService::begin() {
   attachInterrupt(digitalPinToInterrupt(PIN_GPS_PPS), onPpsIsr, RISING);
 #if GPS_PPS_RMT_EN
   {
-    rmt_obj_t* r = rmtInit(PIN_GPS_PPS, RMT_RX_MODE, RMT_MEM_64);
-    if (r == nullptr) {
-      Serial.println("[pps-rmt] init failed -> GPIO ISR only");
-    } else {
-      rmtSetTick(r, GPS_PPS_RMT_TICK_NS);
-      rmtSetFilter(r, true, GPS_PPS_RMT_FILTER_NS / GPS_PPS_RMT_TICK_NS);
-      rmtSetRxThreshold(r, static_cast<uint32_t>(GPS_PPS_RMT_WINDOW_MS * 1000000UL) / GPS_PPS_RMT_TICK_NS);
-      if (rmtRead(r, &GpsService::rmtPpsCb, nullptr)) {
-        gRmt.armed = true;
-        Serial.printf("[pps-rmt] armed pin=%d tick=%uns win=%ums filter=%uns\n",
-                      PIN_GPS_PPS, GPS_PPS_RMT_TICK_NS, GPS_PPS_RMT_WINDOW_MS,
-                      GPS_PPS_RMT_FILTER_NS);
-      } else {
-        Serial.println("[pps-rmt] rmtRead failed -> GPIO ISR only");
-      }
-    }
-  }
+    // IDF5 rmt_rx: pool-allocated channel (S3 may take DMA RX; C3 has no DMA).
+    gIdf.doneQ = xQueueCreate(4, sizeof(rmt_rx_done_event_data_t));
+    gIdf.recvCfg.signal_range_min_ns = GPS_PPS_RMT_FILTER_NS;
+    gIdf.recvCfg.signal_range_max_ns =
+        static_cast<uint32_t>(GPS_PPS_RMT_WINDOW_MS) * 1000000UL;
+    gIdf.recvCfg.flags.en_partial_rx = 0;
+
+    rmt_rx_channel_config_t cfg = {};
+    cfg.gpio_num = static_cast<gpio_num_t>(PIN_GPS_PPS);
+    cfg.clk_src = RMT_CLK_SRC_DEFAULT;
+    cfg.resolution_hz = 1000000000UL / GPS_PPS_RMT_TICK_NS;  // 1 MHz @ 1 µs
+    cfg.mem_block_symbols = GPS_PPS_RMT_SYM_CAP;
+    cfg.intr_priority = 0;
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+    cfg.flags.with_dma = 1;  // S3 RX channels support DMA
+#else
+    cfg.flags.with_dma = 0;  // C3 RMT has no DMA backend
 #endif
-#if GPS_PPS_RMT_EN
-  {
-    // Direct-IDF probe: explicit channel + own RX task, isolating HAL-vs-
-    // driver failure layers (HAL rmtRead(cb) stays armed above for A/B).
-    rmt_config_t c = {};
-    c.rmt_mode = RMT_MODE_RX;
-    c.channel = static_cast<rmt_channel_t>(GPS_PPS_RMT_CH);
-    c.gpio_num = static_cast<gpio_num_t>(PIN_GPS_PPS);
-    c.clk_div = 80;  // 1 µs per tick
-    c.mem_block_num = 1;
-    c.rx_config.filter_en = true;
-    c.rx_config.filter_ticks_thresh = 1;
-    c.rx_config.idle_threshold =
-        static_cast<uint32_t>(GPS_PPS_RMT_WINDOW_MS) * 1000000UL / GPS_PPS_RMT_TICK_NS;
-    esp_err_t err = rmt_config(&c);
+
+    esp_err_t err = ESP_ERR_INVALID_STATE;
+    if (gIdf.doneQ == nullptr) {
+      err = ESP_ERR_NO_MEM;
+    } else {
+      err = rmt_new_rx_channel(&cfg, &gIdf.chan);
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+      // Fall back to non-DMA if the DMA-capable RX pool is exhausted.
+      if (err == ESP_ERR_NOT_FOUND || err == ESP_ERR_NOT_SUPPORTED) {
+        cfg.flags.with_dma = 0;
+        err = rmt_new_rx_channel(&cfg, &gIdf.chan);
+      }
+#endif
+    }
     if (err == ESP_OK) {
       gIdf.stage |= 1;
-      // RX channels must own the capture memory, or the driver discards
-      // received symbols and pushes EMPTY ringbuf items (field-proven).
-      err = rmt_set_memory_owner(c.channel, RMT_MEM_OWNER_RX);
-    }
-    if (err == ESP_OK) {
-      gIdf.stage |= 16;
-      err = rmt_driver_install(c.channel, 2048, 0);
+      rmt_rx_event_callbacks_t cbs = {};
+      cbs.on_recv_done = &GpsService::rmtRxDoneCb;
+      err = rmt_rx_register_event_callbacks(gIdf.chan, &cbs, nullptr);
     }
     if (err == ESP_OK) {
       gIdf.stage |= 2;
-      err = rmt_get_ringbuf_handle(c.channel, &gIdf.rb);
-      if (gIdf.rb == nullptr && err == ESP_OK) {
-        err = ESP_FAIL;
-      }
+      err = rmt_enable(gIdf.chan);
     }
     if (err == ESP_OK) {
       gIdf.stage |= 4;
-      err = rmt_rx_start(c.channel, true);
+      if (xTaskCreate(rmtRxTask, "rmtpps", 3072, nullptr, 3, nullptr) == pdPASS) {
+        gIdf.stage |= 8;
+      } else {
+        err = ESP_ERR_NO_MEM;
+      }
     }
-    if (err == ESP_OK && xTaskCreate(rmtIdfTask, "rmtpps", 3072, nullptr, 3, nullptr) == pdPASS) {
-      gIdf.stage |= 8;
+    if (err == ESP_OK && rmtArmReceive()) {
+      gRmt.armed = true;
       gIdf.ok = true;
+      Serial.printf("[pps-rmt] idf5 armed pin=%d tick=%uns win=%ums filter=%uns dma=%u\n",
+                    PIN_GPS_PPS, GPS_PPS_RMT_TICK_NS, GPS_PPS_RMT_WINDOW_MS,
+                    GPS_PPS_RMT_FILTER_NS, static_cast<unsigned>(cfg.flags.with_dma));
+    } else {
+      gIdf.err = err;
+      Serial.printf("[pps-rmt] idf5 init failed stage=%u err=%d -> GPIO ISR only\n",
+                    gIdf.stage, err);
     }
-    gIdf.err = err;
-    Serial.printf("[pps-rmt-idf] ch=%d stage=%u ok=%d err=%d\n",
-                  GPS_PPS_RMT_CH, gIdf.stage, gIdf.ok ? 1 : 0, err);
-    if (err == ESP_OK && xTaskCreate(rmtIdfTask, "rmtpps", 3072, nullptr, 3, nullptr) == pdPASS) {
-      gIdf.stage |= 8;
-      gIdf.ok = true;
-    }
-    Serial.printf("[pps-rmt-idf] ch=%d stage=%u ok=%d err=%d\n",
-                  GPS_PPS_RMT_CH, gIdf.stage, gIdf.ok ? 1 : 0, err);
   }
 #endif
   Serial.printf("GPS UART%d RX=%d TX=%d baud=%d buf=2048 local-clock=on ppsQ=%d tsens=%d\n",
@@ -721,7 +718,7 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
   work.ppsRmt.idfLastD1Us = gIdf.lastD1Us;
   work.ppsRmt.idfEmptyFrames = gIdf.emptyFrames;
   work.ppsRmt.idfDataFrames = gIdf.dataFrames;
-  rmt_get_status(static_cast<rmt_channel_t>(GPS_PPS_RMT_CH), &work.ppsRmt.idfRawStatus);
+  work.ppsRmt.idfRawStatus = 0;  // legacy IDF4 register probe removed
   work.ppsRmt.idfStage = gIdf.stage;
   work.ppsRmt.idfErr = gIdf.err;
 #endif

@@ -8,6 +8,9 @@
 #include "config.h"
 #include "local_clock.h"
 #include "settings.h"
+#if GPS_PPS_RMT_EN
+#include "driver/rmt_rx.h"
+#endif
 
 struct GpsStatus {
   bool validFix = false;
@@ -46,7 +49,7 @@ struct GpsStatus {
     uint32_t oddPulse = 0;  // pulse width outside the plausible band
     uint32_t fallbacks = 0; // auto-fallbacks to the GPIO source
     uint32_t lastWidthUs = 0;
-    // direct-IDF driver probe (bypasses the HAL rmtRead wrapper)
+    // IDF5 rmt_rx driver diagnostics (replaces legacy HAL / rmt_get_status)
     bool idfOk = false;
     uint32_t idfFrames = 0;
     uint32_t idfFirstSyms = 0;
@@ -55,7 +58,7 @@ struct GpsStatus {
     uint32_t idfLastD1Us = 0;
     uint32_t idfEmptyFrames = 0;
     uint32_t idfDataFrames = 0;
-    uint32_t idfRawStatus = 0;
+    uint32_t idfRawStatus = 0;  // unused on IDF5 (kept for /status schema)
     uint8_t idfStage = 0;
     int idfErr = 0;
   };
@@ -81,9 +84,14 @@ class GpsService {
 
  private:
   static void IRAM_ATTR onPpsIsr();
-  static void rmtPpsCb(uint32_t* data, size_t len, void* arg);
   static bool rmtProcessSymbols(const uint32_t* data, size_t len);
-  static void rmtIdfTask(void* arg);
+#if GPS_PPS_RMT_EN
+  static bool IRAM_ATTR rmtRxDoneCb(rmt_channel_handle_t channel,
+                                    const rmt_rx_done_event_data_t* edata,
+                                    void* user_data);
+  static void rmtRxTask(void* arg);
+  static bool rmtArmReceive();
+#endif
   void parseNmea();
   void commitNmeaTime(uint32_t epochSec, AnomalyPolicy policy, uint16_t holdoverSec);
   void publishStatus(const GpsStatus& work);

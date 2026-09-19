@@ -1,8 +1,8 @@
 # S3 特性深挖路线图（PPS 硬件捕获 / PSRAM 历史 / OTA / 外部时钟）
 
-> 状态：立项排序已定（2026-09-18：**① RMT【已封存】→ ② OTA【板测通过 v1.1.7】→ ③ PSRAM 历史【已取消 v1.1.14】→ ④ 外部时钟【接口 v1.1.15，待购件开 EN】**）
+> 状态：立项排序已定（2026-09-18：**① RMT【IDF4 封存 → IDF5 路径已就绪 v1.1.23，默认 EN=0】→ ② OTA【板测通过 v1.1.7】→ ③ PSRAM 历史【已取消 v1.1.14】→ ④ 外部时钟【接口 v1.1.15，待购件开 EN】**）
 > 背景：S3 移植转正后的特性深挖规划，基于 2026-09-18 代码/特性审查；各项目启动前按本档「验收准则」细化
-> 修订：③ 已取消；④ 见 [ext_clock_design.md](ext_clock_design.md)
+> 修订：③ 已取消；④ 见 [ext_clock_design.md](ext_clock_design.md)；IDF5 适配见 [idf5_adapt_20260919.md](idf5_adapt_20260919.md)
 > 相关：[esp32s3_devkitc1_hw.md](esp32s3_devkitc1_hw.md)、[esp32s3_flash_test_20260917.md](esp32s3_flash_test_20260917.md)、[s3_clock_drift_20260917.md](s3_clock_drift_20260917.md)
 
 ## 0. 现状基线
@@ -13,16 +13,16 @@
 | 16MB QIO flash | ✅ default_16MB 分区；app1/OTA 槽位经 Web `/ota` 可写 |
 | 8MB OPI PSRAM | 闲置（history 已取消）；可留给后续缓冲 |
 | 新版温度传感器 | ✅ `temperatureRead()`（tcmp 显示/日志） |
-| RMT 4TX | 1 路用于 RGB 状态灯；**RX 4 路全闲置** |
+| RMT 4TX | 1 路用于 RGB 状态灯；**RX 4 路：IDF5 驱动已接线，默认 EN=0** |
 | 3× UART | 2 路在用（调试/GNSS），第 3 路闲置 |
 | USB-OTG | 刻意不用（CDC_ON_BOOT=0，走 UART 座） |
 
-## 1. 项目一：RMT RX 硬件捕获 PPS 边沿（第 1 位）——**已尝试、平台级封存（2026-09-18）**
+## 1. 项目一：RMT RX 硬件捕获 PPS 边沿（第 1 位）——**IDF4 封存；IDF5 路径 v1.1.23**
 
-- **结局**：四轮探针后诚实封存。根因不在应用层：Arduino-ESP32 2.0.17 / IDF 4.4.7 的 **legacy RMT 驱动在 S3 上的 RX 数据通路只推送空环形缓冲项**（每边沿精确 2 个空帧、零符号数据），HAL `rmtRead(cb)` 与直驱（显式通道/滤波/阈值/`RMT_MEM_OWNER_RX` 认领/`rmt_set_pin` 补路由）两条路径同样空帧——共同层即驱动本身；`rmt_get_status` 原始寄存器恒 `0x2a8150`。
-- **附带发现**：为合并精化时间戳而加的「边沿扣留」机制会扰动 NMEA 交叉检核时序边距（±1000ms → LCK/ACQ 每百秒抖动），即使精化流为零也发生——该机制随 `GPS_PPS_RMT_EN=0` 整体剔除，设备已恢复长测级稳定。
-- **重开条件**：迁移 Arduino 3.x / IDF 5（新 `rmt` 驱动 + S3 RX 专属通道模型）后再评估；代码保留（`GPS_PPS_RMT_EN` 置 1 即回实验态），探索过程全部入档。
-- **验收准则/工作量**：见下（供重开时引用）
+- **IDF4 结局（2026-09-18）**：四轮探针后诚实封存。根因不在应用层：Arduino-ESP32 2.0.17 / IDF 4.4.7 的 **legacy RMT 驱动在 S3 上的 RX 数据通路只推送空环形缓冲项**（每边沿精确 2 个空帧、零符号数据），HAL `rmtRead(cb)` 与直驱两条路径同样空帧；`rmt_get_status` 原始寄存器恒 `0x2a8150`。
+- **附带发现**：边沿扣留机制扰动 NMEA 交叉检核；随 `GPS_PPS_RMT_EN=0` 剔除后恢复稳定。
+- **IDF5（v1.1.23）**：平台迁至 pioarduino Arduino 3.3.11 / IDF 5.5.5；应用层改为 `driver/rmt_rx.h`（`rmt_new_rx_channel` / `rmt_receive` / `on_recv_done`）。**默认仍 EN=0**，待板测再开。详见 [idf5_adapt_20260919.md](idf5_adapt_20260919.md)。
+- **验收准则**：开 EN=1 后 `idfDataFrames` 随 PPS 增长；`deltaMeanUx10` 量级合理；长测 LCK 不抖动。
 
 ## 2. 项目二：PSRAM 诊断环形缓冲 + `/history`（第 3 位）——**已取消（v1.1.14）**
 
@@ -48,11 +48,10 @@
 ## 5. 明确不做
 
 - **NTS/加密 NTP**：有 AES/SHA 加速器也不做——局域网场景，阶段 C 界定不变
-- **IDF5 / Arduino 3.x 迁移**：迁移成本 >> 收益，当前 2.0.17/IDF4.4 稳定运行
 - **触摸 / LCD 外设 / 802.11mc**：与产品无关
 
 ## 6. 排序备忘
 
-**① RMT 捕获（已封存）→ ② OTA（已验收）→ ③ PSRAM 历史（已取消）→ ④ 外部时钟（接口已合入，待购件开 EN）**
+**① RMT 捕获（IDF5 路径就绪，待板测开 EN）→ ② OTA（已验收）→ ③ PSRAM 历史（已取消）→ ④ 外部时钟（接口已合入，待购件开 EN）**
 
 > ④ 默认关闭；购 DS3231 并置 `EXT_RTC_EN=1` 后做拔天线验收。

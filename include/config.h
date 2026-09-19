@@ -4,11 +4,11 @@
 // OLED mark is unambiguous after OTA / serial upgrade.
 #define FW_VER_MAJOR         1
 #define FW_VER_MINOR         1
-#define FW_VER_PATCH         20
-// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.20").
-#define FW_MARK              "v1.1.20"
+#define FW_VER_PATCH         23
+// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.23").
+#define FW_MARK              "v1.1.23"
 // Full string for /status, /cfg, serial, OTA pages.
-#define FW_VERSION           "1.1.20"
+#define FW_VERSION           "1.1.23"
 // Reject obviously truncated OTA payloads before activating the slot.
 #define OTA_MIN_IMAGE_BYTES      (200 * 1024)
 // After a pending-verify OTA boot, wait until tasks are alive this long before
@@ -54,7 +54,7 @@
 #define PIN_LED_D4          12   // D4 RUN / WiFi
 #define PIN_LED_D5          13   // D5 GPS / PPS / NTP ready
 #define PIN_LED_RGB         48   // S3 onboard SK6812-mini RGB (D6, 3V3): D4->R / D5->G
-#define GPS_PPS_RMT_CH       7   // direct-IDF RMT RX channel (S3: 0..7; avoid HAL RGB ch0)
+#define GPS_PPS_RMT_CH       7   // legacy IDF4 hint (unused; IDF5 pool-allocates RX)
                                  // NOTE: field-measured @48 on this board; original
                                  // V1.1 schematic routes it to 38 (clone/older wiring)
 #define TASK_TIME_CORE       1   // dual-core: task-time alone on core 1
@@ -73,7 +73,7 @@
 #define PIN_ENC_SW           5
 #define PIN_LED_D4          12   // D4 RUN / WiFi
 #define PIN_LED_D5          13   // D5 GPS / PPS / NTP ready
-#define GPS_PPS_RMT_CH       1   // direct-IDF RMT RX channel (C3: 0..1; avoid HAL RGB ch0)
+#define GPS_PPS_RMT_CH       1   // legacy IDF4 hint (unused; IDF5 pool-allocates RX)
 #define TASK_TIME_CORE       0   // C3 single-core: everything on core 0
 
 #endif
@@ -210,16 +210,14 @@
 // ISR→task PPS queue (missed edges under WiFi load).
 #define GPS_PPS_ISR_QUEUE             8
 // RMT RX hardware capture of the PPS edge (docs/s3_deep_dive_roadmap.md #1):
-// PARKED (2026-09-18) — Arduino-ESP32 2.0.17 / IDF 4.4.7 legacy RMT RX on S3
-// delivers only EMPTY ringbuf items (2 per edge, both the HAL rmtRead(cb)
-// wrapper and a direct-IDF driver path with RMT_MEM_OWNER_RX claimed; raw
-// channel status constant at 0x2a8150). Platform-level data-path defect,
-// not fixable app-side. Reopen on Arduino 3.x / IDF 5 (new RMT driver).
-#define GPS_PPS_RMT_EN                0   // 0 = legacy GPIO ISR only
+// IDF5 path ready (pioarduino Arduino 3.3.11 / ESP-IDF 5.5.5, driver/rmt_rx.h).
+// Default 0 until board re-validation — GPIO ISR remains the production source.
+// Set to 1 to reopen the RMT refinement experiment on IDF5.
+#define GPS_PPS_RMT_EN                0   // 0 = GPIO ISR only; 1 = IDF5 rmt_rx
 #define GPS_PPS_RMT_QUEUE             8
-#define GPS_PPS_RMT_TICK_NS        1000   // 1 µs symbols (80 MHz / 80)
-#define GPS_PPS_RMT_WINDOW_MS        20   // capture window after the edge
-#define GPS_PPS_RMT_FILTER_NS      1000   // hw-glitch filter: drop <1 µs pulses
+#define GPS_PPS_RMT_TICK_NS        1000   // 1 µs symbols (resolution_hz = 1e9/tick)
+#define GPS_PPS_RMT_WINDOW_MS        20   // signal_range_max_ns after last edge
+#define GPS_PPS_RMT_FILTER_NS      1000   // signal_range_min_ns glitch filter
 #define GPS_PPS_RMT_HOLD_MS         700    // hold a GPIO edge for its refinement
 #define GPS_PPS_RMT_STALE_MS        2100   // no RMT edges for this long -> fall back to GPIO
 // Missed PPS seconds ≥ this → Unsynced (not silent catch-up only).
