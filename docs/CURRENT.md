@@ -1,7 +1,7 @@
 # 当前基线（与代码一致）
 
 > 更新日期：2026-09-19  
-> 工作分支：`cursor/work-a05e` · 固件 **v1.1.36**（`GPS_PPS_RMT_EN=0`，GPIO 授时）  
+> **`main` = v1.1.36**（`GPS_PPS_RMT_EN=0`，GPIO 授时）· 合入自 `cursor/work-a05e` @ `ab96148`  
 > Web OTA 往返 **PASS** — [ota_deploy_v1136_20260919.md](ota_deploy_v1136_20260919.md)  
 > RMT 板测已结案 FAIL — [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)
 

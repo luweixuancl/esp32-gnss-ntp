@@ -14,7 +14,7 @@
 - Web OTA 往返 **PASS** — [`docs/ota_deploy_v1136_20260919.md`](../docs/ota_deploy_v1136_20260919.md)
 - Debug log: [`docs/debug_log.md`](../docs/debug_log.md)
 - Platform: pioarduino 55.03.311（Arduino 3.3.11 / IDF 5.5.5）
-- Branch tip: `cursor/work-a05e`
+- On **`main`**（及 `cursor/work-a05e`）
 
 ## Verify
 
@@ -23,8 +23,8 @@ wc -c firmware_esp32s3.bin   # 1091520
 sha256sum -c SHA256SUMS
 ```
 
-## China mirror (work branch)
+## China mirror
 
 ```text
-https://gh-proxy.com/https://raw.githubusercontent.com/luweixuancl/esp32-gnss-ntp/cursor/work-a05e/dist/firmware_esp32s3.bin
+https://gh-proxy.com/https://raw.githubusercontent.com/luweixuancl/esp32-gnss-ntp/main/dist/firmware_esp32s3.bin
 ```
