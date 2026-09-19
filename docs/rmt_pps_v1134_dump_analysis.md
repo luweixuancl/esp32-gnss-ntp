@@ -1,5 +1,7 @@
 # RMT dump 分析 — v1.1.34（2026-09-19）
 
+> **历史结果**。结案汇总：[rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)。当前 tip [CURRENT.md](CURRENT.md)。
+
 > 证据：[`rmt_pps_v1134_debuglog_20260919.tar.gz`](rmt_pps_v1134_debuglog_20260919.tar.gz)（`GET /debug/log`）
 
 ## 结论

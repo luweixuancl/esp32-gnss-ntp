@@ -1,6 +1,6 @@
 # 时钟算法评价（两次 10 min NTP 比对）
 
-> **历史归档**：下文口径以当时固件为准。当前 `main` = **v1.1.28** / IDF5，见 [CURRENT.md](CURRENT.md)。
+> **历史归档**：下文口径以当时固件为准。当前 `main` = **v1.1.39** / IDF5，见 [CURRENT.md](CURRENT.md)。
 
 
 > 依据：[ntp_cmp_test_20260911.md](ntp_cmp_test_20260911.md)、[ntp_cmp_test_20260914.md](ntp_cmp_test_20260914.md)、[local_clock_gps_check.md](local_clock_gps_check.md)  

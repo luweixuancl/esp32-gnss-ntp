@@ -1,10 +1,9 @@
-# S3 板测记录 — IDF5 / v1.1.28（已合入 main）
+# S3 板测记录 — IDF5 / v1.1.28 冒烟（已合入）+ 后续跟进
 
-> 日期：2026-09-19  
-> 固件：**v1.1.28** · 整片 `merged_firmware_esp32s3_n16r8_0x0.bin`  
+> 冒烟固件：**v1.1.28** · 整片 `merged_firmware_esp32s3_n16r8_0x0.bin`  
 > 平台：pioarduino 55.03.311（Arduino 3.3.11 / IDF 5.5.5）  
 > 设备：`192.168.1.24` · `H3C_LuxYang`  
-> 总览：[CURRENT.md](CURRENT.md)
+> 当前 tip：**v1.1.39** — [CURRENT.md](CURRENT.md)
 
 ## 升级路径
 
@@ -30,5 +29,6 @@
 | RMT PPS EN=1 板测（v1.1.29–35） | **FAIL → 搁置** — [CLOSED](rmt_pps_board_test_CLOSED_20260919.md) |
 | **v1.1.36**（EN=0）Web OTA 自动往返 | **PASS** — [ota_deploy_v1136_20260919.md](ota_deploy_v1136_20260919.md) |
 | **v1.1.38** PSRAM 时钟长测环 | **PASS** — [clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md) |
+| **v1.1.39** 去掉设备端 CSV 下载 | 仅二进制；CLI 转 CSV — [clock_trace.md](clock_trace.md) |
 
-生产形态：GPIO 授时 + Web OTA + 可选时钟迹环长测；外置 RTC 待购件。
+生产形态：GPIO 授时 + Web OTA + 时钟迹环长测；外置 RTC 待购件。当前 tip **v1.1.39**。

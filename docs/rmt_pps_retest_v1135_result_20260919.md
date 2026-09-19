@@ -1,5 +1,7 @@
 # RMT PPS 复测结果 — v1.1.35 FAIL（2026-09-19，第 4 轮）
 
+> **历史结果**。结案汇总：[rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)。当前 tip [CURRENT.md](CURRENT.md)。
+
 > 结论先行：**FAIL** —— DMA 尝试、跳过 RGB RMT TX、`rtc_gpio_deinit` 三项排除后，
 > 零时长符号**原样存在**（dump 仍全 `0x00000000`）。armed/init 链路稳定正常；
 > 时钟/NTP 服务面持续无回归。

@@ -26,12 +26,13 @@
 
 done 回调仍约 **2 帧/PPS**，但词内容恒零 → **事件路径活、采样写入死**。
 
-## 产品决策（v1.1.36）
+## 产品决策（v1.1.36，仍为现行策略）
 
-- **`GPS_PPS_RMT_EN=0`**：生产/工作分支默认回 GPIO 精化（与 `main` v1.1.28 策略一致）
+- **`GPS_PPS_RMT_EN=0`**：生产默认 GPIO 精化（`main` tip v1.1.39 仍如此）
 - RMT 源码与 `/debug/log` **保留**，供日后独立最小复现 / MCPWM 等替代方案
 - 后续若再开 EN：优先 GPIO 回环自测或独立 sketch，勿再在整机上盲迭代
 
 ## 收摊验收（辅助 AI，2026-09-19）
 
-Web OTA **v1.1.35→36 PASS**：`/status` 无 `gps.ppsRmt`；`/debug/log` 无 `[pps-rmt]`；S1 / LCK / 160 MHz modem sleep 全绿 — [ota_deploy_v1136_20260919.md](ota_deploy_v1136_20260919.md)。
+Web OTA **v1.1.35→36 PASS**：`/status` 无 `gps.ppsRmt`；`/debug/log` 无 `[pps-rmt]`；S1 / LCK / 160 MHz modem sleep 全绿 — [ota_deploy_v1136_20260919.md](ota_deploy_v1136_20260919.md)。  
+其后 tip 已至 **v1.1.39**（时钟环等），RMT 仍保持 EN=0。

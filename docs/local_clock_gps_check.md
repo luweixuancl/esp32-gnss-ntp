@@ -1,6 +1,6 @@
 # PPS 校准本地时钟与 GPS 交叉检核
 
-> **历史归档**：下文口径以当时固件为准。当前 `main` = **v1.1.28** / IDF5，见 [CURRENT.md](CURRENT.md)。
+> **历史归档**：下文口径以当时固件为准。当前 `main` = **v1.1.39** / IDF5，见 [CURRENT.md](CURRENT.md)。
 
 
 > 状态：已实现（含审核修复：Holdover 在 PPS 丢失时生效、WARN→Degraded 不重锚、策略缓存、PPS 原子拷贝、NTP LI/RefID 诚实化）  

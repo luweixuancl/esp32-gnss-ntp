@@ -1,7 +1,7 @@
-# 从 IDF4（≤ v1.1.21）升到 IDF5（v1.1.28+）
+# 从 IDF4（≤ v1.1.21）升到 IDF5（v1.1.28+ / 当前 v1.1.39）
 
 > 适用：设备仍显示 **v1.1.20 / v1.1.21**（Arduino 2 / IDF 4.4）  
-> 目标：`main` 上 **v1.1.28**（pioarduino / IDF 5.5.5）  
+> 目标：`main` 上 **v1.1.39**（pioarduino / IDF 5.5.5）  
 > 总览：[CURRENT.md](CURRENT.md)
 
 ## 现象
@@ -35,22 +35,26 @@ esptool.py --chip esp32s3 -p <PORT> erase_flash
 esptool.py --chip esp32s3 -p <PORT> write_flash 0x0 merged_firmware_esp32s3_n16r8_0x0.bin
 ```
 
-3. 重启后 `fwMark` 应为 **`v1.1.28`**。NVS（WiFi 等）被擦掉，需重配网。
+3. 重启后 `fwMark` 应为 **`v1.1.39`**（或当前 `main` 尖端版本）。NVS（WiFi 等）被擦掉，需重配网。
 
 ### ESP32-C3
 
-同上，改用 `dist/firmware_merged_0x0.bin`（C3 另换了更大 OTA 分区表，同样必须整片）。
+整片：`firmware_merged_0x0.bin` @ `0x0`（同上 erase + write）。镜像见 `dist/` / [CURRENT.md](CURRENT.md)。
 
-## 迁移成功之后
+## 已在 IDF5（≥ v1.1.28）时
 
-同 IDF5 线上的小版本升级，可用 Web OTA / `firmware_esp32s3.bin`（或 C3 的 `firmware.bin`）@ `0x10000`（保 NVS）。  
-上传前核对：`otaChip` 与文件名一致、字节数与 `SHA256SUMS` 一致。
-
-## 串口自检
+只需 app-only 或 Web OTA：
 
 ```text
-FW v1.1.28 (1.1.28)
-[pwr] cpu=160 MHz wifi_modem_sleep=1 …
-[gps] NMEA filter: … GGA+RMC+ZDA …
-[ota] app valid (cancel rollback) …   # 若来自 OTA 槽
+https://gh-proxy.com/https://raw.githubusercontent.com/luweixuancl/esp32-gnss-ntp/main/dist/firmware_esp32s3.bin
 ```
+
+`@0x10000`，保留 NVS。
+
+## 串口确认
+
+```text
+FW v1.1.39 (1.1.39)
+```
+
+OLED / `/status` 的 `fwMark` 同值。

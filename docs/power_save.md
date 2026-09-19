@@ -1,6 +1,6 @@
 # S3 / 常开 NTP 的功耗与散热
 
-> 固件：**v1.1.28**（自 v1.1.26 起落地）  
+> 固件：自 **v1.1.26** 落地；当前 tip **v1.1.39**（见 [CURRENT.md](CURRENT.md)）  
 > 场景：必须常连 WiFi、听 UDP/123、跟 PPS —— **不能**深睡。  
 > 总览：[CURRENT.md](CURRENT.md)
 
@@ -34,4 +34,4 @@ build_flags =
 
 ## 验收（已完成）
 
-S3 v1.1.28：用户确认壳温下降；13 min soak 中 Die 温约 37–40 °C。见 [board_test_s3_idf5_20260919.md](board_test_s3_idf5_20260919.md)。
+S3 v1.1.28 冒烟：用户确认壳温下降；13 min soak 中 Die 温约 37–40 °C。见 [board_test_s3_idf5_20260919.md](board_test_s3_idf5_20260919.md)。现行 tip **v1.1.39** 仍默认 160 MHz + modem sleep。

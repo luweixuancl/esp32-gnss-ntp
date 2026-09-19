@@ -1,5 +1,7 @@
 # RMT PPS 复测任务书 — v1.1.33
 
+> **历史任务书**（RMT 战役已结案 FAIL→搁置）。勿再按本文刷 EN=1 固件。结案见 [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)；当前 tip [CURRENT.md](CURRENT.md)。
+
 ## 相对 v1.1.32
 
 v1.1.32 **armed 链路 PASS**，但 1259 帧全是 **1×零时长符号** → 100% junk，精化仍为 0。

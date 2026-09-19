@@ -1,5 +1,7 @@
 # RMT PPS 复测结果 — v1.1.32 FAIL（2026-09-19，第 3 轮）
 
+> **历史结果**。结案汇总：[rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)。当前 tip [CURRENT.md](CURRENT.md)。
+
 > 结论先行：**FAIL** —— v1.1.31/32 修复了 armed 链路（init 全 31 阶段、首个 PPS 后成功
 > armed），但 **RMT 收到的每帧符号时长恒为 0**，解析 100% 进 junk，精化合路仍为 0。
 > 时钟/NTP 服务面依旧无回归（GPIO 路径全程 LCK / stratum 1 GPSS）。

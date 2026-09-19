@@ -1,6 +1,6 @@
 # NTP 比对测试记录（GPS vs 本机 / 阿里云）
 
-> **历史归档**：下文口径以当时固件为准。当前 `main` = **v1.1.28** / IDF5，见 [CURRENT.md](CURRENT.md)。
+> **历史归档**：下文口径以当时固件为准。当前 `main` = **v1.1.39** / IDF5，见 [CURRENT.md](CURRENT.md)。
 
 
 ## 摘要

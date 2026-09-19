@@ -1,10 +1,10 @@
 # S3 特性深挖路线图（PPS 硬件捕获 / PSRAM 历史 / OTA / 外部时钟）
 
-> 状态（2026-09-19）：工作分支 **v1.1.36**（`GPS_PPS_RMT_EN=0`）；**RMT 板测结案 FAIL**；**Web OTA 自动往返 PASS**（[ota_deploy_v1136](ota_deploy_v1136_20260919.md)）；ExtClock 待购件；PSRAM history 已取消。  
+> 状态（2026-09-19）：**`main` = v1.1.39**（`GPS_PPS_RMT_EN=0`）；RMT 板测结案 FAIL；Web OTA PASS；**时钟长测环板测 PASS**（二进制下载，设备端无 CSV）；ExtClock 待购件。  
 > 总览：[CURRENT.md](CURRENT.md)  
-> 相关：[esp32s3_devkitc1_hw.md](esp32s3_devkitc1_hw.md)、[idf5_adapt_20260919.md](idf5_adapt_20260919.md)
+> 相关：[esp32s3_devkitc1_hw.md](esp32s3_devkitc1_hw.md)、[idf5_adapt_20260919.md](idf5_adapt_20260919.md)、[clock_trace.md](clock_trace.md)
 
-## 0. 现状基线（v1.1.36）
+## 0. 现状基线（v1.1.39）
 
 | S3 特性 | 现状 |
 |---|---|
@@ -23,19 +23,19 @@
 - 生产路径：GPIO ISR + LocalClock（已验证 LCK / stratum 1）。  
 - 再开 EN 前：独立最小 sketch 或 GPIO 回环自测，勿在整机盲迭代。
 
-## 2. PSRAM 时钟长测环 —— **已实现并板测 PASS（v1.1.38）**
+## 2. PSRAM 时钟长测环 —— **已实现并板测 PASS（v1.1.38；v1.1.39 仅二进制）**
 
-- start/stop 状态机，**仅 Stopped 可拉**；默认二进制页 + 下载期停 NTP。  
-- 板测：[clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md)（10 min、647 样本、5132 samp/s）。  
-- 见 [clock_trace.md](clock_trace.md)；客户端 `tools/clock_trace_client.py`。  
-- 旧「通用 /history」仍取消；本环专用于时钟长测。
+- start/stop 状态机，**仅 Stopped 可拉**；下载期停 NTP。  
+- 板测：[clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md)（10 min、647 样本）。  
+- v1.1.39：设备端 **去掉 CSV**；CLI `tools/clock_trace_client.py` 本地转 CSV。  
+- 见 [clock_trace.md](clock_trace.md)。旧「通用 /history」仍取消。
 
 ## 3. OTA 双分区 —— **已实现；IDF5 自动往返 PASS（v1.1.36）**
 
 - `POST /ota` + `/cfg` UI；`Update`；启动后 `esp_ota_mark_app_valid_cancel_rollback`（≥30 s）。  
 - OTA busy 拒 NTP（KoD `RSTR`）；magic + chip_id 校验。  
-- **v1.1.35→36 自动部署 PASS**（<45 s，热启动 LCK，无 `ppsRmt`）— [ota_deploy_v1136_20260919.md](ota_deploy_v1136_20260919.md)。  
-- **自 IDF4 首迁须整片烧录**，不能依赖 Web OTA（见 [upgrade_idf5_from_1120.md](upgrade_idf5_from_1120.md)）。
+- **v1.1.35→36 自动部署 PASS** — [ota_deploy_v1136_20260919.md](ota_deploy_v1136_20260919.md)。  
+- **自 IDF4 首迁须整片烧录**（见 [upgrade_idf5_from_1120.md](upgrade_idf5_from_1120.md)）。
 
 ## 4. 外部高品质时钟 —— **接口已落地，待购件**
 
@@ -47,4 +47,4 @@ NTS / 加密 NTP、触摸 / LCD、802.11mc。
 
 ## 6. 排序备忘
 
-**① ExtClock 购件开 EN**（RMT PPS 已搁置；OTA / IDF5 / 降功耗已完成）
+**① ExtClock 购件开 EN**（RMT 搁置；OTA / IDF5 / 降功耗 / 时钟环已完成）

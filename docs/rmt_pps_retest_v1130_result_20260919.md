@@ -1,5 +1,7 @@
 # RMT PPS 复测结果 — v1.1.30 FAIL（2026-09-19）
 
+> **历史结果**。结案汇总：[rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)。当前 tip [CURRENT.md](CURRENT.md)。
+
 > 结论先行：**FAIL** —— RMT 首次 `rmt_receive()` 超硬件限制被拒，armed 永不置位。
 > 时钟/NTP 服务面无回归（GPIO 兜底路径全程 LCK / stratum 1 GPSS）。
 

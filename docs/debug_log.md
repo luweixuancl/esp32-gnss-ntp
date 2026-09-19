@@ -1,6 +1,7 @@
 # RAM 调试日志（免串口拉 boot/RMT）
 
-> 固件 **v1.1.34+** · `DEBUG_LOG_EN=1`（默认）· 环缓 **32 KB**
+> 固件 **v1.1.34+**（当前 tip v1.1.39）· `DEBUG_LOG_EN=1`（默认）· 环缓 **32 KB**  
+> 总览：[CURRENT.md](CURRENT.md)
 
 上电早期关键行（`[pps-rmt]` / `[gps]` / `[wifi-evt]` / boot）在写 Serial 的同时写入 RAM 环形缓冲。STA 入网后用 HTTP 拉取，无需一直挂 USB 串口。
 
@@ -28,7 +29,7 @@ curl -fsS "http://$IP/debug/log?pass=$PASS&clear=1"
 响应为纯文本，首行元数据：
 
 ```text
-# debug_log fw=v1.1.34 used=1234 dropped=0 uptime_ms=… heap=…
+# debug_log fw=v1.1.39 used=1234 dropped=0 uptime_ms=… heap=…
 [pps-rmt] idf5 ready …
 [pps-rmt] dump n=1 val0=0x…
 ```

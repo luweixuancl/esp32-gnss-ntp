@@ -1,5 +1,7 @@
 # RMT PPS 复测任务书 — v1.1.30（相对 v1.1.29）
 
+> **历史任务书**（RMT 战役已结案 FAIL→搁置）。勿再按本文刷 EN=1 固件。结案见 [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)；当前 tip [CURRENT.md](CURRENT.md)。
+
 上一轮（v1.1.29）§7 硬项 PASS，但 **`active=false` / `samples=0` / 符号 1×零宽**：DMA 回调指针失效。  
 v1.1.30：**ISR 拷贝符号 + 非 DMA + 时间窗匹配**；`idfDataFrames` 仅计解析成功；新增 `idfJunkFrames`。
 

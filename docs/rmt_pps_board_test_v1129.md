@@ -1,5 +1,7 @@
 # RMT PPS 板测流程（v1.1.29 · `GPS_PPS_RMT_EN=1`）
 
+> **历史任务书**（RMT 战役已结案 FAIL→搁置）。勿再按本文刷 EN=1 固件。结案见 [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)；当前 tip [CURRENT.md](CURRENT.md)。
+
 > 受众：执行板测的 AI / 操作者（只测不改代码，除非文档要求回退）  
 > 分支：`cursor/work-a05e` · 固件 **v1.1.29**  
 > 目标板：**ESP32-S3**（主测）；C3 可选  

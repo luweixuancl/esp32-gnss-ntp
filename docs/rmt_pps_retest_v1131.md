@@ -1,5 +1,7 @@
 # RMT PPS 复测任务书 — v1.1.31
 
+> **历史任务书**（RMT 战役已结案 FAIL→搁置）。勿再按本文刷 EN=1 固件。结案见 [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)；当前 tip [CURRENT.md](CURRENT.md)。
+
 v1.1.30 **FAIL**：`GPS_PPS_RMT_WINDOW_MS=50` → `signal_range_max_ns` 超 IDF5 上限 32 767 000 ns，`rmt_receive` 拒收；且 init else 用 `ESP_OK` 盖掉真实 `gIdf.err`。
 
 v1.1.31 修复：

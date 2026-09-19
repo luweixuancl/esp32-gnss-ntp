@@ -1,5 +1,7 @@
 # RMT PPS 板测结果 — v1.1.29（2026-09-19）
 
+> **历史结果**。结案汇总：[rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)。当前 tip [CURRENT.md](CURRENT.md)。
+
 > 原始包：[`rmt_pps_board_test_20260919.tar.gz`](rmt_pps_board_test_20260919.tar.gz)  
 > 设备：S3 @ `192.168.1.24` · 固件 **v1.1.29** · `GPS_PPS_RMT_EN=1`  
 > 流程：[rmt_pps_board_test_v1129.md](rmt_pps_board_test_v1129.md)

@@ -1,5 +1,7 @@
 # RMT PPS 复测任务书 — v1.1.32
 
+> **历史任务书**（RMT 战役已结案 FAIL→搁置）。勿再按本文刷 EN=1 固件。结案见 [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)；当前 tip [CURRENT.md](CURRENT.md)。
+
 ## 相对 v1.1.31 的优化
 
 **等 GPIO 见到第一发 1PPS 后再 `rmt_receive()`**（GNSS 冷启动 / 模组刚上电无 PPS 时，不再每 20 ms 空收 junk）。

@@ -1,5 +1,7 @@
 # RMT PPS 复测任务书 — v1.1.35
 
+> **历史任务书**（RMT 战役已结案 FAIL→搁置）。勿再按本文刷 EN=1 固件。结案见 [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)；当前 tip [CURRENT.md](CURRENT.md)。
+
 ## 相对 v1.1.34
 
 `/debug/log` dump 已证实 raw 词仅为：

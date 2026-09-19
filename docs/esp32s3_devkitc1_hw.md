@@ -1,6 +1,6 @@
 # ESP32-S3-DevKitC-1 硬件笔记与移植规划（N16R8）
 
-> 状态：**移植完成并转正**；平台已迁 **IDF5 / v1.1.28**（见 [CURRENT.md](CURRENT.md)、[idf5_adapt_20260919.md](idf5_adapt_20260919.md)）  
+> 状态：**移植完成并转正**；平台 IDF5；当前 tip **v1.1.39**（见 [CURRENT.md](CURRENT.md)、[idf5_adapt_20260919.md](idf5_adapt_20260919.md)）  
 > 板卡：乐鑫 **ESP32-S3-DevKitC-1 V1.1**，模组 **ESP32-S3-WROOM-1 N16R8**（16MB QIO flash + 8MB OPI PSRAM）  
 > 资料：[`芯片资料/ESP32S3/`](../芯片资料/ESP32S3/)（引脚图 / 原理图 / 数据手册）  
 > 相关：[wifi_event_fsm.md](wifi_event_fsm.md)、[s3_deep_dive_roadmap.md](s3_deep_dive_roadmap.md)、[power_save.md](power_save.md)
