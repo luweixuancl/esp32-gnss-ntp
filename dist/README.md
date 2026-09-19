@@ -11,6 +11,7 @@
 
 - Mark: **v1.1.25** (`FW_MARK`)
 - Platform: pioarduino 55.03.311 (Arduino 3.3.11 / IDF 5.5.5) — see `docs/idf5_adapt_20260919.md`
+- C3 partitions: `partitions/default_ota_1750k.csv` (~1.75 MB app slots). **Full flash** (`firmware_merged_0x0.bin`) applies the new table; Web OTA alone does not.
 
 ## Verify before Web OTA
 
