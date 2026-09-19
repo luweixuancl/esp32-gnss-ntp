@@ -1,5 +1,8 @@
 # /status 秒间隔监测：freqPpm 稳定性与温补机制实测
 
+> **历史归档**：下文口径以当时固件为准。当前 `main` = **v1.1.28** / IDF5，见 [CURRENT.md](CURRENT.md)。
+
+
 > 状态：已完成（纯只读监测，未改任何代码）
 > 日期：2026-09-16
 > 设备：`10.81.127.143`（H3C_LuxYang，RSSI −43 dBm），uptime ≈ 15 h，温补 **开**（k = −0.50 ppm/°C，NVS `tcmp`/`tcpc`），异常策略 Hold 5m

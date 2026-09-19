@@ -30,11 +30,13 @@ struct RmtPpsEdge {
   uint32_t widthUs;
 };
 struct RmtPpsState {
-  bool armed = false;   // rmt_new_rx_channel + first rmt_receive ok
+  bool armed = false;   // first rmt_receive ok (deferred until GPIO PPS)
+  bool ready = false;   // channel+task enabled; waiting for first PPS to arm
   bool alive = false;   // refinements still flowing
   bool active = false;  // currently the merge source
   bool reportedFallback = false;  // one log line per fallback episode
   uint64_t lastEdgeUs = 0;
+  uint32_t lastArmTryMs = 0;
   uint8_t head = 0, tail = 0;
   RmtPpsEdge q[GPS_PPS_RMT_QUEUE];
   // statistics (task-context writers only)
@@ -48,10 +50,16 @@ struct RmtPpsState {
 };
 static RmtPpsState gRmt;
 
-// IDF5 driver state: channel handle + done-queue + static receive buffer.
+// IDF5 driver state: channel handle + done-queue of *copied* frames.
+// v1.1.29 board fail mode: queueing edata pointers under DMA left the task
+// reading 1×zero-duration symbols (stale buffer). Always copy in the ISR.
 #ifndef GPS_PPS_RMT_SYM_CAP
 #define GPS_PPS_RMT_SYM_CAP 64
 #endif
+struct RmtDoneFrame {
+  size_t n = 0;
+  rmt_symbol_word_t syms[GPS_PPS_RMT_SYM_CAP];
+};
 struct IdfPpsState {
   bool ok = false;
   uint8_t stage = 0;  // 1=new_ch 2=cbs 4=enable 8=task 16=recv
@@ -63,6 +71,7 @@ struct IdfPpsState {
   uint32_t lastD1Us = 0;
   uint32_t emptyFrames = 0;
   uint32_t dataFrames = 0;
+  uint32_t junkFrames = 0;
   rmt_channel_handle_t chan = nullptr;
   QueueHandle_t doneQ = nullptr;
   rmt_symbol_word_t raw[GPS_PPS_RMT_SYM_CAP];
@@ -200,7 +209,8 @@ bool GpsService::rmtProcessSymbols(const uint32_t* data, size_t len) {
 }
 
 #if GPS_PPS_RMT_EN
-// IDF5 on_recv_done runs in ISR: copy edata into the queue; task parses.
+// IDF5 on_recv_done runs in ISR: copy symbols out of the driver buffer before
+// returning (DMA/ping-pong may recycle the memory immediately after).
 bool IRAM_ATTR GpsService::rmtRxDoneCb(rmt_channel_handle_t channel,
                                        const rmt_rx_done_event_data_t* edata,
                                        void* user_data) {
@@ -209,8 +219,19 @@ bool IRAM_ATTR GpsService::rmtRxDoneCb(rmt_channel_handle_t channel,
   if (edata == nullptr || gIdf.doneQ == nullptr) {
     return false;
   }
+  RmtDoneFrame fr{};
+  size_t n = edata->num_symbols;
+  if (n > GPS_PPS_RMT_SYM_CAP) {
+    n = GPS_PPS_RMT_SYM_CAP;
+  }
+  fr.n = n;
+  if (n > 0 && edata->received_symbols != nullptr) {
+    memcpy(fr.syms, edata->received_symbols, n * sizeof(rmt_symbol_word_t));
+  }
   BaseType_t woken = pdFALSE;
-  xQueueSendFromISR(gIdf.doneQ, edata, &woken);
+  if (xQueueSendFromISR(gIdf.doneQ, &fr, &woken) != pdTRUE) {
+    return false;
+  }
   return woken == pdTRUE;
 }
 
@@ -227,30 +248,55 @@ bool GpsService::rmtArmReceive() {
   return true;
 }
 
-// Task-context RX: drain done-queue → symbol parser → re-arm receive.
+void GpsService::tryArmRmtAfterFirstPps() {
+  if (!gRmt.ready || gRmt.armed || !gIdf.ok) {
+    return;
+  }
+  // GNSS modules do not emit 1PPS until they have time/fix; keep GPIO-only
+  // until the ISR has seen at least one edge, then start RMT receive.
+  if (!ppsSeen_ && ppsCount_ == 0) {
+    return;
+  }
+  const uint32_t nowMs = millis();
+  if (gRmt.lastArmTryMs != 0 && (nowMs - gRmt.lastArmTryMs) < GPS_PPS_RMT_ARM_RETRY_MS) {
+    return;
+  }
+  gRmt.lastArmTryMs = nowMs;
+  if (rmtArmReceive()) {
+    gRmt.armed = true;
+    Serial.printf("[pps-rmt] idf5 armed after first PPS (count=%u)\n",
+                  static_cast<unsigned>(ppsCount_));
+  } else {
+    Serial.printf("[pps-rmt] arm defer failed err=%d (retry)\n", gIdf.err);
+  }
+}
+
+// Task-context RX: drain copied frames → symbol parser → re-arm receive.
 void GpsService::rmtRxTask(void* arg) {
   (void)arg;
   for (;;) {
-    rmt_rx_done_event_data_t edata = {};
-    if (xQueueReceive(gIdf.doneQ, &edata, portMAX_DELAY) != pdTRUE) {
+    RmtDoneFrame fr{};
+    if (xQueueReceive(gIdf.doneQ, &fr, portMAX_DELAY) != pdTRUE) {
       continue;
     }
     ++gIdf.frames;
-    const size_t n = edata.num_symbols;
-    if (n == 0 || edata.received_symbols == nullptr) {
+    const size_t n = fr.n;
+    if (n == 0) {
       ++gIdf.emptyFrames;
     } else {
-      ++gIdf.dataFrames;
       if (gIdf.firstSyms == 0) {
         gIdf.firstSyms = static_cast<uint32_t>(n);
       }
       gIdf.lastSyms = static_cast<uint32_t>(n);
-      const uint32_t sym = edata.received_symbols[0].val;
+      const uint32_t sym = fr.syms[0].val;
       gIdf.lastD0Us = (sym & 0x7FFF) * (GPS_PPS_RMT_TICK_NS / 1000);
       gIdf.lastD1Us = ((sym >> 16) & 0x7FFF) * (GPS_PPS_RMT_TICK_NS / 1000);
-      rmtProcessSymbols(reinterpret_cast<const uint32_t*>(edata.received_symbols), n);
+      if (rmtProcessSymbols(reinterpret_cast<const uint32_t*>(fr.syms), n)) {
+        ++gIdf.dataFrames;
+      } else {
+        ++gIdf.junkFrames;
+      }
     }
-    // Re-arm for the next PPS window (non-blocking; next done via ISR).
     (void)rmtArmReceive();
   }
 }
@@ -264,11 +310,20 @@ void GpsService::begin() {
   attachInterrupt(digitalPinToInterrupt(PIN_GPS_PPS), onPpsIsr, RISING);
 #if GPS_PPS_RMT_EN
   {
-    // IDF5 rmt_rx: pool-allocated channel (S3 may take DMA RX; C3 has no DMA).
-    gIdf.doneQ = xQueueCreate(4, sizeof(rmt_rx_done_event_data_t));
+    // IDF5 rmt_rx: non-DMA by default (v1.1.29: DMA + pointer queue → junk symbols).
+    // signal_range_max_ns is 15-bit in tick units → max 32767 * tick_ns.
+    gIdf.doneQ = xQueueCreate(4, sizeof(RmtDoneFrame));
     gIdf.recvCfg.signal_range_min_ns = GPS_PPS_RMT_FILTER_NS;
-    gIdf.recvCfg.signal_range_max_ns =
-        static_cast<uint32_t>(GPS_PPS_RMT_WINDOW_MS) * 1000000UL;
+    {
+      const uint32_t tickNs = GPS_PPS_RMT_TICK_NS;
+      const uint32_t maxRangeNs = 32767u * tickNs;  // IDF5 rmt_receive hard cap
+      uint32_t rangeNs =
+          static_cast<uint32_t>(GPS_PPS_RMT_WINDOW_MS) * 1000000UL;
+      if (rangeNs > maxRangeNs) {
+        rangeNs = maxRangeNs;
+      }
+      gIdf.recvCfg.signal_range_max_ns = rangeNs;
+    }
     gIdf.recvCfg.flags.en_partial_rx = 0;
 
     rmt_rx_channel_config_t cfg = {};
@@ -277,24 +332,13 @@ void GpsService::begin() {
     cfg.resolution_hz = 1000000000UL / GPS_PPS_RMT_TICK_NS;  // 1 MHz @ 1 µs
     cfg.mem_block_symbols = GPS_PPS_RMT_SYM_CAP;
     cfg.intr_priority = 0;
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
-    cfg.flags.with_dma = 1;  // S3 RX channels support DMA
-#else
-    cfg.flags.with_dma = 0;  // C3 RMT has no DMA backend
-#endif
+    cfg.flags.with_dma = 0;  // copy-safe; S3 DMA optional later
 
     esp_err_t err = ESP_ERR_INVALID_STATE;
     if (gIdf.doneQ == nullptr) {
       err = ESP_ERR_NO_MEM;
     } else {
       err = rmt_new_rx_channel(&cfg, &gIdf.chan);
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
-      // Fall back to non-DMA if the DMA-capable RX pool is exhausted.
-      if (err == ESP_ERR_NOT_FOUND || err == ESP_ERR_NOT_SUPPORTED) {
-        cfg.flags.with_dma = 0;
-        err = rmt_new_rx_channel(&cfg, &gIdf.chan);
-      }
-#endif
     }
     if (err == ESP_OK) {
       gIdf.stage |= 1;
@@ -314,16 +358,20 @@ void GpsService::begin() {
         err = ESP_ERR_NO_MEM;
       }
     }
-    if (err == ESP_OK && rmtArmReceive()) {
-      gRmt.armed = true;
+    if (err == ESP_OK) {
+      // Do NOT rmt_receive yet: PPS pin is idle-low until GNSS has a fix.
+      // signal_range_max would end empty receives every WINDOW_MS while waiting.
+      // Arm on first GPIO PPS from loop() (see tryArmRmtAfterFirstPps).
       gIdf.ok = true;
-      Serial.printf("[pps-rmt] idf5 armed pin=%d tick=%uns win=%ums filter=%uns dma=%u\n",
+      gRmt.ready = true;
+      Serial.printf("[pps-rmt] idf5 ready pin=%d tick=%uns win=%ums filter=%uns dma=%u "
+                    "(arm on first PPS)\n",
                     PIN_GPS_PPS, GPS_PPS_RMT_TICK_NS, GPS_PPS_RMT_WINDOW_MS,
                     GPS_PPS_RMT_FILTER_NS, static_cast<unsigned>(cfg.flags.with_dma));
     } else {
       gIdf.err = err;
       Serial.printf("[pps-rmt] idf5 init failed stage=%u err=%d -> GPIO ISR only\n",
-                    gIdf.stage, err);
+                    gIdf.stage, gIdf.err);
     }
   }
 #endif
@@ -583,6 +631,10 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
   sampleDieTemp();
   parseNmea();
 
+#if GPS_PPS_RMT_EN
+  tryArmRmtAfterFirstPps();
+#endif
+
   // Drain every queued PPS edge (WiFi may delay task-time by >1s). With RMT
   // capture armed, GPIO edges are held briefly until their refined hardware
   // timestamp arrives (keyed by count); per-edge timeout falls back to the
@@ -646,10 +698,23 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
     size_t out = 0;
     for (size_t i = 0; i < npend; ++i) {
       int64_t refined = -1;
+      size_t hit = nref;
       for (size_t k = 0; k < nref; ++k) {
         if (ref[k].count == pend[i].count) {
           refined = static_cast<int64_t>(ref[k].edgeUs);
+          hit = k;
           break;
+        }
+        const int64_t dt =
+            static_cast<int64_t>(ref[k].edgeUs) - static_cast<int64_t>(pend[i].edgeUs);
+        if (dt >= -static_cast<int64_t>(GPS_PPS_RMT_MATCH_US) &&
+            dt <= static_cast<int64_t>(GPS_PPS_RMT_MATCH_US)) {
+          // Prefer closest in time when count drifted (DMA/race).
+          if (refined < 0 ||
+              llabs(dt) < llabs(refined - static_cast<int64_t>(pend[i].edgeUs))) {
+            refined = static_cast<int64_t>(ref[k].edgeUs);
+            hit = k;
+          }
         }
       }
       if (refined >= 0) {
@@ -663,16 +728,20 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
           gRmt.active = true;
           gRmt.reportedFallback = false;
         }
+        if (hit < nref) {
+          gRmt.lastWidthUs = ref[hit].widthUs;
+        }
         drainedCount = pend[i].count;
       } else if ((nowUs - pend[i].queuedUs) > holdNs) {
         localClock_.onPpsEdge(pend[i].edgeUs, pend[i].count);  // no refinement: GPIO fallback
+        // Count unrefined GPIO emits even before first active (diagnose hold misses).
+        ++gRmt.fallbacks;
         if (gRmt.active) {
           gRmt.active = false;
-          ++gRmt.fallbacks;
-          if (!gRmt.reportedFallback) {
-            Serial.println("[pps-rmt] stale -> GPIO fallback");
-            gRmt.reportedFallback = true;
-          }
+        }
+        if (!gRmt.reportedFallback) {
+          Serial.println("[pps-rmt] stale -> GPIO fallback");
+          gRmt.reportedFallback = true;
         }
         drainedCount = pend[i].count;
       } else {
@@ -743,6 +812,7 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
   work.ppsRmt.idfLastD1Us = gIdf.lastD1Us;
   work.ppsRmt.idfEmptyFrames = gIdf.emptyFrames;
   work.ppsRmt.idfDataFrames = gIdf.dataFrames;
+  work.ppsRmt.idfJunkFrames = gIdf.junkFrames;
   work.ppsRmt.idfRawStatus = 0;  // legacy IDF4 register probe removed
   work.ppsRmt.idfStage = gIdf.stage;
   work.ppsRmt.idfErr = gIdf.err;

@@ -1274,6 +1274,7 @@ void WebPortal::handleStatus() {
   ppsRmt["idfLastD1Us"] = st.ppsRmt.idfLastD1Us;
   ppsRmt["idfEmptyFrames"] = st.ppsRmt.idfEmptyFrames;
   ppsRmt["idfDataFrames"] = st.ppsRmt.idfDataFrames;
+  ppsRmt["idfJunkFrames"] = st.ppsRmt.idfJunkFrames;
   char rs[12];
   snprintf(rs, sizeof(rs), "0x%08x", st.ppsRmt.idfRawStatus);
   ppsRmt["idfRawStatus"] = rs;

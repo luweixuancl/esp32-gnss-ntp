@@ -1,0 +1,83 @@
+# rmt_pps_monitor host=192.168.1.24 duration=180s period=2.0s
+[   0.1s] fw=v1.1.29 state=LCK pps=660 armed=1 idfOk=1 active=0 df=1320 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[   2.5s] fw=v1.1.29 state=LCK pps=662 armed=1 idfOk=1 active=0 df=1324 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[   5.9s] fw=v1.1.29 state=LCK pps=666 armed=1 idfOk=1 active=0 df=1332 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[   8.0s] fw=v1.1.29 state=LCK pps=668 armed=1 idfOk=1 active=0 df=1336 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  10.4s] fw=v1.1.29 state=LCK pps=670 armed=1 idfOk=1 active=0 df=1340 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  12.8s] fw=v1.1.29 state=LCK pps=673 armed=1 idfOk=1 active=0 df=1346 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  14.9s] fw=v1.1.29 state=LCK pps=675 armed=1 idfOk=1 active=0 df=1350 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  17.0s] fw=v1.1.29 state=LCK pps=677 armed=1 idfOk=1 active=0 df=1354 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  19.4s] fw=v1.1.29 state=LCK pps=679 armed=1 idfOk=1 active=0 df=1358 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  21.6s] fw=v1.1.29 state=LCK pps=682 armed=1 idfOk=1 active=0 df=1363 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  24.0s] fw=v1.1.29 state=LCK pps=684 armed=1 idfOk=1 active=0 df=1368 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  26.1s] fw=v1.1.29 state=LCK pps=686 armed=1 idfOk=1 active=0 df=1372 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  28.2s] fw=v1.1.29 state=LCK pps=688 armed=1 idfOk=1 active=0 df=1376 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  30.6s] fw=v1.1.29 state=LCK pps=691 armed=1 idfOk=1 active=0 df=1380 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  32.7s] fw=v1.1.29 state=LCK pps=693 armed=1 idfOk=1 active=0 df=1386 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  34.8s] fw=v1.1.29 state=LCK pps=695 armed=1 idfOk=1 active=0 df=1390 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  37.3s] fw=v1.1.29 state=LCK pps=697 armed=1 idfOk=1 active=0 df=1394 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  39.6s] fw=v1.1.29 state=LCK pps=700 armed=1 idfOk=1 active=0 df=1399 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  42.0s] fw=v1.1.29 state=LCK pps=702 armed=1 idfOk=1 active=0 df=1404 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  44.5s] fw=v1.1.29 state=ACQ pps=704 armed=1 idfOk=1 active=0 df=1408 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  47.0s] fw=v1.1.29 state=LCK pps=707 armed=1 idfOk=1 active=0 df=1414 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  54.0s] ERROR <urlopen error timed out>
+[  56.0s] fw=v1.1.29 state=LCK pps=716 armed=1 idfOk=1 active=0 df=1432 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  58.5s] fw=v1.1.29 state=LCK pps=718 armed=1 idfOk=1 active=0 df=1436 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  61.0s] fw=v1.1.29 state=LCK pps=721 armed=1 idfOk=1 active=0 df=1442 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  63.1s] fw=v1.1.29 state=LCK pps=723 armed=1 idfOk=1 active=0 df=1446 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  65.5s] fw=v1.1.29 state=LCK pps=725 armed=1 idfOk=1 active=0 df=1450 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  67.6s] fw=v1.1.29 state=LCK pps=728 armed=1 idfOk=1 active=0 df=1455 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  70.0s] fw=v1.1.29 state=LCK pps=730 armed=1 idfOk=1 active=0 df=1460 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  72.5s] fw=v1.1.29 state=LCK pps=732 armed=1 idfOk=1 active=0 df=1464 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  74.9s] fw=v1.1.29 state=LCK pps=735 armed=1 idfOk=1 active=0 df=1470 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  77.1s] fw=v1.1.29 state=LCK pps=737 armed=1 idfOk=1 active=0 df=1474 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  79.2s] fw=v1.1.29 state=LCK pps=739 armed=1 idfOk=1 active=0 df=1478 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  81.6s] fw=v1.1.29 state=LCK pps=742 armed=1 idfOk=1 active=0 df=1482 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  84.0s] fw=v1.1.29 state=LCK pps=744 armed=1 idfOk=1 active=0 df=1488 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  86.1s] fw=v1.1.29 state=LCK pps=746 armed=1 idfOk=1 active=0 df=1492 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  88.6s] fw=v1.1.29 state=LCK pps=749 armed=1 idfOk=1 active=0 df=1497 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  91.1s] fw=v1.1.29 state=LCK pps=751 armed=1 idfOk=1 active=0 df=1502 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  93.6s] fw=v1.1.29 state=LCK pps=753 armed=1 idfOk=1 active=0 df=1506 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  95.6s] fw=v1.1.29 state=LCK pps=756 armed=1 idfOk=1 active=0 df=1512 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[  98.1s] fw=v1.1.29 state=LCK pps=758 armed=1 idfOk=1 active=0 df=1516 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 100.3s] fw=v1.1.29 state=LCK pps=760 armed=1 idfOk=1 active=0 df=1520 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 102.8s] fw=v1.1.29 state=LCK pps=763 armed=1 idfOk=1 active=0 df=1526 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 105.2s] fw=v1.1.29 state=LCK pps=765 armed=1 idfOk=1 active=0 df=1530 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 107.3s] fw=v1.1.29 state=LCK pps=767 armed=1 idfOk=1 active=0 df=1534 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 109.7s] fw=v1.1.29 state=LCK pps=770 armed=1 idfOk=1 active=0 df=1540 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 112.2s] fw=v1.1.29 state=LCK pps=772 armed=1 idfOk=1 active=0 df=1544 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 114.6s] fw=v1.1.29 state=LCK pps=775 armed=1 idfOk=1 active=0 df=1549 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 117.1s] fw=v1.1.29 state=LCK pps=777 armed=1 idfOk=1 active=0 df=1554 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 120.6s] fw=v1.1.29 state=LCK pps=781 armed=1 idfOk=1 active=0 df=1560 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 122.7s] fw=v1.1.29 state=LCK pps=783 armed=1 idfOk=1 active=0 df=1566 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 125.1s] fw=v1.1.29 state=LCK pps=785 armed=1 idfOk=1 active=0 df=1570 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 127.5s] fw=v1.1.29 state=LCK pps=787 armed=1 idfOk=1 active=0 df=1574 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 130.0s] fw=v1.1.29 state=LCK pps=790 armed=1 idfOk=1 active=0 df=1580 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 132.1s] fw=v1.1.29 state=LCK pps=792 armed=1 idfOk=1 active=0 df=1584 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 134.5s] fw=v1.1.29 state=LCK pps=794 armed=1 idfOk=1 active=0 df=1588 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 137.0s] fw=v1.1.29 state=LCK pps=797 armed=1 idfOk=1 active=0 df=1594 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 139.1s] fw=v1.1.29 state=LCK pps=799 armed=1 idfOk=1 active=0 df=1598 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 141.2s] fw=v1.1.29 state=LCK pps=801 armed=1 idfOk=1 active=0 df=1602 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 143.6s] fw=v1.1.29 state=LCK pps=804 armed=1 idfOk=1 active=0 df=1607 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 145.7s] fw=v1.1.29 state=LCK pps=806 armed=1 idfOk=1 active=0 df=1612 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 148.1s] fw=v1.1.29 state=LCK pps=808 armed=1 idfOk=1 active=0 df=1616 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 150.3s] fw=v1.1.29 state=LCK pps=810 armed=1 idfOk=1 active=0 df=1620 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 152.4s] fw=v1.1.29 state=LCK pps=812 armed=1 idfOk=1 active=0 df=1624 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 154.8s] fw=v1.1.29 state=LCK pps=815 armed=1 idfOk=1 active=0 df=1630 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 156.9s] fw=v1.1.29 state=LCK pps=817 armed=1 idfOk=1 active=0 df=1634 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 159.4s] fw=v1.1.29 state=LCK pps=819 armed=1 idfOk=1 active=0 df=1638 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 161.5s] fw=v1.1.29 state=LCK pps=821 armed=1 idfOk=1 active=0 df=1642 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 163.9s] fw=v1.1.29 state=LCK pps=824 armed=1 idfOk=1 active=0 df=1648 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 166.4s] fw=v1.1.29 state=LCK pps=826 armed=1 idfOk=1 active=0 df=1652 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 168.4s] fw=v1.1.29 state=LCK pps=828 armed=1 idfOk=1 active=0 df=1656 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 170.8s] fw=v1.1.29 state=LCK pps=831 armed=1 idfOk=1 active=0 df=1662 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 172.9s] fw=v1.1.29 state=LCK pps=833 armed=1 idfOk=1 active=0 df=1666 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 175.3s] fw=v1.1.29 state=LCK pps=835 armed=1 idfOk=1 active=0 df=1670 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 177.4s] fw=v1.1.29 state=LCK pps=837 armed=1 idfOk=1 active=0 df=1674 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+[ 179.8s] fw=v1.1.29 state=LCK pps=840 armed=1 idfOk=1 active=0 df=1680 ef=0 fb=0 meanUs=0 width=0 stage=31 err=0
+===== RMT SUMMARY =====
+samples=75 errors=1 fw=v1.1.29
+has_ppsRmt=True armed_ok_samples=75/75
+LCK=74/75 after_first_lck_seen=True
+idfDataFrames 1320 -> 1680  empty=0  fallbacks 0 -> 0
+VERDICT: PASS
