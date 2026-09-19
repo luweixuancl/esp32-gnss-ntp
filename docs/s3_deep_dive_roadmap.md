@@ -23,9 +23,10 @@
 - 生产路径：GPIO ISR + LocalClock（已验证 LCK / stratum 1）。  
 - 再开 EN 前：独立最小 sketch 或 GPIO 回环自测，勿在整机盲迭代。
 
-## 2. PSRAM 时钟长测环 —— **已实现（v1.1.37）**
+## 2. PSRAM 时钟长测环 —— **已实现并板测 PASS（v1.1.38）**
 
-- 替代已取消的 `/history`：start/stop 状态机，**仅 Stopped 可拉 CSV**。  
+- start/stop 状态机，**仅 Stopped 可拉**；默认二进制页 + 下载期停 NTP。  
+- 板测：[clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md)（10 min、647 样本、5132 samp/s）。  
 - 见 [clock_trace.md](clock_trace.md)；客户端 `tools/clock_trace_client.py`。  
 - 旧「通用 /history」仍取消；本环专用于时钟长测。
 

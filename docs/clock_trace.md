@@ -1,6 +1,7 @@
 # 时钟长测 — PSRAM/RAM 采样环（v1.1.37+，传输优化 v1.1.38）
 
 > 设备侧按 PPS≈1 Hz 写入环形缓冲；**录制中禁止拉取**；停止后下载。  
+> **板测 PASS**（10 min / 647 样本 / 二进制 0.1 s 拉完）— [clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md)  
 > 总览：[CURRENT.md](CURRENT.md) · 客户端：[`tools/clock_trace_client.py`](../tools/clock_trace_client.py)
 
 ## 为什么

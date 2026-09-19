@@ -9,7 +9,7 @@
 
 ## Current build
 
-- Mark: **v1.1.38**（PSRAM 时钟长测环）— [`docs/clock_trace.md`](../docs/clock_trace.md)
+- Mark: **v1.1.38**（PSRAM 时钟长测环，板测 PASS）— [`docs/clock_trace_boardtest_20260919.md`](../docs/clock_trace_boardtest_20260919.md)
 - `GPS_PPS_RMT_EN=0` — [`docs/rmt_pps_board_test_CLOSED_20260919.md`](../docs/rmt_pps_board_test_CLOSED_20260919.md)
 - Web OTA 往返 **PASS**（v1.1.36 基线）— [`docs/ota_deploy_v1136_20260919.md`](../docs/ota_deploy_v1136_20260919.md)
 - Debug log: [`docs/debug_log.md`](../docs/debug_log.md)
