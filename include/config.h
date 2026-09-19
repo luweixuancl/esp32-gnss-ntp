@@ -4,11 +4,11 @@
 // OLED mark is unambiguous after OTA / serial upgrade.
 #define FW_VER_MAJOR         1
 #define FW_VER_MINOR         1
-#define FW_VER_PATCH         33
-// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.33").
-#define FW_MARK              "v1.1.33"
+#define FW_VER_PATCH         34
+// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.34").
+#define FW_MARK              "v1.1.34"
 // Full string for /status, /cfg, serial, OTA pages.
-#define FW_VERSION           "1.1.33"
+#define FW_VERSION           "1.1.34"
 // Reject obviously truncated OTA payloads before activating the slot.
 #define OTA_MIN_IMAGE_BYTES      (200 * 1024)
 // After a pending-verify OTA boot, wait until tasks are alive this long before
@@ -252,6 +252,13 @@
 #define GPS_PPS_RMT_MATCH_US        5000   // |rmt-gpio| time match window (µs)
 #define GPS_PPS_RMT_ARM_RETRY_MS    1000   // retry deferred arm while waiting for PPS
 #define GPS_PPS_RMT_DUMP_FRAMES      16   // serial-dump first N frames (raw hex)
+// RAM debug ring (tee to Serial; fetch via GET /debug/log after WiFi).
+#ifndef DEBUG_LOG_EN
+#define DEBUG_LOG_EN                    1
+#endif
+#ifndef DEBUG_LOG_BYTES
+#define DEBUG_LOG_BYTES         (32 * 1024)
+#endif
 // Missed PPS seconds ≥ this → Unsynced (not silent catch-up only).
 #define CLK_PPS_MISS_UNSYNC           3
 // Holdover dispersion: floor crystal error (ppm) when EMA is still small.

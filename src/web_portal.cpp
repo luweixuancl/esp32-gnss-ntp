@@ -1,6 +1,7 @@
 #include "web_portal.h"
 #include "app_ipc.h"
 #include "config.h"
+#include "debug_log.h"
 #include "gps_service.h"
 #include "ntp_server.h"
 #include "ota_service.h"
@@ -8,6 +9,7 @@
 #include <esp_system.h>
 #include <math.h>
 #include <time.h>
+#include <stdlib.h>
 
 namespace {
 
@@ -71,8 +73,8 @@ void WebPortal::begin(WifiManager* wifi, GpsService* gps, NtpServer* ntp) {
     return;
   }
 
-  const char* hdrs[] = {"Cookie", "Content-Length"};
-  server_.collectHeaders(hdrs, 2);
+  const char* hdrs[] = {"Cookie", "Content-Length", "X-Debug-Pass"};
+  server_.collectHeaders(hdrs, 3);
 
   server_.on("/", HTTP_GET, [this]() { handleRoot(); });
   server_.on("/setup", HTTP_GET, [this]() { handleSetupEntry(); });
@@ -89,6 +91,8 @@ void WebPortal::begin(WifiManager* wifi, GpsService* gps, NtpServer* ntp) {
       "/ota", HTTP_POST, [this]() { handleOtaDone(); }, [this]() { handleOtaUpload(); });
   server_.on("/status", HTTP_GET, [this]() { handleStatus(); });
   server_.on("/metrics", HTTP_GET, [this]() { handleMetrics(); });
+  server_.on("/debug/log", HTTP_GET, [this]() { handleDebugLog(); });
+  server_.on("/debug/log/clear", HTTP_POST, [this]() { handleDebugLogClear(); });
   server_.onNotFound([this]() {
     sendNoCache();
     const WifiLinkSnapshot link = wifi_ ? wifi_->linkSnapshot() : WifiLinkSnapshot{};
@@ -103,7 +107,7 @@ void WebPortal::begin(WifiManager* wifi, GpsService* gps, NtpServer* ntp) {
   });
   server_.begin();
   started_ = true;
-  Serial.println("HTTP on :80  (/ /status|/status?view=ui /metrics open; /cfg+/ota need login)");
+  debugLogf("HTTP on :80  (/ /status|/metrics open; /cfg+/ota+/debug/log need login or ?pass=)");
 }
 
 void WebPortal::loop() {
@@ -192,6 +196,81 @@ bool WebPortal::requireSession(bool htmlLogin) {
   sendNoCache();
   server_.send(401, "text/plain", "Unauthorized");
   return false;
+}
+
+bool WebPortal::requireSessionOrPass() {
+  if (sessionCookieOk()) {
+    return true;
+  }
+  String pass = server_.arg("pass");
+  if (pass.isEmpty() && server_.hasHeader("X-Debug-Pass")) {
+    pass = server_.header("X-Debug-Pass");
+  }
+  const String expect = writePassword();
+  if (!pass.isEmpty() && !expect.isEmpty() && pass == expect) {
+    return true;
+  }
+  sendNoCache();
+  server_.send(401, "text/plain", "Unauthorized (login cookie or ?pass= / X-Debug-Pass)");
+  return false;
+}
+
+void WebPortal::handleDebugLog() {
+  if (!requireSessionOrPass()) {
+    return;
+  }
+  sendNoCache();
+#if !DEBUG_LOG_EN
+  server_.send(503, "text/plain", "debug log disabled (DEBUG_LOG_EN=0)\n");
+  return;
+#else
+  const size_t used = debugLogUsed();
+  char* snap = static_cast<char*>(malloc(used + 1));
+  if (snap == nullptr && used > 0) {
+    server_.send(500, "text/plain", "oom\n");
+    return;
+  }
+  uint32_t dropped = 0;
+  const size_t n = (snap != nullptr) ? debugLogSnapshot(snap, used + 1, &dropped) : 0;
+  char head[192];
+  snprintf(head, sizeof(head),
+           "# debug_log fw=%s used=%u dropped=%u uptime_ms=%lu heap=%u\n", FW_MARK,
+           static_cast<unsigned>(used), static_cast<unsigned>(dropped),
+           static_cast<unsigned long>(millis()),
+           static_cast<unsigned>(ESP.getFreeHeap()));
+  const size_t headLen = strlen(head);
+  char* body = static_cast<char*>(malloc(headLen + n + 1));
+  if (body == nullptr) {
+    free(snap);
+    server_.send(500, "text/plain", "oom\n");
+    return;
+  }
+  memcpy(body, head, headLen);
+  if (n && snap) {
+    memcpy(body + headLen, snap, n);
+  }
+  body[headLen + n] = '\0';
+  free(snap);
+  const bool clearAfter = server_.hasArg("clear");
+  server_.send(200, "text/plain; charset=utf-8", body);
+  free(body);
+  if (clearAfter) {
+    debugLogClear();
+  }
+#endif
+}
+
+void WebPortal::handleDebugLogClear() {
+  if (!requireSessionOrPass()) {
+    return;
+  }
+  sendNoCache();
+#if DEBUG_LOG_EN
+  debugLogClear();
+  server_.send(200, "text/plain", "cleared\n");
+#else
+  server_.send(503, "text/plain", "debug log disabled\n");
+#endif
 }
 
 void WebPortal::sendLoginPage(const char* err) {

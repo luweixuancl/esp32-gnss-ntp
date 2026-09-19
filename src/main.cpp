@@ -6,6 +6,7 @@
 
 #include "app_ipc.h"
 #include "config.h"
+#include "debug_log.h"
 #include "settings.h"
 #include "gps_service.h"
 #include "ntp_server.h"
@@ -269,8 +270,8 @@ static void finishConnect(WifiConnectState st) {
     char buf[48];
     snprintf(buf, sizeof(buf), "OK %s", gWifi.localIp().toString().c_str());
     postUiText(buf);
-    Serial.printf("STA IP: %s  (http://%s/)\n", gWifi.localIp().toString().c_str(),
-                  gWifi.localIp().toString().c_str());
+    debugLogf("STA IP: %s  (http://%s/)", gWifi.localIp().toString().c_str(),
+              gWifi.localIp().toString().c_str());
     // STA is up — SoftAP must go away (was escape hatch only).
     gWifi.stopAp();
     gIpc.setupAp = false;
@@ -679,19 +680,20 @@ static void taskUi(void* /*arg*/) {
 void setup() {
   Serial.begin(115200);
   delay(200);
-  Serial.println("\nGNSS NTP Server (RTOS)");
-  Serial.printf("FW %s (%s)\n", FW_MARK, FW_VERSION);
+  debugLogBegin();
+  debugLogf("\nGNSS NTP Server (RTOS)");
+  debugLogf("FW %s (%s)", FW_MARK, FW_VERSION);
 
   // Always-on NTP cannot deep-sleep; lower CPU clock to cut S3 idle heat.
   // PPS uses esp_timer / GPIO ISR (not CPU cycle counting), so 160 MHz is fine.
   if (!setCpuFrequencyMhz(CPU_FREQ_MHZ)) {
-    Serial.printf("[pwr] setCpuFrequencyMhz(%u) failed — keeping default\n",
-                  static_cast<unsigned>(CPU_FREQ_MHZ));
+    debugLogf("[pwr] setCpuFrequencyMhz(%u) failed — keeping default",
+              static_cast<unsigned>(CPU_FREQ_MHZ));
   } else {
-    Serial.printf("[pwr] cpu=%u MHz wifi_modem_sleep=%u time_idle=%ums\n",
-                  static_cast<unsigned>(getCpuFrequencyMhz()),
-                  static_cast<unsigned>(WIFI_MODEM_SLEEP),
-                  static_cast<unsigned>(TASK_TIME_IDLE_MS));
+    debugLogf("[pwr] cpu=%u MHz wifi_modem_sleep=%u time_idle=%ums",
+              static_cast<unsigned>(getCpuFrequencyMhz()),
+              static_cast<unsigned>(WIFI_MODEM_SLEEP),
+              static_cast<unsigned>(TASK_TIME_IDLE_MS));
   }
 
   if (!ipcInit()) {
@@ -721,9 +723,9 @@ void setup() {
   gNtp.begin();
   gOta.begin();
 
-  Serial.printf("MAC=%s\n", WiFi.macAddress().c_str());
-  Serial.printf("SoftAP default pass=%s (NVS appw overrides if set)\n",
-                derivedSoftApPassword().c_str());
+  debugLogf("MAC=%s", WiFi.macAddress().c_str());
+  debugLogf("SoftAP default pass=%s (NVS appw overrides if set)",
+            derivedSoftApPassword().c_str());
 
   // Priority: time=5 > net=2 > ui=1 (all below WiFi/lwIP ~18+).
   // During OTA, OtaService temporarily boosts net above time via vTaskPrioritySet.
@@ -737,7 +739,7 @@ void setup() {
   gIpc.taskNet = gTaskNet;
   gIpc.taskUi = gTaskUi;
 
-  Serial.println("Tasks started: time=5 net=2 ui=1");
+  debugLogf("Tasks started: time=5 net=2 ui=1");
 }
 
 void loop() {
