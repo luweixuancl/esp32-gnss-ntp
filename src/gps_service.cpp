@@ -1,6 +1,7 @@
 #include "gps_service.h"
 #include "ext_clock.h"
 #include "debug_log.h"
+#include "clock_trace.h"
 #include <esp_timer.h>
 #include <stdlib.h>
 #include <string.h>
@@ -933,6 +934,7 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
   work.extClockDriver = gExtClock.driver();
 
   publishStatus(work);
+  clockTraceMaybeSample(work);
 
 #if GPS_LOCK_DIAG_MS > 0
   if (!work.timeValid) {

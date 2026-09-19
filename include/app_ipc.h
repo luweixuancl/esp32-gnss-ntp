@@ -70,6 +70,10 @@ struct AppIpc {
   volatile bool otaBusy = false;       // Uploading | Rebooting
   volatile OtaPhase otaPhase = OtaPhase::Idle;
 
+  // Debug bulk transfer (clock-trace download). Written by task-net.
+  // When set, task-time sheds GPS work and NTP answers KoD RSTR (like OTA).
+  volatile bool xferBusy = false;
+
   // Task handles for priority shed during OTA (set once from setup).
   TaskHandle_t taskTime = nullptr;
   TaskHandle_t taskNet = nullptr;
@@ -96,6 +100,9 @@ inline void ipcKickNet() { gIpc.kickNetMs = millis(); }
 inline void ipcKickUi() { gIpc.kickUiMs = millis(); }
 
 inline bool ipcOtaBusy() { return gIpc.otaBusy; }
+inline bool ipcXferBusy() { return gIpc.xferBusy; }
+// True when NTP must shed (OTA upload or debug bulk xfer).
+inline bool ipcShedNtp() { return gIpc.otaBusy || gIpc.xferBusy; }
 inline OtaPhase ipcOtaPhase() { return gIpc.otaPhase; }
 const char* ipcOtaPhaseLabel();
 // True while running app is ESP_OTA_IMG_PENDING_VERIFY (post-OTA confirm window).

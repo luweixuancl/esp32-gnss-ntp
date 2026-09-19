@@ -2,12 +2,17 @@
 #include "app_ipc.h"
 #include "config.h"
 #include "debug_log.h"
+#include "clock_trace.h"
 #include "gps_service.h"
 #include "ntp_server.h"
 #include "ota_service.h"
 #include <ArduinoJson.h>
 #include <esp_system.h>
+#include <esp_task_wdt.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include <math.h>
+#include <string.h>
 #include <time.h>
 #include <stdlib.h>
 
@@ -93,6 +98,11 @@ void WebPortal::begin(WifiManager* wifi, GpsService* gps, NtpServer* ntp) {
   server_.on("/metrics", HTTP_GET, [this]() { handleMetrics(); });
   server_.on("/debug/log", HTTP_GET, [this]() { handleDebugLog(); });
   server_.on("/debug/log/clear", HTTP_POST, [this]() { handleDebugLogClear(); });
+  server_.on("/debug/clock", HTTP_GET, [this]() { handleClockTraceStatus(); });
+  server_.on("/debug/clock/start", HTTP_POST, [this]() { handleClockTraceStart(); });
+  server_.on("/debug/clock/stop", HTTP_POST, [this]() { handleClockTraceStop(); });
+  server_.on("/debug/clock/clear", HTTP_POST, [this]() { handleClockTraceClear(); });
+  server_.on("/debug/clock/data", HTTP_GET, [this]() { handleClockTraceData(); });
   server_.onNotFound([this]() {
     sendNoCache();
     const WifiLinkSnapshot link = wifi_ ? wifi_->linkSnapshot() : WifiLinkSnapshot{};
@@ -107,7 +117,7 @@ void WebPortal::begin(WifiManager* wifi, GpsService* gps, NtpServer* ntp) {
   });
   server_.begin();
   started_ = true;
-  debugLogf("HTTP on :80  (/ /status|/metrics open; /cfg+/ota+/debug/log need login or ?pass=)");
+  debugLogf("HTTP on :80  (/ /status|/metrics open; /cfg+/ota+/debug/* need login or ?pass=)");
 }
 
 void WebPortal::loop() {
@@ -270,6 +280,209 @@ void WebPortal::handleDebugLogClear() {
   server_.send(200, "text/plain", "cleared\n");
 #else
   server_.send(503, "text/plain", "debug log disabled\n");
+#endif
+}
+
+static void sendClockTraceJson(WebServer& server, int httpCode, const ClockTraceInfo& info,
+                               const char* errMsg) {
+  JsonDocument doc;
+  doc["ok"] = (httpCode >= 200 && httpCode < 300);
+  doc["state"] = clockTraceStateLabel(info.state);
+  doc["stateCode"] = static_cast<uint8_t>(info.state);
+  doc["capacity"] = info.capacity;
+  doc["count"] = info.count;
+  doc["dropped"] = info.dropped;
+  doc["seqFirst"] = info.seqFirst;
+  doc["seqNext"] = info.seqNext;
+  doc["startedMs"] = info.startedMs;
+  doc["stoppedMs"] = info.stoppedMs;
+  doc["psram"] = info.psram;
+  doc["sampleBytes"] = static_cast<uint32_t>(sizeof(ClockTraceSample));
+  doc["fw"] = FW_MARK;
+  if (errMsg && errMsg[0]) {
+    doc["error"] = errMsg;
+  }
+  String out;
+  serializeJson(doc, out);
+  server.send(httpCode, "application/json", out);
+}
+
+void WebPortal::handleClockTraceStatus() {
+  if (!requireSessionOrPass()) {
+    return;
+  }
+  sendNoCache();
+#if !CLOCK_TRACE_EN
+  server_.send(503, "application/json", "{\"ok\":false,\"error\":\"CLOCK_TRACE_EN=0\"}");
+  return;
+#else
+  sendClockTraceJson(server_, 200, clockTraceInfo(), nullptr);
+#endif
+}
+
+void WebPortal::handleClockTraceStart() {
+  if (!requireSessionOrPass()) {
+    return;
+  }
+  sendNoCache();
+  char err[96] = {};
+  const bool ok = clockTraceStart(err, sizeof(err));
+  sendClockTraceJson(server_, ok ? 200 : 409, clockTraceInfo(), ok ? nullptr : err);
+}
+
+void WebPortal::handleClockTraceStop() {
+  if (!requireSessionOrPass()) {
+    return;
+  }
+  sendNoCache();
+  char err[96] = {};
+  const bool ok = clockTraceStop(err, sizeof(err));
+  sendClockTraceJson(server_, ok ? 200 : 409, clockTraceInfo(), ok ? nullptr : err);
+}
+
+void WebPortal::handleClockTraceClear() {
+  if (!requireSessionOrPass()) {
+    return;
+  }
+  sendNoCache();
+  char err[96] = {};
+  const bool ok = clockTraceClear(err, sizeof(err));
+  sendClockTraceJson(server_, ok ? 200 : 409, clockTraceInfo(), ok ? nullptr : err);
+}
+
+void WebPortal::handleClockTraceData() {
+  if (!requireSessionOrPass()) {
+    return;
+  }
+  sendNoCache();
+#if !CLOCK_TRACE_EN
+  server_.send(503, "text/plain", "CLOCK_TRACE_EN=0\n");
+  return;
+#else
+  if (server_.hasArg("format")) {
+    String fmt = server_.arg("format");
+    fmt.toLowerCase();
+    if (fmt == "csv") {
+      server_.send(410, "text/plain",
+                   "csv download removed; use binary GET /debug/clock/data "
+                   "and tools/clock_trace_client.py fetch\n");
+      return;
+    }
+  }
+
+  const ClockTraceInfo info = clockTraceInfo();
+  if (info.state != ClockTraceState::Stopped) {
+    char msg[128];
+    snprintf(msg, sizeof(msg),
+             "conflict: fetch only after stop (state=%s). POST /debug/clock/stop first.\n",
+             clockTraceStateLabel(info.state));
+    server_.send(409, "text/plain", msg);
+    return;
+  }
+  if (info.count == 0) {
+    server_.send(204, "text/plain", "");
+    return;
+  }
+
+  uint32_t fromSeq = info.seqFirst;
+  if (server_.hasArg("from")) {
+    fromSeq = static_cast<uint32_t>(strtoul(server_.arg("from").c_str(), nullptr, 10));
+  }
+  if (fromSeq < info.seqFirst) {
+    fromSeq = info.seqFirst;
+  }
+  uint32_t limit = CLOCK_TRACE_FETCH_DEFAULT;
+  if (server_.hasArg("limit")) {
+    limit = static_cast<uint32_t>(strtoul(server_.arg("limit").c_str(), nullptr, 10));
+  }
+  if (limit == 0) {
+    limit = CLOCK_TRACE_FETCH_DEFAULT;
+  }
+  if (limit > CLOCK_TRACE_FETCH_MAX) {
+    limit = CLOCK_TRACE_FETCH_MAX;
+  }
+  const uint32_t avail = (fromSeq >= info.seqNext) ? 0u : (info.seqNext - fromSeq);
+  const uint32_t nSend = (avail < limit) ? avail : limit;
+  if (nSend == 0) {
+    server_.send(204, "text/plain", "");
+    return;
+  }
+
+  // Shed NTP + boost net for the transfer window (same idea as OTA).
+  UBaseType_t savedPrioTime = 0;
+  UBaseType_t savedPrioNet = 0;
+  bool prioBoosted = false;
+  gIpc.xferBusy = true;
+  if (gIpc.taskTime) {
+    savedPrioTime = uxTaskPriorityGet(gIpc.taskTime);
+    vTaskPrioritySet(gIpc.taskTime, TASK_PRIO_TIME_OTA);
+  }
+  if (gIpc.taskNet) {
+    savedPrioNet = uxTaskPriorityGet(gIpc.taskNet);
+    vTaskPrioritySet(gIpc.taskNet, TASK_PRIO_NET_OTA);
+    prioBoosted = true;
+  }
+  auto xferEnd = [&]() {
+    gIpc.xferBusy = false;
+    if (prioBoosted) {
+      if (gIpc.taskTime) {
+        vTaskPrioritySet(gIpc.taskTime, savedPrioTime);
+      }
+      if (gIpc.taskNet) {
+        vTaskPrioritySet(gIpc.taskNet, savedPrioNet);
+      }
+    }
+  };
+
+  constexpr size_t kChunk = 256;  // samples per sendContent (~10.5 KB)
+  ClockTraceSample* batch =
+      static_cast<ClockTraceSample*>(malloc(kChunk * sizeof(ClockTraceSample)));
+  if (batch == nullptr) {
+    xferEnd();
+    server_.send(500, "text/plain", "oom\n");
+    return;
+  }
+
+  ClockTraceBinHeader hdr{};
+  hdr.magic[0] = 'C';
+  hdr.magic[1] = 'T';
+  hdr.magic[2] = 'R';
+  hdr.magic[3] = 'B';
+  hdr.version = 1;
+  hdr.sampleSize = static_cast<uint16_t>(sizeof(ClockTraceSample));
+  hdr.seqFrom = fromSeq;
+  hdr.count = nSend;
+  hdr.seqNext = fromSeq + nSend;
+  hdr.seqEnd = info.seqNext;
+  hdr.dropped = info.dropped;
+  hdr.flags = (hdr.seqNext >= info.seqNext) ? 1u : 0u;
+
+  const size_t bodyLen = sizeof(hdr) + static_cast<size_t>(nSend) * sizeof(ClockTraceSample);
+  server_.setContentLength(bodyLen);
+  server_.send(200, "application/octet-stream", "");
+  server_.sendContent(reinterpret_cast<const char*>(&hdr), sizeof(hdr));
+
+  uint32_t next = fromSeq;
+  uint32_t produced = 0;
+  while (produced < nSend) {
+    const size_t want = ((nSend - produced) < kChunk) ? (nSend - produced) : kChunk;
+    int errCode = 0;
+    uint32_t nxt = next;
+    const size_t n = clockTraceRead(next, batch, want, &nxt, &errCode);
+    if (errCode != 0 || n == 0) {
+      break;
+    }
+    server_.sendContent(reinterpret_cast<const char*>(batch), n * sizeof(ClockTraceSample));
+    produced += static_cast<uint32_t>(n);
+    next = nxt;
+    esp_task_wdt_reset();
+    ipcKickNet();
+    if (n < want) {
+      break;
+    }
+  }
+  free(batch);
+  xferEnd();
 #endif
 }
 
@@ -664,6 +877,17 @@ void WebPortal::handleSetup() {
             "<label>Password</label><input id='pass' type='password'>"
             "<button type='button' onclick='saveWifi()'>连接</button>"
             "<p id='msg'></p></div>");
+  body += F("<div class='card'><h2 style='font-size:1rem;margin:0 0 8px'>时钟长测 (PSRAM)</h2>"
+            "<p style='color:#64748b;font-size:.85rem'>设备侧采样环：开始后按 PPS≈1 Hz 写入 RAM/PSRAM；"
+            "<strong>必须先停止</strong>才能下载。<strong>仅二进制</strong>（期间停 NTP / KoD RSTR）；"
+            "CSV 由 CLI 本地生成：<code>tools/clock_trace_client.py fetch -o out.csv</code>。</p>"
+            "<p>状态 <code id='ctState'>--</code> · 样本 <span id='ctCount'>0</span>/<span id='ctCap'>0</span>"
+            " · dropped <span id='ctDrop'>0</span> · PSRAM <span id='ctPsram'>?</span></p>"
+            "<button type='button' onclick='ctStart()'>开始录制</button> "
+            "<button type='button' onclick='ctStop()'>停止</button> "
+            "<button type='button' onclick='ctClear()'>清空</button> "
+            "<button type='button' onclick='ctFetchBin()'>下载 BIN</button>"
+            "<p id='ctmsg'></p></div>");
   body += F("<div class='card'><h2 style='font-size:1rem;margin:0 0 8px'>固件 OTA</h2>"
             "<p style='color:#64748b;font-size:.85rem'>上传本芯片对应的 <strong>app 镜像</strong>："
             "C3 用 <code>firmware.bin</code>，S3 用 <code>firmware_esp32s3.bin</code>"
@@ -828,6 +1052,40 @@ void WebPortal::handleSetup() {
             " document.getElementById('smsg').textContent=await postSave({oledIdleMin});"
             " }catch(e){document.getElementById('smsg').textContent=String(e);}"
             "}"
+            "async function ctRefresh(){"
+            " try{"
+            "  const r=await fetch('/debug/clock',{credentials:'same-origin'});"
+            "  if(r.status===401){location.href='/login';return;}"
+            "  const j=await r.json();"
+            "  const el=id=>document.getElementById(id);"
+            "  if(el('ctState'))el('ctState').textContent=j.state||'?';"
+            "  if(el('ctCount'))el('ctCount').textContent=j.count|0;"
+            "  if(el('ctCap'))el('ctCap').textContent=j.capacity|0;"
+            "  if(el('ctDrop'))el('ctDrop').textContent=j.dropped|0;"
+            "  if(el('ctPsram'))el('ctPsram').textContent=j.psram?'yes':'no';"
+            "  return j;"
+            " }catch(e){const m=document.getElementById('ctmsg');if(m)m.textContent=String(e);}"
+            "}"
+            "async function ctPost(path){"
+            " const r=await fetch(path,{method:'POST',credentials:'same-origin'});"
+            " if(r.status===401){location.href='/login';return null;}"
+            " const j=await r.json();"
+            " const m=document.getElementById('ctmsg');"
+            " if(m)m.textContent=(j.ok?'OK ':'ERR ')+(j.error||j.state||'');"
+            " await ctRefresh();"
+            " return j;"
+            "}"
+            "async function ctStart(){await ctPost('/debug/clock/start');}"
+            "async function ctStop(){await ctPost('/debug/clock/stop');}"
+            "async function ctClear(){await ctPost('/debug/clock/clear');}"
+            "async function ctFetchBin(){"
+            " const st=await ctRefresh();"
+            " if(!st||st.state!=='STOP'){"
+            "  document.getElementById('ctmsg').textContent='请先停止录制再下载';return;}"
+            " document.getElementById('ctmsg').textContent='下载中（停 NTP）… CSV 请用 CLI';"
+            " location.href='/debug/clock/data';"
+            "}"
+            "ctRefresh(); setInterval(ctRefresh,2000);"
             "document.getElementById('apol').value='");
   body += String(apol);
   body += F("';"
@@ -1210,11 +1468,12 @@ void WebPortal::handleStatus() {
   const WifiLinkSnapshot link = wifi_ ? wifi_->linkSnapshot() : WifiLinkSnapshot{};
   const GpsStatus st = gps_ ? gps_->snapshot() : GpsStatus{};
   const bool otaBusy = ipcOtaBusy();
-  const bool syncOk = !otaBusy && st.timeValid &&
+  const bool shedNtp = ipcShedNtp();
+  const bool syncOk = !shedNtp && st.timeValid &&
                       (st.clockState == ClockState::Locked || st.clockState == ClockState::Degraded ||
                        st.clockState == ClockState::Holdover);
   const bool s1 =
-      !otaBusy && st.timeValid && st.clockState == ClockState::Locked && st.ppsFresh;
+      !shedNtp && st.timeValid && st.clockState == ClockState::Locked && st.ppsFresh;
 
   uint32_t utcEpoch = st.utcEpoch;
   uint32_t utcFracMs = 0;
@@ -1272,9 +1531,10 @@ void WebPortal::handleStatus() {
   doc["otaNextSize"] = gOta.nextSlotSize();
   doc["otaState"] = gOta.imageStateLabel();
   doc["otaBusy"] = otaBusy;
+  doc["xferBusy"] = ipcXferBusy();
   doc["otaPhase"] = ipcOtaPhaseLabel();
   doc["otaChip"] = gOta.expectedChipName();
-  doc["ntpServing"] = !otaBusy;
+  doc["ntpServing"] = !shedNtp;
   doc["sta"] = link.staUp;
   doc["ip"] = (link.staUp ? link.staIp : link.apIp).toString();
   doc["ssid"] = link.staUp ? link.staSsid : "";
@@ -1283,6 +1543,18 @@ void WebPortal::handleStatus() {
   doc["uptimeSec"] = millis() / 1000;
   doc["freeHeap"] = ESP.getFreeHeap();
   doc["minFreeHeap"] = ESP.getMinFreeHeap();
+#if CLOCK_TRACE_EN
+  {
+    const ClockTraceInfo ct = clockTraceInfo();
+    JsonObject tr = doc["clockTrace"].to<JsonObject>();
+    tr["state"] = clockTraceStateLabel(ct.state);
+    tr["stateCode"] = static_cast<uint8_t>(ct.state);
+    tr["count"] = ct.count;
+    tr["capacity"] = ct.capacity;
+    tr["dropped"] = ct.dropped;
+    tr["psram"] = ct.psram;
+  }
+#endif
 
   AnomalyPolicy apol = AnomalyPolicy::Refuse;
   uint16_t hold = 0;
@@ -1391,10 +1663,10 @@ void WebPortal::handleStatus() {
   ntp["synced"] = syncOk;
   ntp["stratum"] = syncOk ? 1 : 16;
   ntp["stratum1Ready"] = s1;
-  ntp["refId"] = otaBusy ? "RSTR" : (syncOk ? "GPSS" : "INIT");
+  ntp["refId"] = shedNtp ? "RSTR" : (syncOk ? "GPSS" : "INIT");
   // LI is leap-second indicator only; holdover stays LI=0 with rising dispersion.
   ntp["li"] = syncOk ? 0 : 3;
-  ntp["otaRefuse"] = otaBusy;
+  ntp["otaRefuse"] = shedNtp;
   ntp["requests"] = ntp_ ? ntp_->requestCount() : 0;
   ntp["served"] = ntp_ ? ntp_->servedCount() : 0;
   ntp["rateLimited"] = ntp_ ? ntp_->rateLimitedCount() : 0;

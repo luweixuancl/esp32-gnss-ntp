@@ -4,11 +4,11 @@
 // OLED mark is unambiguous after OTA / serial upgrade.
 #define FW_VER_MAJOR         1
 #define FW_VER_MINOR         1
-#define FW_VER_PATCH         36
-// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.36").
-#define FW_MARK              "v1.1.36"
+#define FW_VER_PATCH         39
+// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.39").
+#define FW_MARK              "v1.1.39"
 // Full string for /status, /cfg, serial, OTA pages.
-#define FW_VERSION           "1.1.36"
+#define FW_VERSION           "1.1.39"
 // Reject obviously truncated OTA payloads before activating the slot.
 #define OTA_MIN_IMAGE_BYTES      (200 * 1024)
 // After a pending-verify OTA boot, wait until tasks are alive this long before
@@ -263,6 +263,28 @@
 #endif
 #ifndef DEBUG_LOG_BYTES
 #define DEBUG_LOG_BYTES         (32 * 1024)
+#endif
+// PSRAM (S3) / DRAM fallback clock-trace ring — start/stop; fetch only when Stopped.
+// See docs/clock_trace.md.
+#ifndef CLOCK_TRACE_EN
+#define CLOCK_TRACE_EN                  1
+#endif
+#ifndef CLOCK_TRACE_CAP
+#if defined(BOARD_HAS_PSRAM)
+#define CLOCK_TRACE_CAP            86400u  // ~24 h @ 1 Hz ≈ 3.8 MB in PSRAM
+#else
+#define CLOCK_TRACE_CAP             3600u  // ~1 h in internal RAM (C3)
+#endif
+#endif
+#ifndef CLOCK_TRACE_FETCH_DEFAULT
+#define CLOCK_TRACE_FETCH_DEFAULT   8000u  // samples per binary page (~336 KB)
+#endif
+#ifndef CLOCK_TRACE_FETCH_MAX
+#define CLOCK_TRACE_FETCH_MAX      12000u  // hard cap per HTTP response
+#endif
+// While clock-trace download busy: task-time yields like OTA (NTP shed).
+#ifndef CLOCK_TRACE_XFER_YIELD_MS
+#define CLOCK_TRACE_XFER_YIELD_MS      20
 #endif
 // Missed PPS seconds ≥ this → Unsynced (not silent catch-up only).
 #define CLK_PPS_MISS_UNSYNC           3
