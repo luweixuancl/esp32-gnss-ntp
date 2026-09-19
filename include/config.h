@@ -4,11 +4,11 @@
 // OLED mark is unambiguous after OTA / serial upgrade.
 #define FW_VER_MAJOR         1
 #define FW_VER_MINOR         1
-#define FW_VER_PATCH         20
-// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.20").
-#define FW_MARK              "v1.1.20"
+#define FW_VER_PATCH         21
+// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.21").
+#define FW_MARK              "v1.1.21"
 // Full string for /status, /cfg, serial, OTA pages.
-#define FW_VERSION           "1.1.20"
+#define FW_VERSION           "1.1.21"
 // Reject obviously truncated OTA payloads before activating the slot.
 #define OTA_MIN_IMAGE_BYTES      (200 * 1024)
 // After a pending-verify OTA boot, wait until tasks are alive this long before
@@ -83,6 +83,8 @@
 #define GPS_DEBUG            0   // 1 = 每秒向 UART0 打印定位/PPS（time 任务内，默认关）
 #define GPS_DEBUG_NMEA       0   // 1 = 把 NMEA 原文转发到 UART0
 // Boot: sniff NMEA talkers, then $PCAS03 → only GGA + ZDA (DX-GP10 / CASIC).
+// Skip PCAS entirely when probe already sees GGA+ZDA with no extras; $PCAS00
+// (FLASH) only when probe saw a wrong/incomplete set (not on empty wake).
 #ifndef GPS_NMEA_FILTER_EN
 #define GPS_NMEA_FILTER_EN       1
 #endif

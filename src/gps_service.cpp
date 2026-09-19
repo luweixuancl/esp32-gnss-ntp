@@ -511,18 +511,39 @@ void GpsService::probeAndFilterNmea() {
     append("ZDA");
   }
   if (n == 0) {
-    Serial.println("[gps] probe: no NMEA yet (module waking?) — still applying filter");
+    Serial.println("[gps] probe: no NMEA yet (module waking?) — apply RAM filter only");
   } else {
     Serial.printf("[gps] probe saw: %s\n", seen);
+  }
+
+  // Want GGA + ZDA; extras are the usual CASIC defaults we strip.
+  constexpr uint16_t kWant = (1u << 0) | (1u << 6);  // GGA | ZDA
+  constexpr uint16_t kExtras =
+      (1u << 1) | (1u << 2) | (1u << 3) | (1u << 4) | (1u << 5);  // GLL|GSA|GSV|RMC|VTG
+  const bool alreadyOk =
+      n > 0 && (nmeaSeenMask_ & kWant) == kWant && (nmeaSeenMask_ & kExtras) == 0;
+  if (alreadyOk) {
+    nmeaFilterApplied_ = true;
+    Serial.println("[gps] NMEA filter: already GGA + ZDA — skip PCAS (no FLASH write)");
+    return;
   }
 
   // CASIC PCAS03: GGA,GLL,GSA,GSV,RMC,VTG,ZDA,... → only GGA + ZDA @ 1× rate.
   sendPcas("PCAS03,1,0,0,0,0,0,1,0,0,0,,,0,0");
   delay(GPS_NMEA_CMD_GAP_MS);
-  sendPcas("PCAS00");  // persist to FLASH
-  delay(GPS_NMEA_CMD_GAP_MS);
+
+  // Persist only when probe observed a wrong/incomplete set. Empty probe →
+  // RAM-only this boot (avoid FLASH wear while the module is still waking).
+  const bool shouldPersist =
+      n > 0 && ((nmeaSeenMask_ & kExtras) != 0 || (nmeaSeenMask_ & kWant) != kWant);
+  if (shouldPersist) {
+    sendPcas("PCAS00");  // save to module FLASH once
+    delay(GPS_NMEA_CMD_GAP_MS);
+    Serial.println("[gps] NMEA filter: GGA + ZDA only (saved)");
+  } else {
+    Serial.println("[gps] NMEA filter: GGA + ZDA only (RAM, not saved)");
+  }
   nmeaFilterApplied_ = true;
-  Serial.println("[gps] NMEA filter: GGA + ZDA only (saved)");
 }
 
 void GpsService::setTempComp(bool enabled, int16_t coeffCenti) {
