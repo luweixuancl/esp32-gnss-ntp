@@ -28,6 +28,11 @@ class WebPortal {
   void handleMetrics();
   void handleDebugLog();
   void handleDebugLogClear();
+  void handleClockTraceStatus();
+  void handleClockTraceStart();
+  void handleClockTraceStop();
+  void handleClockTraceClear();
+  void handleClockTraceData();
   bool sessionCookieOk();
   bool requireSession(bool htmlLogin);
   bool requireSessionOrPass();

@@ -7,6 +7,7 @@
 #include "app_ipc.h"
 #include "config.h"
 #include "debug_log.h"
+#include "clock_trace.h"
 #include "settings.h"
 #include "gps_service.h"
 #include "ntp_server.h"
@@ -681,6 +682,7 @@ void setup() {
   Serial.begin(115200);
   delay(200);
   debugLogBegin();
+  clockTraceBegin();
   debugLogf("\nGNSS NTP Server (RTOS)");
   debugLogf("FW %s (%s)", FW_MARK, FW_VERSION);
 

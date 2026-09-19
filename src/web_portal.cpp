@@ -2,6 +2,7 @@
 #include "app_ipc.h"
 #include "config.h"
 #include "debug_log.h"
+#include "clock_trace.h"
 #include "gps_service.h"
 #include "ntp_server.h"
 #include "ota_service.h"
@@ -93,6 +94,11 @@ void WebPortal::begin(WifiManager* wifi, GpsService* gps, NtpServer* ntp) {
   server_.on("/metrics", HTTP_GET, [this]() { handleMetrics(); });
   server_.on("/debug/log", HTTP_GET, [this]() { handleDebugLog(); });
   server_.on("/debug/log/clear", HTTP_POST, [this]() { handleDebugLogClear(); });
+  server_.on("/debug/clock", HTTP_GET, [this]() { handleClockTraceStatus(); });
+  server_.on("/debug/clock/start", HTTP_POST, [this]() { handleClockTraceStart(); });
+  server_.on("/debug/clock/stop", HTTP_POST, [this]() { handleClockTraceStop(); });
+  server_.on("/debug/clock/clear", HTTP_POST, [this]() { handleClockTraceClear(); });
+  server_.on("/debug/clock/data", HTTP_GET, [this]() { handleClockTraceData(); });
   server_.onNotFound([this]() {
     sendNoCache();
     const WifiLinkSnapshot link = wifi_ ? wifi_->linkSnapshot() : WifiLinkSnapshot{};
@@ -107,7 +113,7 @@ void WebPortal::begin(WifiManager* wifi, GpsService* gps, NtpServer* ntp) {
   });
   server_.begin();
   started_ = true;
-  debugLogf("HTTP on :80  (/ /status|/metrics open; /cfg+/ota+/debug/log need login or ?pass=)");
+  debugLogf("HTTP on :80  (/ /status|/metrics open; /cfg+/ota+/debug/* need login or ?pass=)");
 }
 
 void WebPortal::loop() {
@@ -270,6 +276,179 @@ void WebPortal::handleDebugLogClear() {
   server_.send(200, "text/plain", "cleared\n");
 #else
   server_.send(503, "text/plain", "debug log disabled\n");
+#endif
+}
+
+static void sendClockTraceJson(WebServer& server, int httpCode, const ClockTraceInfo& info,
+                               const char* errMsg) {
+  JsonDocument doc;
+  doc["ok"] = (httpCode >= 200 && httpCode < 300);
+  doc["state"] = clockTraceStateLabel(info.state);
+  doc["stateCode"] = static_cast<uint8_t>(info.state);
+  doc["capacity"] = info.capacity;
+  doc["count"] = info.count;
+  doc["dropped"] = info.dropped;
+  doc["seqFirst"] = info.seqFirst;
+  doc["seqNext"] = info.seqNext;
+  doc["startedMs"] = info.startedMs;
+  doc["stoppedMs"] = info.stoppedMs;
+  doc["psram"] = info.psram;
+  doc["sampleBytes"] = static_cast<uint32_t>(sizeof(ClockTraceSample));
+  doc["fw"] = FW_MARK;
+  if (errMsg && errMsg[0]) {
+    doc["error"] = errMsg;
+  }
+  String out;
+  serializeJson(doc, out);
+  server.send(httpCode, "application/json", out);
+}
+
+void WebPortal::handleClockTraceStatus() {
+  if (!requireSessionOrPass()) {
+    return;
+  }
+  sendNoCache();
+#if !CLOCK_TRACE_EN
+  server_.send(503, "application/json", "{\"ok\":false,\"error\":\"CLOCK_TRACE_EN=0\"}");
+  return;
+#else
+  sendClockTraceJson(server_, 200, clockTraceInfo(), nullptr);
+#endif
+}
+
+void WebPortal::handleClockTraceStart() {
+  if (!requireSessionOrPass()) {
+    return;
+  }
+  sendNoCache();
+  char err[96] = {};
+  const bool ok = clockTraceStart(err, sizeof(err));
+  sendClockTraceJson(server_, ok ? 200 : 409, clockTraceInfo(), ok ? nullptr : err);
+}
+
+void WebPortal::handleClockTraceStop() {
+  if (!requireSessionOrPass()) {
+    return;
+  }
+  sendNoCache();
+  char err[96] = {};
+  const bool ok = clockTraceStop(err, sizeof(err));
+  sendClockTraceJson(server_, ok ? 200 : 409, clockTraceInfo(), ok ? nullptr : err);
+}
+
+void WebPortal::handleClockTraceClear() {
+  if (!requireSessionOrPass()) {
+    return;
+  }
+  sendNoCache();
+  char err[96] = {};
+  const bool ok = clockTraceClear(err, sizeof(err));
+  sendClockTraceJson(server_, ok ? 200 : 409, clockTraceInfo(), ok ? nullptr : err);
+}
+
+void WebPortal::handleClockTraceData() {
+  if (!requireSessionOrPass()) {
+    return;
+  }
+  sendNoCache();
+#if !CLOCK_TRACE_EN
+  server_.send(503, "text/plain", "CLOCK_TRACE_EN=0\n");
+  return;
+#else
+  const ClockTraceInfo info = clockTraceInfo();
+  if (info.state != ClockTraceState::Stopped) {
+    char msg[128];
+    snprintf(msg, sizeof(msg),
+             "conflict: fetch only after stop (state=%s). POST /debug/clock/stop first.\n",
+             clockTraceStateLabel(info.state));
+    server_.send(409, "text/plain", msg);
+    return;
+  }
+  if (info.count == 0) {
+    server_.send(204, "text/plain", "");
+    return;
+  }
+
+  uint32_t fromSeq = info.seqFirst;
+  if (server_.hasArg("from")) {
+    fromSeq = static_cast<uint32_t>(strtoul(server_.arg("from").c_str(), nullptr, 10));
+  }
+  uint32_t limit = CLOCK_TRACE_FETCH_DEFAULT;
+  if (server_.hasArg("limit")) {
+    limit = static_cast<uint32_t>(strtoul(server_.arg("limit").c_str(), nullptr, 10));
+  }
+  if (limit == 0) {
+    limit = CLOCK_TRACE_FETCH_DEFAULT;
+  }
+  if (limit > 2000u) {
+    limit = 2000u;  // cap per request to keep heap calm
+  }
+
+  const bool wantHeader = (!server_.hasArg("from")) || (fromSeq <= info.seqFirst);
+  server_.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server_.send(200, "text/csv; charset=utf-8", "");
+  // Chunked CSV. Header only on first page (no from= or from<=seqFirst).
+  if (wantHeader) {
+    char meta[192];
+    snprintf(meta, sizeof(meta),
+             "# clock_trace fw=%s state=STOP count=%u dropped=%u seqFirst=%u seqNext=%u "
+             "psram=%d cap=%u\n"
+             "seq,uptimeMs,utcEpoch,ppsCount,residualMs,holdoverMs,freqPpm,tempC,tempCorrPpm,"
+             "qualityMs,state,ppsFresh,timeValid,tempComp,satellites\n",
+             FW_MARK, static_cast<unsigned>(info.count), static_cast<unsigned>(info.dropped),
+             static_cast<unsigned>(info.seqFirst), static_cast<unsigned>(info.seqNext),
+             info.psram ? 1 : 0, static_cast<unsigned>(info.capacity));
+    server_.sendContent(meta);
+  }
+
+  constexpr size_t kChunk = 64;
+  ClockTraceSample* batch =
+      static_cast<ClockTraceSample*>(malloc(kChunk * sizeof(ClockTraceSample)));
+  if (batch == nullptr) {
+    server_.sendContent("# error: oom\n");
+    return;
+  }
+  uint32_t next = fromSeq;
+  uint32_t produced = 0;
+  while (produced < limit) {
+    const size_t want = ((limit - produced) < kChunk) ? (limit - produced) : kChunk;
+    int errCode = 0;
+    uint32_t nxt = next;
+    const size_t n = clockTraceRead(next, batch, want, &nxt, &errCode);
+    if (errCode == 1) {
+      server_.sendContent("# error: not stopped\n");
+      break;
+    }
+    if (n == 0) {
+      break;
+    }
+    for (size_t i = 0; i < n; ++i) {
+      const ClockTraceSample& s = batch[i];
+      char line[160];
+      snprintf(line, sizeof(line),
+               "%u,%u,%u,%u,%ld,%u,%.4f,%.2f,%.3f,%u,%u,%u,%u,%u,%u\n",
+               static_cast<unsigned>(s.seq), static_cast<unsigned>(s.uptimeMs),
+               static_cast<unsigned>(s.utcEpoch), static_cast<unsigned>(s.ppsCount),
+               static_cast<long>(s.residualMs), static_cast<unsigned>(s.holdoverMs),
+               static_cast<double>(s.freqPpm),
+               isnan(s.tempC) ? 0.0 : static_cast<double>(s.tempC),
+               static_cast<double>(s.tempCorrPpm), static_cast<unsigned>(s.qualityMs),
+               static_cast<unsigned>(s.state), (s.flags & 0x01) ? 1u : 0u,
+               (s.flags & 0x02) ? 1u : 0u, (s.flags & 0x04) ? 1u : 0u,
+               static_cast<unsigned>(s.satellites));
+      server_.sendContent(line);
+    }
+    produced += static_cast<uint32_t>(n);
+    next = nxt;
+    if (n < want) {
+      break;
+    }
+  }
+  free(batch);
+  char trailer[96];
+  snprintf(trailer, sizeof(trailer), "# next=%u done=%u\n", static_cast<unsigned>(next),
+           (next >= info.seqNext) ? 1u : 0u);
+  server_.sendContent(trailer);
 #endif
 }
 
@@ -664,6 +843,17 @@ void WebPortal::handleSetup() {
             "<label>Password</label><input id='pass' type='password'>"
             "<button type='button' onclick='saveWifi()'>连接</button>"
             "<p id='msg'></p></div>");
+  body += F("<div class='card'><h2 style='font-size:1rem;margin:0 0 8px'>时钟长测 (PSRAM)</h2>"
+            "<p style='color:#64748b;font-size:.85rem'>设备侧采样环：开始后按 PPS≈1 Hz 写入 RAM/PSRAM；"
+            "<strong>必须先停止</strong>才能拉取 CSV（录制中禁止下载，避免与授时竞态）。"
+            "详见 <code>docs/clock_trace.md</code> / <code>tools/clock_trace_client.py</code>。</p>"
+            "<p>状态 <code id='ctState'>--</code> · 样本 <span id='ctCount'>0</span>/<span id='ctCap'>0</span>"
+            " · dropped <span id='ctDrop'>0</span> · PSRAM <span id='ctPsram'>?</span></p>"
+            "<button type='button' onclick='ctStart()'>开始录制</button> "
+            "<button type='button' onclick='ctStop()'>停止</button> "
+            "<button type='button' onclick='ctClear()'>清空</button> "
+            "<button type='button' onclick='ctFetch()'>下载 CSV</button>"
+            "<p id='ctmsg'></p></div>");
   body += F("<div class='card'><h2 style='font-size:1rem;margin:0 0 8px'>固件 OTA</h2>"
             "<p style='color:#64748b;font-size:.85rem'>上传本芯片对应的 <strong>app 镜像</strong>："
             "C3 用 <code>firmware.bin</code>，S3 用 <code>firmware_esp32s3.bin</code>"
@@ -828,6 +1018,39 @@ void WebPortal::handleSetup() {
             " document.getElementById('smsg').textContent=await postSave({oledIdleMin});"
             " }catch(e){document.getElementById('smsg').textContent=String(e);}"
             "}"
+            "async function ctRefresh(){"
+            " try{"
+            "  const r=await fetch('/debug/clock',{credentials:'same-origin'});"
+            "  if(r.status===401){location.href='/login';return;}"
+            "  const j=await r.json();"
+            "  const el=id=>document.getElementById(id);"
+            "  if(el('ctState'))el('ctState').textContent=j.state||'?';"
+            "  if(el('ctCount'))el('ctCount').textContent=j.count|0;"
+            "  if(el('ctCap'))el('ctCap').textContent=j.capacity|0;"
+            "  if(el('ctDrop'))el('ctDrop').textContent=j.dropped|0;"
+            "  if(el('ctPsram'))el('ctPsram').textContent=j.psram?'yes':'no';"
+            "  return j;"
+            " }catch(e){const m=document.getElementById('ctmsg');if(m)m.textContent=String(e);}"
+            "}"
+            "async function ctPost(path){"
+            " const r=await fetch(path,{method:'POST',credentials:'same-origin'});"
+            " if(r.status===401){location.href='/login';return null;}"
+            " const j=await r.json();"
+            " const m=document.getElementById('ctmsg');"
+            " if(m)m.textContent=(j.ok?'OK ':'ERR ')+(j.error||j.state||'');"
+            " await ctRefresh();"
+            " return j;"
+            "}"
+            "async function ctStart(){await ctPost('/debug/clock/start');}"
+            "async function ctStop(){await ctPost('/debug/clock/stop');}"
+            "async function ctClear(){await ctPost('/debug/clock/clear');}"
+            "async function ctFetch(){"
+            " const st=await ctRefresh();"
+            " if(!st||st.state!=='STOP'){"
+            "  document.getElementById('ctmsg').textContent='请先停止录制再下载';return;}"
+            " location.href='/debug/clock/data';"
+            "}"
+            "ctRefresh(); setInterval(ctRefresh,2000);"
             "document.getElementById('apol').value='");
   body += String(apol);
   body += F("';"
@@ -1283,6 +1506,18 @@ void WebPortal::handleStatus() {
   doc["uptimeSec"] = millis() / 1000;
   doc["freeHeap"] = ESP.getFreeHeap();
   doc["minFreeHeap"] = ESP.getMinFreeHeap();
+#if CLOCK_TRACE_EN
+  {
+    const ClockTraceInfo ct = clockTraceInfo();
+    JsonObject tr = doc["clockTrace"].to<JsonObject>();
+    tr["state"] = clockTraceStateLabel(ct.state);
+    tr["stateCode"] = static_cast<uint8_t>(ct.state);
+    tr["count"] = ct.count;
+    tr["capacity"] = ct.capacity;
+    tr["dropped"] = ct.dropped;
+    tr["psram"] = ct.psram;
+  }
+#endif
 
   AnomalyPolicy apol = AnomalyPolicy::Refuse;
   uint16_t hold = 0;

@@ -18,6 +18,7 @@ Tight cohesion / loose coupling rules for the GNSS NTP firmware.
 - **`AppSettings`**: read via `settingsCopy()`; persist via `settingsCommit()` only. Factory reset before `ipcInit` may call `gStore.save` directly.
 - **OTA**: observe `ipcOtaBusy()` / `ipcOtaPhase()`; do not call into `OtaService` from time/ui.
 - **ExtClock**: optional DS3231 assist (`EXT_RTC_EN`); task-time polls; feeds `LocalClock::setExtAssist` only.
+- **ClockTrace**: task-time appends samples; task-net serves start/stop/clear/data. Fetch allowed only when **Stopped**.
 
 ## Queues
 

@@ -10,7 +10,7 @@
 |---|---|
 | 双核 LX7 | ✅ `task-time` 独占 core 1；默认运行 **160 MHz**（可编回 240） |
 | 16MB QIO flash | ✅ `default_16MB`；Web OTA 写下一 app 槽 |
-| 8MB OPI PSRAM | 闲置（history 已取消） |
+| 8MB OPI PSRAM | ✅ 时钟长测环（`CLOCK_TRACE`，见 [clock_trace.md](clock_trace.md)） |
 | 温度传感器 | ✅ `temperatureRead()`（偶发首读失败有 lazy retry） |
 | RMT | RGB 用 TX；**PPS RX 代码保留，`GPS_PPS_RMT_EN=0`（板测搁置）** |
 | UART | 调试 + GNSS；第 3 路闲置 |
@@ -23,7 +23,11 @@
 - 生产路径：GPIO ISR + LocalClock（已验证 LCK / stratum 1）。  
 - 再开 EN 前：独立最小 sketch 或 GPIO 回环自测，勿在整机盲迭代。
 
-## 2. PSRAM `/history` —— **已取消（v1.1.14）**
+## 2. PSRAM 时钟长测环 —— **已实现（v1.1.37）**
+
+- 替代已取消的 `/history`：start/stop 状态机，**仅 Stopped 可拉 CSV**。  
+- 见 [clock_trace.md](clock_trace.md)；客户端 `tools/clock_trace_client.py`。  
+- 旧「通用 /history」仍取消；本环专用于时钟长测。
 
 ## 3. OTA 双分区 —— **已实现；IDF5 自动往返 PASS（v1.1.36）**
 
