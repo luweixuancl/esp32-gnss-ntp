@@ -17,12 +17,12 @@
 | WiFi / `[pwr] cpu=160 wifi_modem_sleep=1` | **OK** |
 | 壳温相对旧 240 MHz 固件下降 | **OK**（用户确认 2026-09-19） |
 | **PPS / LocalClock Locked / S1 授时** | **OK**（UI：`S1` + UTC 时间，192.168.1.24，RSSI −62 dBm） |
+| **Web OTA**（IDF5→IDF5，app 镜像） | **OK**（用户人工测试 2026-09-19） |
 
 ## 建议继续
 
 1. **NTP 客户端**：`ntpdate -q 192.168.1.24`（或等同）  
 2. **稳态**：Locked / S1 保持 ≥10 min  
-3. **Web OTA**（可选，IDF5→IDF5）：`firmware_esp32s3.bin` 往返一次 
 
 ## 合入后可选
 
