@@ -15,6 +15,7 @@
 | 整片刷入 → **fwMark v1.1.28** | **OK**（用户确认 2026-09-19） |
 | NMEA GGA+RMC+ZDA / `nmea=1 rmc=1 zda=1` | **OK**（串口 `[clk] wait`） |
 | WiFi / `[pwr] cpu=160 wifi_modem_sleep=1` | **OK** |
+| 壳温相对旧 240 MHz 固件下降 | **OK**（用户确认 2026-09-19） |
 | **PPS / LocalClock Locked** | **未过**：`pps=0 fresh=0` → 停在 ACQ、`tv=0`（2026-09-19 串口） |
 
 ## 当前阻塞
