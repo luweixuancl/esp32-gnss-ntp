@@ -286,10 +286,19 @@ void GpsService::begin() {
 #if GPS_PPS_RMT_EN
   {
     // IDF5 rmt_rx: non-DMA by default (v1.1.29: DMA + pointer queue → junk symbols).
+    // signal_range_max_ns is 15-bit in tick units → max 32767 * tick_ns.
     gIdf.doneQ = xQueueCreate(4, sizeof(RmtDoneFrame));
     gIdf.recvCfg.signal_range_min_ns = GPS_PPS_RMT_FILTER_NS;
-    gIdf.recvCfg.signal_range_max_ns =
-        static_cast<uint32_t>(GPS_PPS_RMT_WINDOW_MS) * 1000000UL;
+    {
+      const uint32_t tickNs = GPS_PPS_RMT_TICK_NS;
+      const uint32_t maxRangeNs = 32767u * tickNs;  // IDF5 rmt_receive hard cap
+      uint32_t rangeNs =
+          static_cast<uint32_t>(GPS_PPS_RMT_WINDOW_MS) * 1000000UL;
+      if (rangeNs > maxRangeNs) {
+        rangeNs = maxRangeNs;
+      }
+      gIdf.recvCfg.signal_range_max_ns = rangeNs;
+    }
     gIdf.recvCfg.flags.en_partial_rx = 0;
 
     rmt_rx_channel_config_t cfg = {};
@@ -331,9 +340,13 @@ void GpsService::begin() {
                     PIN_GPS_PPS, GPS_PPS_RMT_TICK_NS, GPS_PPS_RMT_WINDOW_MS,
                     GPS_PPS_RMT_FILTER_NS, static_cast<unsigned>(cfg.flags.with_dma));
     } else {
-      gIdf.err = err;
+      // rmtArmReceive() already stores the real esp_err in gIdf.err — do not
+      // clobber it with outer ESP_OK when only the arm step failed (v1.1.30).
+      if (err != ESP_OK) {
+        gIdf.err = err;
+      }
       Serial.printf("[pps-rmt] idf5 init failed stage=%u err=%d -> GPIO ISR only\n",
-                    gIdf.stage, err);
+                    gIdf.stage, gIdf.err);
     }
   }
 #endif
