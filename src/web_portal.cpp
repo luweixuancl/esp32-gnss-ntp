@@ -359,6 +359,17 @@ void WebPortal::handleClockTraceData() {
   server_.send(503, "text/plain", "CLOCK_TRACE_EN=0\n");
   return;
 #else
+  if (server_.hasArg("format")) {
+    String fmt = server_.arg("format");
+    fmt.toLowerCase();
+    if (fmt == "csv") {
+      server_.send(410, "text/plain",
+                   "csv download removed; use binary GET /debug/clock/data "
+                   "and tools/clock_trace_client.py fetch\n");
+      return;
+    }
+  }
+
   const ClockTraceInfo info = clockTraceInfo();
   if (info.state != ClockTraceState::Stopped) {
     char msg[128];
@@ -397,11 +408,6 @@ void WebPortal::handleClockTraceData() {
     return;
   }
 
-  // Default binary (fast). format=csv keeps legacy text for browsers.
-  String fmt = server_.hasArg("format") ? server_.arg("format") : String("bin");
-  fmt.toLowerCase();
-  const bool wantCsv = (fmt == "csv");
-
   // Shed NTP + boost net for the transfer window (same idea as OTA).
   UBaseType_t savedPrioTime = 0;
   UBaseType_t savedPrioNet = 0;
@@ -437,84 +443,24 @@ void WebPortal::handleClockTraceData() {
     return;
   }
 
-  if (!wantCsv) {
-    ClockTraceBinHeader hdr{};
-    hdr.magic[0] = 'C';
-    hdr.magic[1] = 'T';
-    hdr.magic[2] = 'R';
-    hdr.magic[3] = 'B';
-    hdr.version = 1;
-    hdr.sampleSize = static_cast<uint16_t>(sizeof(ClockTraceSample));
-    hdr.seqFrom = fromSeq;
-    hdr.count = nSend;
-    hdr.seqNext = fromSeq + nSend;
-    hdr.seqEnd = info.seqNext;
-    hdr.dropped = info.dropped;
-    hdr.flags = (hdr.seqNext >= info.seqNext) ? 1u : 0u;
+  ClockTraceBinHeader hdr{};
+  hdr.magic[0] = 'C';
+  hdr.magic[1] = 'T';
+  hdr.magic[2] = 'R';
+  hdr.magic[3] = 'B';
+  hdr.version = 1;
+  hdr.sampleSize = static_cast<uint16_t>(sizeof(ClockTraceSample));
+  hdr.seqFrom = fromSeq;
+  hdr.count = nSend;
+  hdr.seqNext = fromSeq + nSend;
+  hdr.seqEnd = info.seqNext;
+  hdr.dropped = info.dropped;
+  hdr.flags = (hdr.seqNext >= info.seqNext) ? 1u : 0u;
 
-    const size_t bodyLen = sizeof(hdr) + static_cast<size_t>(nSend) * sizeof(ClockTraceSample);
-    server_.setContentLength(bodyLen);
-    server_.send(200, "application/octet-stream", "");
-    server_.sendContent(reinterpret_cast<const char*>(&hdr), sizeof(hdr));
-
-    uint32_t next = fromSeq;
-    uint32_t produced = 0;
-    while (produced < nSend) {
-      const size_t want = ((nSend - produced) < kChunk) ? (nSend - produced) : kChunk;
-      int errCode = 0;
-      uint32_t nxt = next;
-      const size_t n = clockTraceRead(next, batch, want, &nxt, &errCode);
-      if (errCode != 0 || n == 0) {
-        break;
-      }
-      server_.sendContent(reinterpret_cast<const char*>(batch), n * sizeof(ClockTraceSample));
-      produced += static_cast<uint32_t>(n);
-      next = nxt;
-      esp_task_wdt_reset();
-      ipcKickNet();
-      if (n < want) {
-        break;
-      }
-    }
-    free(batch);
-    xferEnd();
-    return;
-  }
-
-  // CSV path: buffer many lines, fewer TCP writes than per-row sendContent.
-  const bool wantHeader = (!server_.hasArg("from")) || (fromSeq <= info.seqFirst);
-  // Approximate length — client tolerates chunked; still shed NTP.
-  server_.setContentLength(CONTENT_LENGTH_UNKNOWN);
-  server_.send(200, "text/csv; charset=utf-8", "");
-  if (wantHeader) {
-    char meta[220];
-    snprintf(meta, sizeof(meta),
-             "# clock_trace fw=%s state=STOP count=%u dropped=%u seqFirst=%u seqNext=%u "
-             "psram=%d cap=%u\n"
-             "seq,uptimeMs,utcEpoch,ppsCount,residualMs,holdoverMs,freqPpm,tempC,tempCorrPpm,"
-             "qualityMs,state,ppsFresh,timeValid,tempComp,satellites\n",
-             FW_MARK, static_cast<unsigned>(info.count), static_cast<unsigned>(info.dropped),
-             static_cast<unsigned>(info.seqFirst), static_cast<unsigned>(info.seqNext),
-             info.psram ? 1 : 0, static_cast<unsigned>(info.capacity));
-    server_.sendContent(meta);
-  }
-
-  char* textBuf = static_cast<char*>(malloc(4096));
-  if (textBuf == nullptr) {
-    free(batch);
-    xferEnd();
-    server_.sendContent("# error: oom\n");
-    return;
-  }
-  size_t textUsed = 0;
-  auto flushText = [&]() {
-    if (textUsed > 0) {
-      server_.sendContent(textBuf, textUsed);
-      textUsed = 0;
-      esp_task_wdt_reset();
-      ipcKickNet();
-    }
-  };
+  const size_t bodyLen = sizeof(hdr) + static_cast<size_t>(nSend) * sizeof(ClockTraceSample);
+  server_.setContentLength(bodyLen);
+  server_.send(200, "application/octet-stream", "");
+  server_.sendContent(reinterpret_cast<const char*>(&hdr), sizeof(hdr));
 
   uint32_t next = fromSeq;
   uint32_t produced = 0;
@@ -523,50 +469,18 @@ void WebPortal::handleClockTraceData() {
     int errCode = 0;
     uint32_t nxt = next;
     const size_t n = clockTraceRead(next, batch, want, &nxt, &errCode);
-    if (errCode == 1) {
-      flushText();
-      server_.sendContent("# error: not stopped\n");
+    if (errCode != 0 || n == 0) {
       break;
     }
-    if (n == 0) {
-      break;
-    }
-    for (size_t i = 0; i < n; ++i) {
-      const ClockTraceSample& s = batch[i];
-      char line[160];
-      const int len = snprintf(
-          line, sizeof(line),
-          "%u,%u,%u,%u,%ld,%u,%.4f,%.2f,%.3f,%u,%u,%u,%u,%u,%u\n",
-          static_cast<unsigned>(s.seq), static_cast<unsigned>(s.uptimeMs),
-          static_cast<unsigned>(s.utcEpoch), static_cast<unsigned>(s.ppsCount),
-          static_cast<long>(s.residualMs), static_cast<unsigned>(s.holdoverMs),
-          static_cast<double>(s.freqPpm),
-          isnan(s.tempC) ? 0.0 : static_cast<double>(s.tempC),
-          static_cast<double>(s.tempCorrPpm), static_cast<unsigned>(s.qualityMs),
-          static_cast<unsigned>(s.state), (s.flags & 0x01) ? 1u : 0u,
-          (s.flags & 0x02) ? 1u : 0u, (s.flags & 0x04) ? 1u : 0u,
-          static_cast<unsigned>(s.satellites));
-      if (len <= 0) {
-        continue;
-      }
-      if (textUsed + static_cast<size_t>(len) > 4096) {
-        flushText();
-      }
-      memcpy(textBuf + textUsed, line, static_cast<size_t>(len));
-      textUsed += static_cast<size_t>(len);
-    }
+    server_.sendContent(reinterpret_cast<const char*>(batch), n * sizeof(ClockTraceSample));
     produced += static_cast<uint32_t>(n);
     next = nxt;
+    esp_task_wdt_reset();
+    ipcKickNet();
     if (n < want) {
       break;
     }
   }
-  flushText();
-  char trailer[96];
-  snprintf(trailer, sizeof(trailer), "# next=%u done=%u\n", static_cast<unsigned>(next),
-           (next >= info.seqNext) ? 1u : 0u);
-  server_.sendContent(trailer);
-  free(textBuf);
   free(batch);
   xferEnd();
 #endif
@@ -965,15 +879,14 @@ void WebPortal::handleSetup() {
             "<p id='msg'></p></div>");
   body += F("<div class='card'><h2 style='font-size:1rem;margin:0 0 8px'>时钟长测 (PSRAM)</h2>"
             "<p style='color:#64748b;font-size:.85rem'>设备侧采样环：开始后按 PPS≈1 Hz 写入 RAM/PSRAM；"
-            "<strong>必须先停止</strong>才能下载。下载默认<strong>二进制</strong>（快，期间停 NTP / KoD RSTR）；"
-            "浏览器可下 CSV（较慢）。推荐 CLI：<code>tools/clock_trace_client.py fetch</code>。</p>"
+            "<strong>必须先停止</strong>才能下载。<strong>仅二进制</strong>（期间停 NTP / KoD RSTR）；"
+            "CSV 由 CLI 本地生成：<code>tools/clock_trace_client.py fetch -o out.csv</code>。</p>"
             "<p>状态 <code id='ctState'>--</code> · 样本 <span id='ctCount'>0</span>/<span id='ctCap'>0</span>"
             " · dropped <span id='ctDrop'>0</span> · PSRAM <span id='ctPsram'>?</span></p>"
             "<button type='button' onclick='ctStart()'>开始录制</button> "
             "<button type='button' onclick='ctStop()'>停止</button> "
             "<button type='button' onclick='ctClear()'>清空</button> "
-            "<button type='button' onclick='ctFetchBin()'>下载 BIN</button> "
-            "<button type='button' onclick='ctFetchCsv()'>下载 CSV</button>"
+            "<button type='button' onclick='ctFetchBin()'>下载 BIN</button>"
             "<p id='ctmsg'></p></div>");
   body += F("<div class='card'><h2 style='font-size:1rem;margin:0 0 8px'>固件 OTA</h2>"
             "<p style='color:#64748b;font-size:.85rem'>上传本芯片对应的 <strong>app 镜像</strong>："
@@ -1169,15 +1082,8 @@ void WebPortal::handleSetup() {
             " const st=await ctRefresh();"
             " if(!st||st.state!=='STOP'){"
             "  document.getElementById('ctmsg').textContent='请先停止录制再下载';return;}"
-            " document.getElementById('ctmsg').textContent='下载中（停 NTP）…';"
-            " location.href='/debug/clock/data?format=bin';"
-            "}"
-            "async function ctFetchCsv(){"
-            " const st=await ctRefresh();"
-            " if(!st||st.state!=='STOP'){"
-            "  document.getElementById('ctmsg').textContent='请先停止录制再下载';return;}"
-            " document.getElementById('ctmsg').textContent='CSV 较慢，大包请用 CLI';"
-            " location.href='/debug/clock/data?format=csv';"
+            " document.getElementById('ctmsg').textContent='下载中（停 NTP）… CSV 请用 CLI';"
+            " location.href='/debug/clock/data';"
             "}"
             "ctRefresh(); setInterval(ctRefresh,2000);"
             "document.getElementById('apol').value='");

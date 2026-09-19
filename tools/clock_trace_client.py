@@ -81,7 +81,7 @@ def fetch_bin_page(host: str, password: str, from_seq: int, limit: int) -> tuple
         host,
         "/debug/clock/data",
         password,
-        {"format": "bin", "from": from_seq, "limit": limit},
+        {"from": from_seq, "limit": limit},
     )
     code, body = _req("GET", url, timeout=180.0)
     if code == 204:
