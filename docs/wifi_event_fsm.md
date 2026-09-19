@@ -1,8 +1,9 @@
-# WiFi 事件 FSM（ESP32-C3）
+# WiFi 事件 FSM（C3 / S3 共用）
 
-本板为 **ESP32-C3 单核 RISC-V**，不能做 APP/PRO 双核拆分。WiFi/lwIP 已在高优先级内部任务中运行；应用仍用三任务（`task-time` / `task-net` / `task-ui`），全部钉在 core 0。
+> 逻辑在 `WifiManager`；C3 单核、S3 双核均由 **task-net** 独占调用 `WiFi.*`。  
+> 当前基线：[CURRENT.md](CURRENT.md)
 
-双核拆分仅适用于未来换 **ESP32-S3 / 经典双核 ESP32** 时另立项；C3 路线是 **事件驱动加固 + 自动重连**，不是迁核。
+本工程 **ESP32-C3** 为单核 RISC-V，三任务钉在 core 0。**ESP32-S3** 上 `task-time` 在 core 1，`task-net`/`task-ui` 在 core 0——WiFi 规则相同：事件回调只置位，API 只在 task-net。
 
 ## 原则
 

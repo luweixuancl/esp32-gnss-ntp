@@ -1,16 +1,15 @@
 # ESP32-S3-DevKitC-1 硬件笔记与移植规划（N16R8）
 
-> 状态：**移植完成并转正（2026-09-18）**——P1 代码/环境 ✔ → P2 上板点亮 ✔ → P3 现场验收 ✔（[esp32s3_flash_test_20260917.md](esp32s3_flash_test_20260917.md)）→ P4 长测 ✔（[s3_clock_drift_20260917.md](s3_clock_drift_20260917.md)）；代码审查遗留：C3 实机回验挂起、`rssi` 字段口径（纯显示）
-> 日期：2026-09-17
-> 板卡：乐鑫 **ESP32-S3-DevKitC-1 V1.1**，模组 **ESP32-S3-WROOM-1 N16R8**（16MB QIO flash + 8MB OPI PSRAM）
-> 资料：[`芯片资料/ESP32S3/`](../芯片资料/ESP32S3/)（引脚图 / 原理图 / 数据手册；23MB 开发板全文档仅本地保留）
-> 相关：`AGENTS.md`（C3 架构与约定）、[wifi_event_fsm.md](wifi_event_fsm.md)
+> 状态：**移植完成并转正**；平台已迁 **IDF5 / v1.1.28**（见 [CURRENT.md](CURRENT.md)、[idf5_adapt_20260919.md](idf5_adapt_20260919.md)）  
+> 板卡：乐鑫 **ESP32-S3-DevKitC-1 V1.1**，模组 **ESP32-S3-WROOM-1 N16R8**（16MB QIO flash + 8MB OPI PSRAM）  
+> 资料：[`芯片资料/ESP32S3/`](../芯片资料/ESP32S3/)（引脚图 / 原理图 / 数据手册）  
+> 相关：[wifi_event_fsm.md](wifi_event_fsm.md)、[s3_deep_dive_roadmap.md](s3_deep_dive_roadmap.md)、[power_save.md](power_save.md)
 
 ## 1. 为什么值得移植
 
-- **双核 LX7 @240MHz**：`task-time`（GNSS/NTP/PPS）可独占 core 1，`task-net`/`task-ui` 在 core 0——NTP 打戳与 PPS ISR 延迟不再受 WiFi/网页抖动影响（C3 单核只能靠优先级近似）。
-- 512KB SRAM、指令/数据 cache 更大；USB-OTG 原生可用。
-- 现有代码**引脚全部走 `config.h` 宏、无硬编码**，任务结构按可拆分设计——移植条件已备齐。
+- **双核 LX7**：`task-time`（GNSS/NTP/PPS）独占 core 1，`task-net`/`task-ui` 在 core 0。默认运行 **160 MHz**（可编回 240）。
+- 512KB SRAM、指令/数据 cache 更大；USB-OTG 原生可用（本工程不用 CDC）。
+- 引脚全部走 `config.h` 宏；任务结构可拆分。
 
 ## 2. 板卡关键事实
 
@@ -37,27 +36,28 @@
 
 ## 4. 双芯片同存策略（多 env，不开分支）
 
-`platformio.ini` 并列环境，**源码 100% 共享**；引脚差异在 `config.h` 用目标宏分支：
+`platformio.ini` 并列环境（**当前实际**用 pioarduino IDF5，见仓库根 `platformio.ini`）：
 
 ```ini
-[env:esp32-c3]            ; 现有环境，default_envs 保持不变
-; ...
+[platformio]
+default_envs = esp32-c3
 
-[env:esp32-s3]            ; S3 移植期按需: pio run -e esp32-s3
-platform = espressif32
+[idf5]
+platform = https://github.com/pioarduino/platform-espressif32/releases/download/55.03.311/platform-espressif32.zip
+framework = arduino
+; …
+
+[env:esp32-s3]
+extends = idf5
 board = esp32-s3-devkitc-1
-monitor_speed = 115200
 board_build.flash_mode = qio
-board_build.arduino.memory_type = qio_opi   ; N16R8: QIO flash + OPI PSRAM
+board_build.arduino.memory_type = qio_opi
+board_build.f_cpu = 160000000L
 board_upload.flash_size = 16MB
-board_build.partitions = default_16MB.csv   ; default.csv 按 4MB 划，必须换
-board_build.flash_mode = dio                ; (若启动异常再回 dio/qio 二选一实测)
-build_flags =
-  ${env:esp32-c3.build_flags}
-  -DBOARD_HAS_PSRAM
-  -DARDUINO_USB_MODE=1
-  -DARDUINO_USB_CDC_ON_BOOT=0              ; 与 C3 行为一致：Serial=UART0
+board_build.partitions = default_16MB.csv
 ```
+
+（下文 §4 草案里的 `platform = espressif32` 为移植期草稿，**已过时**。）
 
 `config.h` 侧（移植开始时落地）：
 

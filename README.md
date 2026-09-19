@@ -1,13 +1,15 @@
 # GNSS NTP Server
 
-基于 **ESP32 + GNSS 模块（PPS 驯服）** 的局域网一级（Stratum-1）NTP 时间服务器。同一份固件源码支持两个目标，通过 PlatformIO 多环境构建：
+基于 **ESP32 + GNSS 模块（PPS 驯服）** 的局域网一级（Stratum-1）NTP 时间服务器。同一份固件源码支持两个目标，通过 PlatformIO 多环境构建。
+
+**当前基线：v1.1.28** · pioarduino Arduino 3.3.11 / ESP-IDF 5.5.5 — 详见 [`docs/CURRENT.md`](docs/CURRENT.md)。
 
 | 目标 | 板卡 | 核 | 状态 |
 |------|------|----|------|
-| **esp32-c3**（默认） | 合宙 CORE ESP32-C3 | 单核，三任务同核分优先级 | 产品线（v1.0.0 起量产验证） |
-| **esp32-s3** | 乐鑫 ESP32-S3-DevKitC-1（WROOM-1 N16R8） | 双核，`task-time` 独占 core 1 | 已完成 P1–P4 全阶段验收 |
+| **esp32-c3**（默认） | 合宙 CORE ESP32-C3 | 单核，三任务同核分优先级 | 产品线 |
+| **esp32-s3** | 乐鑫 ESP32-S3-DevKitC-1（WROOM-1 N16R8） | 双核，`task-time` 独占 core 1；默认 160 MHz | 移植转正；IDF5 板测 PASS |
 
-GNSS：大夏龙雀 DX-GP10（GPS/北斗/GLONASS 多模，9600 8N1，定位后 1PPS）。启动时探测 NMEA：已是 **GGA + RMC + ZDA** 则跳过 `$PCAS*`；否则 `$PCAS03` 精简为该三者（RMC 供 TinyGPS 日期时间），仅在探测到多余/缺失句时 `$PCAS00` 写模块 FLASH（空探测只改 RAM）。平台：pioarduino Arduino 3.3.11 / IDF 5.5.5（见 `docs/idf5_adapt_20260919.md`）；自 v1.1.20 升级须整片烧录（见 `docs/upgrade_idf5_from_1120.md`）。
+GNSS：大夏龙雀 DX-GP10（GPS/北斗/GLONASS 多模，9600 8N1，定位后 1PPS）。启动时探测 NMEA：已是 **GGA + RMC + ZDA** 则跳过 `$PCAS*`；否则 `$PCAS03` 精简为该三者（RMC 供 TinyGPS 日期时间），仅在探测到多余/缺失句时 `$PCAS00` 写模块 FLASH（空探测只改 RAM）。自 **≤ v1.1.21（IDF4）** 升级须整片烧录（见 [`docs/upgrade_idf5_from_1120.md`](docs/upgrade_idf5_from_1120.md)）。
 
 ## 功能
 
@@ -83,9 +85,13 @@ pio run -e esp32-s3 -t upload           # S3（UART 座）
 pio device monitor
 ```
 
-或直接使用 `dist/` 现成固件：`firmware.bin`（C3 app @0x10000）、`firmware_esp32s3.bin`（S3 app @0x10000）、`merged_firmware_esp32s3_n16r8_0x0.bin`（S3 整片 @0x0，**仅首次烧录用，会清 NVS**）。esptool 示例：
+或直接使用 `dist/` 现成固件：`firmware.bin`（C3 app @0x10000）、`firmware_esp32s3.bin`（S3 app @0x10000）、`merged_firmware_esp32s3_n16r8_0x0.bin` / `firmware_merged_0x0.bin`（整片 @0x0）。
+
+- **自 IDF4（≤ v1.1.21）迁入**：必须 **erase + 整片 @0x0**（会清 NVS），见 [`docs/upgrade_idf5_from_1120.md`](docs/upgrade_idf5_from_1120.md)。  
+- **已在 IDF5**：可用 Web OTA 或 app-only `@0x10000`（保 NVS）。
 
 ```bash
+esptool --chip esp32s3 --port COM5 --baud 921600 erase_flash
 esptool --chip esp32s3 --port COM5 --baud 921600 write_flash 0x0 merged_firmware_esp32s3_n16r8_0x0.bin
 ```
 
@@ -116,20 +122,21 @@ esptool --chip esp32s3 --port COM5 --baud 921600 write_flash 0x0 merged_firmware
 1. **限流（B1）**：每 IP 4 req/s → KoD `RATE`；持续超限 → `DENY` 冷却 ~60s；全局 ~32 pkt/s 静默丢弃
 2. **ACL（B3）**：默认 Off；AllowList 只放行可信 IP（≤8 条），空名单=拒绝全部
 3. **管理面**：`/` `/status` `/metrics` 只读；`/cfg` `/save` `/scan` `/ota` 需登录会话 Cookie；`/setup` 仅登录页
-4. **升级保配置**：优先 Web OTA（`/cfg` 上传 app `firmware.bin`）或串口只刷 app `@0x10000`；勿全片擦除（NVS 里的 WiFi/口令/ACL 会丢）
-5. **观测**：OLED NTP Stats、串口 `[ntp]` 摘要（60s）、`/metrics`；`/status` 字段含 `served` / `rateLimited` / `denied` / `dropped` / `clients` / `ntpAclMode` / `clock.tempRefC` / `fwVersion` / `otaRunning`
+4. **升级保配置**（仅已在 IDF5 / v1.1.28+ 时）：优先 Web OTA（`/cfg` 上传对应芯片 app：`firmware.bin` 或 `firmware_esp32s3.bin`）或串口只刷 app `@0x10000`；勿全片擦除。自 IDF4 迁入则必须整片（见上）
+5. **观测**：OLED NTP Stats、串口 `[ntp]` 摘要（60s）、`/metrics`；`/status` 含 `served` / `rateLimited` / `denied` / `dropped` / `clients` / `ntpAclMode` / `clock.tempRefC` / `fwMark` / `otaRunning` / `otaChip`
 
 ## 实测表现
 
 | 场景 | 结果 |
 |------|------|
-| 锁定态 NTP 比对（C3，10 min） | 配对差 stdev 1.3–2.6 ms |
-| 锁定态 NTP 比对（S3，10 min） | median −2.41 ms / stdev 4.34 ms / 异常 0/60 |
+| S3 IDF5 冒烟（v1.1.28，13 min） | S1 / LCK 100%；NTP offset 均值 −2.83 ms（modem sleep 开） |
+| 锁定态 NTP 比对（C3，10 min，历史） | 配对差 stdev 1.3–2.6 ms |
+| 锁定态 NTP 比对（S3，10 min，历史） | median −2.41 ms / stdev 4.34 ms / 异常 0/60 |
 | Holdover 守时（拔模块电源 2 min，两芯） | 相位漂移 <0.5 ms |
 | 失效链（两芯） | 断电 1.5–2.5s 进 HLD → 300s 准时 UNS 诚实拒绝 → 恢复 3–20s 无跳秒 |
-| C3 6.7h / S3 6.1h 长测 | LCK ≈100%、residual 零漏、无老化漂移 |
+| C3 6.7h / S3 6.1h 长测（历史 IDF4） | LCK ≈100%、residual 零漏、无老化漂移 |
 
-详细数据：[docs/](docs/)——模块边界 [module_boundaries.md](docs/module_boundaries.md)、外部时钟 [ext_clock_design.md](docs/ext_clock_design.md)、状态显示方案 [status_display_product_design.md](docs/status_display_product_design.md)、时钟设计 [local_clock_gps_check.md](docs/local_clock_gps_check.md)、WiFi FSM [wifi_event_fsm.md](docs/wifi_event_fsm.md)、两次 NTP 比对评价 [clock_eval_two_ntp_cmp.md](docs/clock_eval_two_ntp_cmp.md)、C3 长测 [clock_drift_20260916.md](docs/clock_drift_20260916.md)、S3 验收 [esp32s3_flash_test_20260917.md](docs/esp32s3_flash_test_20260917.md)、S3 长测 [s3_clock_drift_20260917.md](docs/s3_clock_drift_20260917.md)。
+详细数据入口：[docs/CURRENT.md](docs/CURRENT.md)；历史归档见 [docs/](docs/)。
 
 ## 客户端测试
 
@@ -159,8 +166,8 @@ PlatformIO + pioarduino Arduino-ESP32 **3.3.11** / ESP-IDF **5.5.5**（`platform
 ```
 include/     配置与头文件（引脚目标条件宏；app_ipc 跨任务快照）
 src/         固件源码（FreeRTOS 任务：time / net / ui；OtaService 等模块）
-docs/        设计方案与测试报告（C3/S3 全系列）
+docs/        设计与测试（入口 CURRENT.md；带日期文件多为历史归档）
 tools/       辅助脚本（NTP 比对、失效链/长时段监测）
-dist/        固件产物（C3 app / S3 app / S3 整片合并）
+dist/        固件产物（C3/S3 app 与整片合并）
 platformio.ini
 ```

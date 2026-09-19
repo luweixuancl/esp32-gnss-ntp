@@ -1,5 +1,8 @@
 # NTP 比对测试记录（2026-09-14，Termux vs 阿里云）
 
+> **历史归档**：下文口径以当时固件为准。当前 `main` = **v1.1.28** / IDF5，见 [CURRENT.md](CURRENT.md)。
+
+
 ## 摘要
 
 2026-09-14 用手机 Termux 对固件设备做了 **10 分钟、每 10 秒一轮** 的 NTP 比对（`tools/ntp_cmp_termux.py`）。结论：

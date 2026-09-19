@@ -1,5 +1,8 @@
 # 拔 GPS 模块电源 / PPS 线失效链现场验收（Holdover 完整超时链）
 
+> **历史归档**：下文口径以当时固件为准。当前 `main` = **v1.1.28** / IDF5，见 [CURRENT.md](CURRENT.md)。
+
+
 > 状态：已完成（HoldoverLong 全链通过；Refuse 变体仍待测）
 > 日期：2026-09-16
 > 设备：`10.81.127.143`，策略 `Hold 5m`（`apol=2`/`ahold=300`），温补开

@@ -1,5 +1,8 @@
 # NTP 时间戳位置与「固定 23 ms」评估
 
+> **历史归档**：下文口径以当时固件为准。当前 `main` = **v1.1.28** / IDF5，见 [CURRENT.md](CURRENT.md)。
+
+
 > 状态：**只评估，不实现**  
 > 日期：2026-09-14  
 > 依据：`src/ntp_server.cpp` 现网路径；[ntp_cmp_test_20260911.md](ntp_cmp_test_20260911.md)、[ntp_cmp_test_20260914.md](ntp_cmp_test_20260914.md)、[clock_eval_two_ntp_cmp.md](clock_eval_two_ntp_cmp.md)

@@ -1,5 +1,7 @@
 # Module boundaries (FreeRTOS)
 
+> 与当前代码一致；总览 [CURRENT.md](CURRENT.md)
+
 Tight cohesion / loose coupling rules for the GNSS NTP firmware.
 
 ## Tasks

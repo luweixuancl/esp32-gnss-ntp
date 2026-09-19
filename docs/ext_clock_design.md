@@ -1,6 +1,6 @@
 # 外部高品质时钟源（方案草案）
 
-> 状态：**接口已合入 v1.1.15（`EXT_RTC_EN=0` 默认）；待采购后开使能**  
+> 状态：**接口已合入（`EXT_RTC_EN=0` 默认）；待采购后开使能** · 当前基线 v1.1.28 见 [CURRENT.md](CURRENT.md)  
 > 路线图项：④（① RMT 封存 · ② OTA 验收 · ③ PSRAM history 已取消 → 本项）  
 > 相关：[s3_deep_dive_roadmap.md](s3_deep_dive_roadmap.md)、[local_clock_gps_check.md](local_clock_gps_check.md)
 

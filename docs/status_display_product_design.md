@@ -1,6 +1,7 @@
 # 正式产品状态显示调研与本项目方案
 
-> 状态：**P0–P2 已落地（v1.1.19）** · 2026-09-18  
+> 状态：**P0–P2 已落地并随后续版本保留** · 当前 UI 基线见 [CURRENT.md](CURRENT.md)（v1.1.28）  
+> 初版落地：v1.1.17–v1.1.19（2026-09-18）
 > 范围：网页状态页 / OLED / 状态灯 / 观测接口的信息架构与刷新策略  
 > 相关：[status_json_1hz_cadence_20260918.md](status_json_1hz_cadence_20260918.md)、[ext_clock_design.md](ext_clock_design.md)、[s3_deep_dive_roadmap.md](s3_deep_dive_roadmap.md)
 
