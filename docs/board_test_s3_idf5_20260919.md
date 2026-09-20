@@ -30,5 +30,6 @@
 | **v1.1.36**（EN=0）Web OTA 自动往返 | **PASS** — [ota_deploy_v1136_20260919.md](ota_deploy_v1136_20260919.md) |
 | **v1.1.38** PSRAM 时钟长测环 | **PASS** — [clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md) |
 | **v1.1.39** 去掉设备端 CSV 下载 | 仅二进制；CLI 转 CSV — [clock_trace.md](clock_trace.md) |
+| **v1.1.40** Web OTA + 一键全量 | **PASS** — [fw_flash_v1140_result_20260920.md](fw_flash_v1140_result_20260920.md) |
 
-生产形态：GPIO 授时 + Web OTA + 时钟迹环长测；外置 RTC 待购件。当前 tip **v1.1.39**。
+生产形态：GPIO 授时 + Web OTA + 时钟迹环长测（无参全量）；外置 RTC 待购件。当前 tip **v1.1.40**。

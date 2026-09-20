@@ -1,6 +1,7 @@
 # 交接：辅助 AI 下载 / 烧录 v1.1.40（S3）
 
-> **给执行侧（Termux / opencode / 现场辅助 AI）**：编译侧已完成，本档是你的唯一任务书。  
+> **状态：已完成 PASS**（2026-09-20）— [fw_flash_v1140_result_20260920.md](fw_flash_v1140_result_20260920.md)  
+> 给执行侧（Termux / opencode / 现场辅助 AI）。勿再刷同一镜像。  
 > 日期：2026-09-20 · 分支 `cursor/clock-psram-ring-a05e` · 镜像提交 `64ffa66`  
 > 编译平台：pioarduino 55.03.311（Arduino 3.3.11 / IDF 5.5.5）  
 > 总览：[CURRENT.md](CURRENT.md) · 镜像说明：[../dist/README.md](../dist/README.md)
