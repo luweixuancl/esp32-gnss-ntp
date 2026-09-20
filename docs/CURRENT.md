@@ -1,7 +1,7 @@
 # 当前基线（与代码一致）
 
 > 更新日期：2026-09-20  
-> **本分支 `cursor/clock-psram-ring-a05e` = v1.1.40**（时钟长测一键全量下载）；**`main` 仍是 v1.1.39**  
+> **本分支 `cursor/clock-psram-ring-a05e` = v1.1.41**（`/cfg` 时钟长测按钮随 IDLE/REC/STOP 启用）；**`main` 仍是 v1.1.39**  
 > 现网 S3 Web OTA **PASS**（v1.1.39→40）+ 一键全量 **PASS** — [fw_flash_v1140_result_20260920.md](fw_flash_v1140_result_20260920.md)  
 > 时钟长测板测 **PASS**（v1.1.38）— [clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md) · 83 min 全量分析 — [clock_trace_83min_20260920.md](clock_trace_83min_20260920.md)  
 > 12.65 h 只存第 1 页事故 — [clock_trace_analysis_20260920.md](clock_trace_analysis_20260920.md) · RMT 结案 FAIL — [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)
@@ -25,13 +25,13 @@
 | Web OTA / S3 160 MHz + modem sleep | ✅ **v1.1.36 OTA 往返 PASS** |
 | **RMT PPS** | ❌ 板测搁置（EN=0）— [CLOSED](rmt_pps_board_test_CLOSED_20260919.md) |
 | Web 调试 log | ✅ `GET /debug/log?pass=` — [debug_log.md](debug_log.md) |
-| 时钟长测环 | ✅ **v1.1.40** 无参=一次全量（现场 101 样本 DONE）— [clock_trace.md](clock_trace.md) · [OTA 验收](fw_flash_v1140_result_20260920.md) · [v1.1.38 板测](clock_trace_boardtest_20260919.md) |
+| 时钟长测环 | ✅ **v1.1.41** `/cfg` 按钮随状态机；无参=一次全量 — [clock_trace.md](clock_trace.md) · [v1.1.40 现场](fw_flash_v1140_result_20260920.md) |
 | 外置 RTC | `EXT_RTC_EN=0`，待购件 |
 
 ## 升级
 
 - 自 IDF4（≤ v1.1.21）：整片烧录 — [upgrade_idf5_from_1120.md](upgrade_idf5_from_1120.md)  
-- 已在 IDF5：可用 `firmware_esp32s3.bin` @ `0x10000` 升到 **v1.1.40**
+- 已在 IDF5：可用 `firmware_esp32s3.bin` @ `0x10000` 升到 **v1.1.41**
 
 ## 文档索引
 

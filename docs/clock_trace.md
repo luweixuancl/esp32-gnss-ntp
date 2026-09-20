@@ -58,7 +58,7 @@ python3 tools/clock_trace_client.py --host "$IP" --pass "$PASS" fetch -o clock.c
 python3 tools/clock_trace_client.py --host "$IP" --pass "$PASS" clear
 ```
 
-**浏览器**：`/cfg` → 停止 → 「下载 BIN」即得全量 bin（`>1 MB` 有确认框）；CSV 请用 CLI。
+**浏览器**：`/cfg` 按钮随状态机启用——空闲仅「开始录制」；录制中仅「停止」；已停止可「下载 BIN / 清空」（清空后才能再开始）。停止后「下载 BIN」一次返回全量（`>1 MB` 有确认框）；CSV 请用 CLI。
 
 > ⚠️ **固化操作顺序：stop → 拉全量 → 断电**。v1.1.40 前「下载 BIN」只给第 1 页
 > （默认 limit=8000），12.65 h 录制因此丢 5/6（见事故分析链接）。

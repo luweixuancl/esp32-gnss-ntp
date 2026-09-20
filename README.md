@@ -2,8 +2,8 @@
 
 基于 **ESP32 + GNSS 模块（PPS 驯服）** 的局域网一级（Stratum-1）NTP 时间服务器。同一份固件源码支持两个目标，通过 PlatformIO 多环境构建。
 
-**当前基线：v1.1.40** · pioarduino Arduino 3.3.11 / ESP-IDF 5.5.5 — 详见 [`docs/CURRENT.md`](docs/CURRENT.md)。  
-发布页：[Releases](https://github.com/luweixuancl/esp32-gnss-ntp/releases) · 当前 tip 以本页 / [`docs/CURRENT.md`](docs/CURRENT.md) / `dist/` 为准（**v1.1.40**）。
+**当前基线：v1.1.41** · pioarduino Arduino 3.3.11 / ESP-IDF 5.5.5 — 详见 [`docs/CURRENT.md`](docs/CURRENT.md)。  
+发布页：[Releases](https://github.com/luweixuancl/esp32-gnss-ntp/releases) · 当前 tip 以本页 / [`docs/CURRENT.md`](docs/CURRENT.md) / `dist/` 为准（**v1.1.41**）。
 
 | 目标 | 板卡 | 核 | 状态 |
 |------|------|----|------|
