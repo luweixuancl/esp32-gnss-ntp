@@ -2,7 +2,7 @@
 
 > 更新日期：2026-09-20  
 > **本分支 `cursor/clock-psram-ring-a05e` = v1.1.41**（`/cfg` 时钟长测按钮随 IDLE/REC/STOP 启用）；**`main` 仍是 v1.1.39**  
-> 现网 S3 Web OTA **PASS**（v1.1.39→40）+ 一键全量 **PASS** — [fw_flash_v1140_result_20260920.md](fw_flash_v1140_result_20260920.md)  
+> 现网 S3 仍为 **v1.1.40**；下一件：**OTA v1.1.41 + 按钮测试** — [fw_flash_v1141.md](fw_flash_v1141.md)  
 > 时钟长测板测 **PASS**（v1.1.38）— [clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md) · 83 min 全量分析 — [clock_trace_83min_20260920.md](clock_trace_83min_20260920.md)  
 > 12.65 h 只存第 1 页事故 — [clock_trace_analysis_20260920.md](clock_trace_analysis_20260920.md) · RMT 结案 FAIL — [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)
 
@@ -37,10 +37,11 @@
 
 | 文档 | 用途 |
 |---|---|
+| [fw_flash_v1141.md](fw_flash_v1141.md) | **辅助 AI 交接：OTA v1.1.41 + `/cfg` 按钮测试** |
+| [rmt_pps_agent_brief.md](rmt_pps_agent_brief.md) | 执行侧入口（指向上一份） |
 | [fw_flash_v1140_result_20260920.md](fw_flash_v1140_result_20260920.md) | **v1.1.40 S3 OTA + 一键全量 PASS** |
 | [clock_trace_83min_20260920.md](clock_trace_83min_20260920.md) | 刷前 83 min 全量分析（v1.1.39，LCK 100%） |
-| [fw_flash_v1140.md](fw_flash_v1140.md) | 辅助 AI 烧录任务书（已完成） |
-| [rmt_pps_agent_brief.md](rmt_pps_agent_brief.md) | 执行侧入口（无进行中任务） |
+| [fw_flash_v1140.md](fw_flash_v1140.md) | v1.1.40 烧录任务书（已完成） |
 | [clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md) | **v1.1.38 时钟环板测 PASS** |
 | [clock_trace.md](clock_trace.md) | PSRAM 时钟长测环 API（v1.1.40 无参=全量） |
 | [ota_deploy_v1136_20260919.md](ota_deploy_v1136_20260919.md) | **v1.1.36 Web OTA PASS** |
