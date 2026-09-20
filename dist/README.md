@@ -9,16 +9,16 @@
 
 ## Current build
 
-- Mark: **v1.1.39**（时钟环仅二进制；CSV 由 CLI）— [`docs/clock_trace.md`](../docs/clock_trace.md)
+- Mark: **v1.1.40**（时钟环无参=一次全量下载；CSV 由 CLI）— [`docs/clock_trace.md`](../docs/clock_trace.md)
 - 板测 PASS（v1.1.38）— [`docs/clock_trace_boardtest_20260919.md`](../docs/clock_trace_boardtest_20260919.md)
 - `GPS_PPS_RMT_EN=0` — [`docs/rmt_pps_board_test_CLOSED_20260919.md`](../docs/rmt_pps_board_test_CLOSED_20260919.md)
 - Platform: pioarduino 55.03.311（Arduino 3.3.11 / IDF 5.5.5）
-- Branch: `main`（v1.1.39）
+- Branch: `cursor/clock-psram-ring-a05e`（v1.1.40）
 
 ## Verify
 
 ```text
-wc -c firmware_esp32s3.bin   # 1099856
+wc -c firmware_esp32s3.bin   # 1100704
 sha256sum -c SHA256SUMS
 ```
 
