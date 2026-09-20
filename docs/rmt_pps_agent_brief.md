@@ -1,24 +1,16 @@
 # 工作分支说明（执行 / 辅助 AI）
 
-当前 **`main` = v1.1.39**，`GPS_PPS_RMT_EN=0`（RMT 板测已结案搁置）。
+**当前任务：把 v1.1.40 刷到现网 S3。** 完整步骤只看这一份：
+
+→ **[fw_flash_v1140.md](fw_flash_v1140.md)**
+
+- 镜像在分支 `cursor/clock-psram-ring-a05e`（提交 `64ffa66`），**不要从 `main` 下**（`main` 仍是 v1.1.39）
+- S3 app：`dist/firmware_esp32s3.bin` · **1100704** B · SHA256 `aed6112f…e9670f0`
+- 推荐 Web OTA；禁止整片擦除、禁止 C3 包、禁止 RMT EN=1
+
+## 背景入口
 
 - 总览：[CURRENT.md](CURRENT.md)
-- RMT 结案：[rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)
-- 时钟长测环：[clock_trace.md](clock_trace.md) · 板测 PASS：[clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md)
-- RAM 调试 log：[debug_log.md](debug_log.md)
-
-## 固件镜像（main）
-
-```text
-https://gh-proxy.com/https://raw.githubusercontent.com/luweixuancl/esp32-gnss-ntp/main/dist/firmware_esp32s3.bin
-```
-
-S3 app @ `0x10000`（已在 IDF5）。自 IDF4 须整片：见 [upgrade_idf5_from_1120.md](upgrade_idf5_from_1120.md)。
-
-## 勿再开 RMT EN=1 整机盲测
-
-需独立最小 sketch / GPIO 回环后再议。日常板测优先时钟环 CLI：
-
-```bash
-python3 tools/clock_trace_client.py --host <IP> --pass <PASS> capture --seconds 600 -o out.csv
-```
+- 时钟长测环（v1.1.40 无参=全量）：[clock_trace.md](clock_trace.md)
+- 上一轮 OTA 先例：[ota_deploy_v1136_20260919.md](ota_deploy_v1136_20260919.md)
+- RMT 已结案，勿再开：[rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)

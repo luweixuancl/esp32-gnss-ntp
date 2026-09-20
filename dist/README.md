@@ -13,7 +13,7 @@
 - 板测 PASS（v1.1.38）— [`docs/clock_trace_boardtest_20260919.md`](../docs/clock_trace_boardtest_20260919.md)
 - `GPS_PPS_RMT_EN=0` — [`docs/rmt_pps_board_test_CLOSED_20260919.md`](../docs/rmt_pps_board_test_CLOSED_20260919.md)
 - Platform: pioarduino 55.03.311（Arduino 3.3.11 / IDF 5.5.5）
-- Branch: `cursor/clock-psram-ring-a05e`（v1.1.40）
+- Branch: `cursor/clock-psram-ring-a05e`（v1.1.40）— 辅助 AI 烧录交接：[fw_flash_v1140.md](../docs/fw_flash_v1140.md)
 
 ## Verify
 

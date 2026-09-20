@@ -1,7 +1,8 @@
 # 当前基线（与代码一致）
 
 > 更新日期：2026-09-20  
-> **`main` = v1.1.40**（时钟长测一键全量下载；基线自 v1.1.39 PSRAM 时钟长测环）· 本分支 `cursor/clock-psram-ring-a05e`  
+> **本分支 `cursor/clock-psram-ring-a05e` = v1.1.40**（时钟长测一键全量下载）；**`main` 仍是 v1.1.39** — 刷机请走 [fw_flash_v1140.md](fw_flash_v1140.md)  
+
 > 时钟长测板测 **PASS**（v1.1.38）— [clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md)  
 > 12.65 h 只存第 1 页事故 + 全量下载设计 — [clock_trace_analysis_20260920.md](clock_trace_analysis_20260920.md) · Web OTA 往返 **PASS** — [ota_deploy_v1136_20260919.md](ota_deploy_v1136_20260919.md)  
 > RMT 板测已结案 FAIL — [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)
@@ -37,6 +38,8 @@
 
 | 文档 | 用途 |
 |---|---|
+| [fw_flash_v1140.md](fw_flash_v1140.md) | **辅助 AI 交接：下载/烧录 v1.1.40** |
+| [rmt_pps_agent_brief.md](rmt_pps_agent_brief.md) | 执行侧入口（指向上一份） |
 | [clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md) | **v1.1.38 时钟环板测 PASS** |
 | [clock_trace.md](clock_trace.md) | PSRAM 时钟长测环 API（v1.1.40 无参=全量） |
 | [ota_deploy_v1136_20260919.md](ota_deploy_v1136_20260919.md) | **v1.1.36 Web OTA PASS** |
