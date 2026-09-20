@@ -1,6 +1,7 @@
 # 交接：辅助 AI OTA v1.1.41 + `/cfg` 按钮测试（S3）
 
-> **给本地执行侧（Termux / opencode / 现场辅助 AI）**。编译侧已完成，本档是你的唯一任务书。  
+> **状态：已完成 PASS**（2026-09-20）— [fw_flash_v1141_result_20260920.md](fw_flash_v1141_result_20260920.md)  
+> 给本地执行侧（Termux / opencode / 现场辅助 AI）。勿再刷同一镜像。  
 > 日期：2026-09-20 · 分支 `cursor/clock-psram-ring-a05e` · 镜像提交 `7d2c47d`  
 > 总览：[CURRENT.md](CURRENT.md) · 上一轮 OTA PASS：[fw_flash_v1140_result_20260920.md](fw_flash_v1140_result_20260920.md)
 

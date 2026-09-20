@@ -1,6 +1,6 @@
 # S3 特性深挖路线图（PPS 硬件捕获 / PSRAM 历史 / OTA / 外部时钟）
 
-> 状态（2026-09-20）：本分支 **v1.1.40**（`GPS_PPS_RMT_EN=0`）；现网 S3 OTA PASS + 一键全量 PASS；RMT 结案 FAIL；ExtClock 待购件。  
+> 状态（2026-09-20）：本分支 **v1.1.41**（`GPS_PPS_RMT_EN=0`）；现网 S3 OTA PASS + `/cfg` 按钮 A–F PASS；RMT 结案 FAIL；ExtClock 待购件。  
 > 总览：[CURRENT.md](CURRENT.md)  
 > 相关：[esp32s3_devkitc1_hw.md](esp32s3_devkitc1_hw.md)、[idf5_adapt_20260919.md](idf5_adapt_20260919.md)、[clock_trace.md](clock_trace.md)
 
@@ -29,6 +29,7 @@
 - 板测：[clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md)（10 min、647 样本）。  
 - v1.1.39：设备端 **去掉 CSV**；CLI 本地转 CSV。  
 - **v1.1.40**：无参 `GET /debug/clock/data` = 一次全量；现网 101 样本 DONE — [fw_flash_v1140_result_20260920.md](fw_flash_v1140_result_20260920.md)。  
+- **v1.1.41**：`/cfg` 四键随 IDLE/REC/STOP；现网 A–F PASS — [fw_flash_v1141_result_20260920.md](fw_flash_v1141_result_20260920.md)。  
 - 见 [clock_trace.md](clock_trace.md)。旧「通用 /history」仍取消。
 
 ## 3. OTA 双分区 —— **已实现；IDF5 自动往返 PASS（v1.1.36）**
