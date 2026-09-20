@@ -1,7 +1,9 @@
-# 时钟长测 — PSRAM/RAM 采样环（v1.1.37+，传输 v1.1.38，去 CSV v1.1.39）
+# 时钟长测 — PSRAM/RAM 采样环（v1.1.37+，传输 v1.1.38，去 CSV v1.1.39，一键全量 v1.1.40）
 
-> 设备侧按 PPS≈1 Hz 写入环形缓冲；**录制中禁止拉取**；停止后下**二进制**。  
-> **板测 PASS**（10 min / 647 样本）— [clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md)  
+> 设备侧按 PPS≈1 Hz 写入环形缓冲；**录制中禁止拉取**；停止后下**二进制**。  
+> **v1.1.40 起「下载 BIN」一次返回全量**（无 `from`/`limit` 参数 = 单响应全流，S3 满环 ≈3.63 MB）；显式 `from`/`limit` 仍是分页（CLI 用）。  
+> **板测 PASS**（10 min / 647 样本）— [clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md)  
+> 12.65 h 只存第 1 页事故分析：[clock_trace_analysis_20260920.md](clock_trace_analysis_20260920.md)  
 > 总览：[CURRENT.md](CURRENT.md) · 客户端：[`tools/clock_trace_client.py`](../tools/clock_trace_client.py)
 
 ## 为什么
@@ -26,7 +28,8 @@ IDLE ──start──► REC ──stop──► STOP ──clear──► IDLE
 |---|---|---|
 | `GET` | `/debug/clock` | JSON 状态 |
 | `POST` | `/debug/clock/start` \| `stop` \| `clear` | 控制 |
-| `GET` | `/debug/clock/data?from=&limit=` | 二进制页（唯一下载格式） |
+| `GET` | `/debug/clock/data` | **无参数 = 一次全量**（`Content-Disposition` 自描述文件名） |
+| `GET` | `/debug/clock/data?from=&limit=` | 分页二进制（CLI 用，`limit` ≤ 12000） |
 
 下载中：`/status` 见 `xferBusy=true`、`ntpServing=false`、`ntp.refId=RSTR`。
 
@@ -39,7 +42,7 @@ IDLE ──start──► REC ──stop──► STOP ──clear──► IDLE
 | 8 | `u32 seqFrom, count, seqNext, seqEnd, dropped, flags`（flags bit0=已拉完） |
 | 32 | `count × ClockTraceSample`（小端） |
 
-默认 `limit=8000`（≈336 KiB/页），上限 12000。
+显式分页默认 `limit=8000`（≈336 KiB/页），上限 12000；**无参 = 一次全量**（v1.1.40+，≈3.63 MB @ S3 满环）。
 
 ### 推荐用法
 
@@ -54,7 +57,10 @@ python3 tools/clock_trace_client.py --host "$IP" --pass "$PASS" fetch -o clock.c
 python3 tools/clock_trace_client.py --host "$IP" --pass "$PASS" clear
 ```
 
-`/cfg`：开始 / 停止 / 清空 / 下载 BIN（CSV 请用 CLI）。
+**浏览器**：`/cfg` → 停止 → 「下载 BIN」即得全量 bin（`>1 MB` 有确认框）；CSV 请用 CLI。
+
+> ⚠️ **固化操作顺序：stop → 拉全量 → 断电**。v1.1.40 前「下载 BIN」只给第 1 页
+> （默认 limit=8000），12.65 h 录制因此丢 5/6（见事故分析链接）。
 
 ## CSV 列（仅客户端写出）
 

@@ -2,8 +2,8 @@
 
 基于 **ESP32 + GNSS 模块（PPS 驯服）** 的局域网一级（Stratum-1）NTP 时间服务器。同一份固件源码支持两个目标，通过 PlatformIO 多环境构建。
 
-**当前基线：v1.1.39** · pioarduino Arduino 3.3.11 / ESP-IDF 5.5.5 — 详见 [`docs/CURRENT.md`](docs/CURRENT.md)。  
-发布页：[Releases](https://github.com/luweixuancl/esp32-gnss-ntp/releases) · 当前 tip 以本页 / [`docs/CURRENT.md`](docs/CURRENT.md) / `dist/` 为准（**v1.1.39**）。
+**当前基线：v1.1.40** · pioarduino Arduino 3.3.11 / ESP-IDF 5.5.5 — 详见 [`docs/CURRENT.md`](docs/CURRENT.md)。  
+发布页：[Releases](https://github.com/luweixuancl/esp32-gnss-ntp/releases) · 当前 tip 以本页 / [`docs/CURRENT.md`](docs/CURRENT.md) / `dist/` 为准（**v1.1.40**）。
 
 | 目标 | 板卡 | 核 | 状态 |
 |------|------|----|------|
@@ -25,7 +25,7 @@ GNSS：大夏龙雀 DX-GP10（GPS/北斗/GLONASS 多模，9600 8N1，定位后 1
 9. **B4 可观测**：OLED NTP Stats、串口 60s 摘要、`/metrics` Prometheus 文本；`GET /debug/log` RAM 环（免串口）
 10. **多目标构建**：PlatformIO 多环境，源码 100% 共享，引脚差异集中在 `include/config.h` 目标条件宏
 11. **Web OTA**：登录 `/cfg` 上传对应芯片 app；升级期间拒绝 NTP（KoD `RSTR`）；IDF5→IDF5 往返板测 PASS（v1.1.36）
-12. **时钟长测环（PSRAM）**：`/debug/clock` start/stop；停止后二进制下载（下载期停 NTP）；CSV 由 `tools/clock_trace_client.py` 本地生成 — [clock_trace.md](docs/clock_trace.md)
+12. **时钟长测环（PSRAM）**：`/debug/clock` start/stop；停止后二进制下载（**无参=一次全量**，v1.1.40+；下载期停 NTP）；CSV 由 `tools/clock_trace_client.py` 本地生成 — [clock_trace.md](docs/clock_trace.md)
 13. **外部时钟接口（可选）**：`ExtClock`（DS3231）；默认 `EXT_RTC_EN=0`；见 [ext_clock_design.md](docs/ext_clock_design.md)
 
 ## 硬件连接

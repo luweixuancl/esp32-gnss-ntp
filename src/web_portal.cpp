@@ -384,6 +384,10 @@ void WebPortal::handleClockTraceData() {
     return;
   }
 
+  // No from & no limit = one-shot full dump (browser button / plain GET):
+  // stream the whole buffer in a single uncapped response. Explicit
+  // from/limit stays paginated (CLI tools always pass both).
+  const bool fullDump = !server_.hasArg("from") && !server_.hasArg("limit");
   uint32_t fromSeq = info.seqFirst;
   if (server_.hasArg("from")) {
     fromSeq = static_cast<uint32_t>(strtoul(server_.arg("from").c_str(), nullptr, 10));
@@ -391,17 +395,22 @@ void WebPortal::handleClockTraceData() {
   if (fromSeq < info.seqFirst) {
     fromSeq = info.seqFirst;
   }
-  uint32_t limit = CLOCK_TRACE_FETCH_DEFAULT;
-  if (server_.hasArg("limit")) {
-    limit = static_cast<uint32_t>(strtoul(server_.arg("limit").c_str(), nullptr, 10));
-  }
-  if (limit == 0) {
-    limit = CLOCK_TRACE_FETCH_DEFAULT;
-  }
-  if (limit > CLOCK_TRACE_FETCH_MAX) {
-    limit = CLOCK_TRACE_FETCH_MAX;
-  }
   const uint32_t avail = (fromSeq >= info.seqNext) ? 0u : (info.seqNext - fromSeq);
+  uint32_t limit;
+  if (fullDump) {
+    limit = avail;
+  } else {
+    limit = CLOCK_TRACE_FETCH_DEFAULT;
+    if (server_.hasArg("limit")) {
+      limit = static_cast<uint32_t>(strtoul(server_.arg("limit").c_str(), nullptr, 10));
+    }
+    if (limit == 0) {
+      limit = CLOCK_TRACE_FETCH_DEFAULT;
+    }
+    if (limit > CLOCK_TRACE_FETCH_MAX) {
+      limit = CLOCK_TRACE_FETCH_MAX;
+    }
+  }
   const uint32_t nSend = (avail < limit) ? avail : limit;
   if (nSend == 0) {
     server_.send(204, "text/plain", "");
@@ -458,6 +467,25 @@ void WebPortal::handleClockTraceData() {
   hdr.flags = (hdr.seqNext >= info.seqNext) ? 1u : 0u;
 
   const size_t bodyLen = sizeof(hdr) + static_cast<size_t>(nSend) * sizeof(ClockTraceSample);
+  {
+    // Self-describing filename: seq range + first-sample UTC (fallback: seq only).
+    ClockTraceSample first{};
+    uint32_t nxt = fromSeq;
+    int ec = 0;
+    char fname[64];
+    if (clockTraceRead(fromSeq, &first, 1, &nxt, &ec) == 1) {
+      snprintf(fname, sizeof(fname), "clock_trace_%lu-%lu_%lu.bin",
+               static_cast<unsigned long>(fromSeq),
+               static_cast<unsigned long>(fromSeq + nSend - 1),
+               static_cast<unsigned long>(first.utcEpoch));
+    } else {
+      snprintf(fname, sizeof(fname), "clock_trace_%lu-%lu.bin",
+               static_cast<unsigned long>(fromSeq),
+               static_cast<unsigned long>(fromSeq + nSend - 1));
+    }
+    server_.sendHeader("Content-Disposition",
+                       String("attachment; filename=\"") + fname + "\"");
+  }
   server_.setContentLength(bodyLen);
   server_.send(200, "application/octet-stream", "");
   server_.sendContent(reinterpret_cast<const char*>(&hdr), sizeof(hdr));
@@ -878,8 +906,9 @@ void WebPortal::handleSetup() {
             "<button type='button' onclick='saveWifi()'>连接</button>"
             "<p id='msg'></p></div>");
   body += F("<div class='card'><h2 style='font-size:1rem;margin:0 0 8px'>时钟长测 (PSRAM)</h2>"
-            "<p style='color:#64748b;font-size:.85rem'>设备侧采样环：开始后按 PPS≈1 Hz 写入 RAM/PSRAM；"
+            "<p style='color:#64748b;font-size:.85rem'>设备侧采样环：开始后按 PPS≈1 Hz 写入 RAM/PSRAM；"
             "<strong>必须先停止</strong>才能下载。<strong>仅二进制</strong>（期间停 NTP / KoD RSTR）；"
+            "下载 BIN <strong>一次返回全量</strong>；"
             "CSV 由 CLI 本地生成：<code>tools/clock_trace_client.py fetch -o out.csv</code>。</p>"
             "<p>状态 <code id='ctState'>--</code> · 样本 <span id='ctCount'>0</span>/<span id='ctCap'>0</span>"
             " · dropped <span id='ctDrop'>0</span> · PSRAM <span id='ctPsram'>?</span></p>"
@@ -1082,7 +1111,10 @@ void WebPortal::handleSetup() {
             " const st=await ctRefresh();"
             " if(!st||st.state!=='STOP'){"
             "  document.getElementById('ctmsg').textContent='请先停止录制再下载';return;}"
-            " document.getElementById('ctmsg').textContent='下载中（停 NTP）… CSV 请用 CLI';"
+            " const bytes=(st.count||0)*42+32;"
+            " const mb=fmtBytes(bytes);"
+            " if(bytes>1048576&&!confirm('共 '+st.count+' 样本（'+mb+'），下载期间停 NTP。开始？'))return;"
+            " document.getElementById('ctmsg').textContent='下载中（'+mb+'，停 NTP）… CSV 请用 CLI';"
             " location.href='/debug/clock/data';"
             "}"
             "ctRefresh(); setInterval(ctRefresh,2000);"

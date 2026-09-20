@@ -1,9 +1,9 @@
 # 当前基线（与代码一致）
 
-> 更新日期：2026-09-19  
-> **`main` = v1.1.39**（PSRAM 时钟长测环，仅二进制下载）· 合入自 `cursor/clock-psram-ring-a05e`  
+> 更新日期：2026-09-20  
+> **`main` = v1.1.40**（时钟长测一键全量下载；基线自 v1.1.39 PSRAM 时钟长测环）· 本分支 `cursor/clock-psram-ring-a05e`  
 > 时钟长测板测 **PASS**（v1.1.38）— [clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md)  
-> Web OTA 往返 **PASS** — [ota_deploy_v1136_20260919.md](ota_deploy_v1136_20260919.md)  
+> 12.65 h 只存第 1 页事故 + 全量下载设计 — [clock_trace_analysis_20260920.md](clock_trace_analysis_20260920.md) · Web OTA 往返 **PASS** — [ota_deploy_v1136_20260919.md](ota_deploy_v1136_20260919.md)  
 > RMT 板测已结案 FAIL — [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)
 
 本文是文档入口；**与代码冲突时以源码与本页为准**。
@@ -25,20 +25,20 @@
 | Web OTA / S3 160 MHz + modem sleep | ✅ **v1.1.36 OTA 往返 PASS** |
 | **RMT PPS** | ❌ 板测搁置（EN=0）— [CLOSED](rmt_pps_board_test_CLOSED_20260919.md) |
 | Web 调试 log | ✅ `GET /debug/log?pass=` — [debug_log.md](debug_log.md) |
-| 时钟长测环 | ✅ **v1.1.39** 仅二进制下载（CLI→CSV）— [clock_trace.md](clock_trace.md) · [板测](clock_trace_boardtest_20260919.md) |
+| 时钟长测环 | ✅ **v1.1.40** 二进制下载：无参=一次全量，显式 from/limit 分页（CLI→CSV）— [clock_trace.md](clock_trace.md) · [板测](clock_trace_boardtest_20260919.md) |
 | 外置 RTC | `EXT_RTC_EN=0`，待购件 |
 
 ## 升级
 
 - 自 IDF4（≤ v1.1.21）：整片烧录 — [upgrade_idf5_from_1120.md](upgrade_idf5_from_1120.md)  
-- 已在 IDF5：可用 `firmware_esp32s3.bin` @ `0x10000` 升到 **v1.1.39**
+- 已在 IDF5：可用 `firmware_esp32s3.bin` @ `0x10000` 升到 **v1.1.40**
 
 ## 文档索引
 
 | 文档 | 用途 |
 |---|---|
 | [clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md) | **v1.1.38 时钟环板测 PASS** |
-| [clock_trace.md](clock_trace.md) | PSRAM 时钟长测环 API |
+| [clock_trace.md](clock_trace.md) | PSRAM 时钟长测环 API（v1.1.40 无参=全量） |
 | [ota_deploy_v1136_20260919.md](ota_deploy_v1136_20260919.md) | **v1.1.36 Web OTA PASS** |
 | [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md) | RMT 板测结案 |
 | [debug_log.md](debug_log.md) | 免串口 RAM log |
