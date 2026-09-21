@@ -1,10 +1,3 @@
 #pragma once
-#include <cstdint>
-enum class AnomalyPolicy : uint8_t {
-  Refuse = 0,
-  HoldoverShort = 1,
-  HoldoverLong = 2,
-};
-inline float tempCoeffPpmPerC(int16_t centi) {
-  return static_cast<float>(centi) / 100.0f;
-}
+// Unused at compile time: `#include "settings.h"` from include/local_clock.h
+// resolves to include/settings.h. Stub Arduino/IPAddress/Preferences instead.

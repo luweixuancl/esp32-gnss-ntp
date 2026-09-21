@@ -9,21 +9,21 @@
 
 ## Current build
 
-- Mark: **v1.1.41**（`/cfg` 时钟长测按钮随 IDLE/REC/STOP）— [`docs/clock_trace.md`](../docs/clock_trace.md)
-- 板测 PASS（v1.1.38）— [`docs/clock_trace_boardtest_20260919.md`](../docs/clock_trace_boardtest_20260919.md)
+- Mark: **v1.1.42**（PPS 流重启清环，修断电后 ACQ 死锁）— [`docs/gps_failover_fix_plan_v1142.md`](../docs/gps_failover_fix_plan_v1142.md)
+- 现网复测任务书 — [`docs/fw_flash_v1142.md`](../docs/fw_flash_v1142.md)
 - `GPS_PPS_RMT_EN=0` — [`docs/rmt_pps_board_test_CLOSED_20260919.md`](../docs/rmt_pps_board_test_CLOSED_20260919.md)
 - Platform: pioarduino 55.03.311（Arduino 3.3.11 / IDF 5.5.5）
-- Branch: `cursor/clock-psram-ring-a05e`（v1.1.41）— 现网 OTA PASS：[fw_flash_v1141_result_20260920.md](../docs/fw_flash_v1141_result_20260920.md)
+- Branch: `cursor/pps-resume-deadlock-6c51`
 
 ## Verify
 
 ```text
-wc -c firmware_esp32s3.bin   # 1102992
+wc -c firmware_esp32s3.bin   # 1103104
 sha256sum -c SHA256SUMS
 ```
 
 ## China mirror
 
 ```text
-https://gh-proxy.com/https://raw.githubusercontent.com/luweixuancl/esp32-gnss-ntp/main/dist/firmware_esp32s3.bin
+https://gh-proxy.com/https://raw.githubusercontent.com/luweixuancl/esp32-gnss-ntp/cursor/pps-resume-deadlock-6c51/dist/firmware_esp32s3.bin
 ```

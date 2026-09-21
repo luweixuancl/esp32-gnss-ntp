@@ -216,7 +216,11 @@
 #define CLK_RESIDUAL_RELOCK_MS       30
 #define CLK_RELOCK_COUNT              3
 #define CLK_PPS_INTERVAL_MAX_ERR_US 5000  // outlier vs last accepted edge → drop edge
-#define CLK_PPS_RESUME_GAP_US      1500000  // PPS gap ≥ this = stream restart → re-bootstrap ring
+// PPS interval ≥ this = stream restart (module power cycle), not EMI glitch.
+// 1.5 s sits above double-edge (~20 ms) and at/under a missed 1 Hz pulse (~2 s).
+// A 2 s hole while Locked/HLD drops phase (enterUnsynced) then re-bootstraps;
+// do not walk UTC +1 s across the hole (see onPpsEdge).
+#define CLK_PPS_RESUME_GAP_US      1500000
 #define CLK_PPS_UNSTABLE_COUNT        3   // consecutive outliers → soft unsync
 #define CLK_HOLDOVER_SHORT_SEC       30
 #define CLK_HOLDOVER_LONG_SEC       300

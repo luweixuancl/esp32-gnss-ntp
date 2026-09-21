@@ -1,6 +1,7 @@
 # 交接：辅助 AI GPS 失效链（Hold 5m）— Termux Alpine
 
-> **状态：待执行**  
+> **状态：已执行 FAIL**（第 6 项恢复死锁）— [gps_failover_hold5m_result_20260921.md](gps_failover_hold5m_result_20260921.md)  
+> 后续改走 v1.1.42 复测：[fw_flash_v1142.md](fw_flash_v1142.md)  
 > 给本地执行侧（Termux / Alpine / opencode）。**不要假设有 `ntpdate`/`chrony`。**  
 > 日期：2026-09-21 · 对照史档：[pps_pull_test_20260916.md](pps_pull_test_20260916.md)  
 > 总览：[CURRENT.md](CURRENT.md) · 入口：[rmt_pps_agent_brief.md](rmt_pps_agent_brief.md)
