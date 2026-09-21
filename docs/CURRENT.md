@@ -1,12 +1,10 @@
 # 当前基线（与代码一致）
 
 > 更新日期：2026-09-21  
-> **本分支 `cursor/pps-resume-deadlock-6c51` = v1.1.42**（PPS 流重启清环，修 ACQ 死锁）  
-> **`main` = v1.1.41**（PR #11 已合入 clock-trace 线）  
-> **进行中**：OTA v1.1.42 + Hold 5m 复测 — [fw_flash_v1142.md](fw_flash_v1142.md) · 计划 [gps_failover_fix_plan_v1142.md](gps_failover_fix_plan_v1142.md)  
-> 现网仍是 **v1.1.41**，第 6 项恢复 FAIL — [gps_failover_hold5m_result_20260921.md](gps_failover_hold5m_result_20260921.md)  
-> v1.1.41 S3 OTA + 按钮 A–F **PASS** — [fw_flash_v1141_result_20260920.md](fw_flash_v1141_result_20260920.md)  
-> RMT 结案 FAIL — [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)
+> **本分支 `cursor/pps-resume-deadlock-6c51` = v1.1.42**（PPS 流重启清环）· 现场 OTA+失效链 **PASS** — [fw_flash_v1142_result_20260921.md](fw_flash_v1142_result_20260921.md)  
+> **`main` = v1.1.41**（待合入本分支升到 v1.1.42）  
+> 现网 S3：`fwMark=v1.1.42` · Hold 5m · LCK / GPSS  
+> v1.1.41 恢复死锁史档 — [gps_failover_hold5m_result_20260921.md](gps_failover_hold5m_result_20260921.md) · RMT 结案 FAIL — [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)
 
 本文是文档入口；**与代码冲突时以源码与本页为准**。
 
@@ -28,7 +26,7 @@
 | **RMT PPS** | ❌ 板测搁置（EN=0）— [CLOSED](rmt_pps_board_test_CLOSED_20260919.md) |
 | Web 调试 log | ✅ `GET /debug/log?pass=` — [debug_log.md](debug_log.md) |
 | 时钟长测环 | ✅ **v1.1.41** `/cfg` 按钮随状态机（现场 A–F PASS）— [clock_trace.md](clock_trace.md) |
-| PPS 断电恢复 | ⚠️ v1.1.41 现场死锁 ACQ；**v1.1.42 代码已修，待 OTA 复测** |
+| PPS 断电恢复 | ✅ **v1.1.42** Hold 5m 全链 + Refuse 对照现场 PASS — [验收](fw_flash_v1142_result_20260921.md) |
 | 外置 RTC | `EXT_RTC_EN=0`，待购件 |
 
 ## 升级
@@ -40,11 +38,11 @@
 
 | 文档 | 用途 |
 |---|---|
-| [fw_flash_v1142.md](fw_flash_v1142.md) | **进行中**：OTA v1.1.42 + Hold 5m 复测 |
-| [gps_failover_fix_plan_v1142.md](gps_failover_fix_plan_v1142.md) | 修正计划（根因 + 加固点 + 验收） |
-| [gps_failover_hold5m_result_20260921.md](gps_failover_hold5m_result_20260921.md) | v1.1.41 第 6 项 FAIL |
-| [gps_failover_hold5m_20260921.md](gps_failover_hold5m_20260921.md) | 上一轮任务书（已跑完） |
-| [rmt_pps_agent_brief.md](rmt_pps_agent_brief.md) | 执行侧入口 |
+| [fw_flash_v1142_result_20260921.md](fw_flash_v1142_result_20260921.md) | **v1.1.42 OTA + Hold 5m / Refuse PASS** |
+| [fw_flash_v1142.md](fw_flash_v1142.md) | 任务书（已完成） |
+| [gps_failover_fix_plan_v1142.md](gps_failover_fix_plan_v1142.md) | 修正计划（根因 + 加固） |
+| [gps_failover_hold5m_result_20260921.md](gps_failover_hold5m_result_20260921.md) | v1.1.41 第 6 项 FAIL（已修） |
+| [rmt_pps_agent_brief.md](rmt_pps_agent_brief.md) | 执行侧入口（无进行中任务） |
 | [fw_flash_v1141_result_20260920.md](fw_flash_v1141_result_20260920.md) | **v1.1.41 S3 OTA + `/cfg` 按钮 PASS** |
 | [clock_trace.md](clock_trace.md) | PSRAM 时钟长测环 API |
 | [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md) | RMT 板测结案 |
