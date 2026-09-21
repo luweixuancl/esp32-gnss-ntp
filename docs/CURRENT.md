@@ -1,7 +1,8 @@
 # 当前基线（与代码一致）
 
-> 更新日期：2026-09-20  
-> **本分支 `cursor/clock-psram-ring-a05e` = v1.1.41**（`/cfg` 时钟长测按钮随 IDLE/REC/STOP）；**`main` 仍是 v1.1.39**  
+> 更新日期：2026-09-21  
+> **本分支线 = v1.1.41**（`/cfg` 时钟长测按钮随 IDLE/REC/STOP）；**`main` 仍是 v1.1.39**  
+> **进行中**：Hold 5m 拔模块电源失效链（Alpine / 无 ntpdate）— [gps_failover_hold5m_20260921.md](gps_failover_hold5m_20260921.md)  
 > 现网 S3 Web OTA **PASS**（v1.1.40→41）+ 按钮 A–F **PASS** — [fw_flash_v1141_result_20260920.md](fw_flash_v1141_result_20260920.md)  
 > 时钟长测板测 **PASS**（v1.1.38）— [clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md) · 83 min 全量分析 — [clock_trace_83min_20260920.md](clock_trace_83min_20260920.md)  
 > 12.65 h 只存第 1 页事故 — [clock_trace_analysis_20260920.md](clock_trace_analysis_20260920.md) · RMT 结案 FAIL — [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)
@@ -37,9 +38,10 @@
 
 | 文档 | 用途 |
 |---|---|
+| [gps_failover_hold5m_20260921.md](gps_failover_hold5m_20260921.md) | **进行中**：Hold 5m 拔模块电源（Alpine / 无 ntpdate） |
+| [rmt_pps_agent_brief.md](rmt_pps_agent_brief.md) | 执行侧入口 |
 | [fw_flash_v1141_result_20260920.md](fw_flash_v1141_result_20260920.md) | **v1.1.41 S3 OTA + `/cfg` 按钮 PASS** |
 | [fw_flash_v1141.md](fw_flash_v1141.md) | 辅助 AI 任务书（已完成） |
-| [rmt_pps_agent_brief.md](rmt_pps_agent_brief.md) | 执行侧入口（无进行中任务） |
 | [fw_flash_v1140_result_20260920.md](fw_flash_v1140_result_20260920.md) | **v1.1.40 S3 OTA + 一键全量 PASS** |
 | [clock_trace_83min_20260920.md](clock_trace_83min_20260920.md) | 刷前 83 min 全量分析（v1.1.39，LCK 100%） |
 | [fw_flash_v1140.md](fw_flash_v1140.md) | v1.1.40 烧录任务书（已完成） |
