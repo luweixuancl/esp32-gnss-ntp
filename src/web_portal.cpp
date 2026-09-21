@@ -298,6 +298,17 @@ static void sendClockTraceJson(WebServer& server, int httpCode, const ClockTrace
   doc["stoppedMs"] = info.stoppedMs;
   doc["psram"] = info.psram;
   doc["sampleBytes"] = static_cast<uint32_t>(sizeof(ClockTraceSample));
+  doc["xferBusy"] = ipcXferBusy();
+  {
+    uint32_t elapsedMs = 0;
+    if (info.state == ClockTraceState::Recording && info.startedMs != 0) {
+      elapsedMs = millis() - info.startedMs;
+    } else if (info.state == ClockTraceState::Stopped &&
+               info.stoppedMs >= info.startedMs) {
+      elapsedMs = info.stoppedMs - info.startedMs;
+    }
+    doc["elapsedMs"] = elapsedMs;
+  }
   doc["fw"] = FW_MARK;
   if (errMsg && errMsg[0]) {
     doc["error"] = errMsg;
@@ -384,6 +395,10 @@ void WebPortal::handleClockTraceData() {
     return;
   }
 
+  // No from & no limit = one-shot full dump (browser button / plain GET):
+  // stream the whole buffer in a single uncapped response. Explicit
+  // from/limit stays paginated (CLI tools always pass both).
+  const bool fullDump = !server_.hasArg("from") && !server_.hasArg("limit");
   uint32_t fromSeq = info.seqFirst;
   if (server_.hasArg("from")) {
     fromSeq = static_cast<uint32_t>(strtoul(server_.arg("from").c_str(), nullptr, 10));
@@ -391,17 +406,22 @@ void WebPortal::handleClockTraceData() {
   if (fromSeq < info.seqFirst) {
     fromSeq = info.seqFirst;
   }
-  uint32_t limit = CLOCK_TRACE_FETCH_DEFAULT;
-  if (server_.hasArg("limit")) {
-    limit = static_cast<uint32_t>(strtoul(server_.arg("limit").c_str(), nullptr, 10));
-  }
-  if (limit == 0) {
-    limit = CLOCK_TRACE_FETCH_DEFAULT;
-  }
-  if (limit > CLOCK_TRACE_FETCH_MAX) {
-    limit = CLOCK_TRACE_FETCH_MAX;
-  }
   const uint32_t avail = (fromSeq >= info.seqNext) ? 0u : (info.seqNext - fromSeq);
+  uint32_t limit;
+  if (fullDump) {
+    limit = avail;
+  } else {
+    limit = CLOCK_TRACE_FETCH_DEFAULT;
+    if (server_.hasArg("limit")) {
+      limit = static_cast<uint32_t>(strtoul(server_.arg("limit").c_str(), nullptr, 10));
+    }
+    if (limit == 0) {
+      limit = CLOCK_TRACE_FETCH_DEFAULT;
+    }
+    if (limit > CLOCK_TRACE_FETCH_MAX) {
+      limit = CLOCK_TRACE_FETCH_MAX;
+    }
+  }
   const uint32_t nSend = (avail < limit) ? avail : limit;
   if (nSend == 0) {
     server_.send(204, "text/plain", "");
@@ -458,6 +478,25 @@ void WebPortal::handleClockTraceData() {
   hdr.flags = (hdr.seqNext >= info.seqNext) ? 1u : 0u;
 
   const size_t bodyLen = sizeof(hdr) + static_cast<size_t>(nSend) * sizeof(ClockTraceSample);
+  {
+    // Self-describing filename: seq range + first-sample UTC (fallback: seq only).
+    ClockTraceSample first{};
+    uint32_t nxt = fromSeq;
+    int ec = 0;
+    char fname[64];
+    if (clockTraceRead(fromSeq, &first, 1, &nxt, &ec) == 1) {
+      snprintf(fname, sizeof(fname), "clock_trace_%lu-%lu_%lu.bin",
+               static_cast<unsigned long>(fromSeq),
+               static_cast<unsigned long>(fromSeq + nSend - 1),
+               static_cast<unsigned long>(first.utcEpoch));
+    } else {
+      snprintf(fname, sizeof(fname), "clock_trace_%lu-%lu.bin",
+               static_cast<unsigned long>(fromSeq),
+               static_cast<unsigned long>(fromSeq + nSend - 1));
+    }
+    server_.sendHeader("Content-Disposition",
+                       String("attachment; filename=\"") + fname + "\"");
+  }
   server_.setContentLength(bodyLen);
   server_.send(200, "application/octet-stream", "");
   server_.sendContent(reinterpret_cast<const char*>(&hdr), sizeof(hdr));
@@ -564,7 +603,9 @@ String WebPortal::buildPage(const String& title, const String& body, bool refres
             ".ok{color:#4ade80}.warn{color:#fbbf24}.bad{color:#f87171}"
             ".obar{display:none;height:10px;background:#334155;border-radius:6px;overflow:hidden;margin:8px 0}"
             ".ofill{height:100%;width:0;background:#38bdf8;transition:width .15s linear}"
-            "button:disabled{opacity:.55}"
+            "button:disabled{opacity:.45;cursor:not-allowed}"
+            ".ctbtns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}"
+            ".ctbtns button{margin:0}"
             ".hero{text-align:center;padding:12px 4px 8px}"
             ".brand{font-size:1.85rem;font-weight:800;letter-spacing:.06em;margin:0;line-height:1.15}"
             ".badge{display:inline-block;margin:14px 0 6px;padding:7px 16px;border-radius:8px;"
@@ -878,15 +919,19 @@ void WebPortal::handleSetup() {
             "<button type='button' onclick='saveWifi()'>连接</button>"
             "<p id='msg'></p></div>");
   body += F("<div class='card'><h2 style='font-size:1rem;margin:0 0 8px'>时钟长测 (PSRAM)</h2>"
-            "<p style='color:#64748b;font-size:.85rem'>设备侧采样环：开始后按 PPS≈1 Hz 写入 RAM/PSRAM；"
+            "<p style='color:#64748b;font-size:.85rem'>设备侧采样环：开始后按 PPS≈1 Hz 写入 RAM/PSRAM；"
             "<strong>必须先停止</strong>才能下载。<strong>仅二进制</strong>（期间停 NTP / KoD RSTR）；"
+            "下载 BIN <strong>一次返回全量</strong>；"
             "CSV 由 CLI 本地生成：<code>tools/clock_trace_client.py fetch -o out.csv</code>。</p>"
-            "<p>状态 <code id='ctState'>--</code> · 样本 <span id='ctCount'>0</span>/<span id='ctCap'>0</span>"
+            "<p>状态 <code id='ctState'>--</code> · 已录 <span id='ctElapsed'>--</span>"
+            " · 样本 <span id='ctCount'>0</span>/<span id='ctCap'>0</span>"
             " · dropped <span id='ctDrop'>0</span> · PSRAM <span id='ctPsram'>?</span></p>"
-            "<button type='button' onclick='ctStart()'>开始录制</button> "
-            "<button type='button' onclick='ctStop()'>停止</button> "
-            "<button type='button' onclick='ctClear()'>清空</button> "
-            "<button type='button' onclick='ctFetchBin()'>下载 BIN</button>"
+            "<div class='ctbtns'>"
+            "<button type='button' id='ctBtnStart' onclick='ctStart()' disabled>开始录制</button>"
+            "<button type='button' id='ctBtnStop' onclick='ctStop()' disabled>停止</button>"
+            "<button type='button' id='ctBtnClear' onclick='ctClear()' disabled>清空</button>"
+            "<button type='button' id='ctBtnFetch' onclick='ctFetchBin()' disabled>下载 BIN</button>"
+            "</div>"
             "<p id='ctmsg'></p></div>");
   body += F("<div class='card'><h2 style='font-size:1rem;margin:0 0 8px'>固件 OTA</h2>"
             "<p style='color:#64748b;font-size:.85rem'>上传本芯片对应的 <strong>app 镜像</strong>："
@@ -1053,37 +1098,90 @@ void WebPortal::handleSetup() {
             " }catch(e){document.getElementById('smsg').textContent=String(e);}"
             "}"
             "async function ctRefresh(){"
+            " if(ctBusy)return;"
             " try{"
             "  const r=await fetch('/debug/clock',{credentials:'same-origin'});"
             "  if(r.status===401){location.href='/login';return;}"
             "  const j=await r.json();"
-            "  const el=id=>document.getElementById(id);"
-            "  if(el('ctState'))el('ctState').textContent=j.state||'?';"
-            "  if(el('ctCount'))el('ctCount').textContent=j.count|0;"
-            "  if(el('ctCap'))el('ctCap').textContent=j.capacity|0;"
-            "  if(el('ctDrop'))el('ctDrop').textContent=j.dropped|0;"
-            "  if(el('ctPsram'))el('ctPsram').textContent=j.psram?'yes':'no';"
+            "  ctPaint(j);"
             "  return j;"
             " }catch(e){const m=document.getElementById('ctmsg');if(m)m.textContent=String(e);}"
             "}"
+            "function ctFmtElapsed(ms){"
+            " ms=ms|0; if(ms<=0)return '--';"
+            " const s=Math.floor(ms/1000); const m=Math.floor(s/60); const h=Math.floor(m/60);"
+            " if(h)return h+'h'+String(m%60).padStart(2,'0')+'m';"
+            " if(m)return m+'m'+String(s%60).padStart(2,'0')+'s';"
+            " return s+'s';}"
+            "let ctBusy=false; let ctLast=null;"
+            "function ctPaint(j){"
+            " if(j)ctLast=j; const s=ctLast||{};"
+            " const el=id=>document.getElementById(id);"
+            " const lab={IDLE:'空闲',REC:'录制中',STOP:'已停止'};"
+            " if(el('ctState'))el('ctState').textContent=lab[s.state]||s.state||'?';"
+            " if(el('ctElapsed'))el('ctElapsed').textContent=ctFmtElapsed(s.elapsedMs);"
+            " if(el('ctCount'))el('ctCount').textContent=s.count|0;"
+            " if(el('ctCap'))el('ctCap').textContent=s.capacity|0;"
+            " if(el('ctDrop'))el('ctDrop').textContent=s.dropped|0;"
+            " if(el('ctPsram'))el('ctPsram').textContent=s.psram?'yes':'no';"
+            " const xfer=ctBusy||!!s.xferBusy;"
+            " const st=s.state;"
+            " const on=(id,v)=>{const b=el(id);if(b)b.disabled=!v;};"
+            " on('ctBtnStart',!xfer&&st==='IDLE');"
+            " on('ctBtnStop',!xfer&&st==='REC');"
+            " on('ctBtnClear',!xfer&&st==='STOP');"
+            " on('ctBtnFetch',!xfer&&st==='STOP'&&(s.count|0)>0);"
+            "}"
             "async function ctPost(path){"
-            " const r=await fetch(path,{method:'POST',credentials:'same-origin'});"
-            " if(r.status===401){location.href='/login';return null;}"
-            " const j=await r.json();"
-            " const m=document.getElementById('ctmsg');"
-            " if(m)m.textContent=(j.ok?'OK ':'ERR ')+(j.error||j.state||'');"
-            " await ctRefresh();"
-            " return j;"
+            " if(ctBusy)return null;"
+            " ctBusy=true; ctPaint(ctLast);"
+            " try{"
+            "  const r=await fetch(path,{method:'POST',credentials:'same-origin'});"
+            "  if(r.status===401){location.href='/login';return null;}"
+            "  const j=await r.json();"
+            "  const m=document.getElementById('ctmsg');"
+            "  if(m)m.textContent=(j.ok?'OK ':'ERR ')+(j.error||j.state||'');"
+            "  ctBusy=false; ctPaint(j);"
+            "  return j;"
+            " }catch(e){"
+            "  ctBusy=false;"
+            "  const m=document.getElementById('ctmsg');if(m)m.textContent=String(e);"
+            "  await ctRefresh();"
+            " }"
             "}"
             "async function ctStart(){await ctPost('/debug/clock/start');}"
             "async function ctStop(){await ctPost('/debug/clock/stop');}"
             "async function ctClear(){await ctPost('/debug/clock/clear');}"
             "async function ctFetchBin(){"
+            " if(ctBusy)return;"
             " const st=await ctRefresh();"
             " if(!st||st.state!=='STOP'){"
             "  document.getElementById('ctmsg').textContent='请先停止录制再下载';return;}"
-            " document.getElementById('ctmsg').textContent='下载中（停 NTP）… CSV 请用 CLI';"
-            " location.href='/debug/clock/data';"
+            " if(!(st.count|0)){"
+            "  document.getElementById('ctmsg').textContent='没有可下载的样本';return;}"
+            " const bytes=(st.count||0)*42+32;"
+            " const mb=fmtBytes(bytes);"
+            " if(bytes>1048576&&!confirm('共 '+st.count+' 样本（'+mb+'），下载期间停 NTP。开始？'))return;"
+            " document.getElementById('ctmsg').textContent='下载中（'+mb+'，停 NTP）… 请勿关页';"
+            " ctBusy=true; ctPaint(Object.assign({},st,{xferBusy:true}));"
+            " try{"
+            "  const r=await fetch('/debug/clock/data',{credentials:'same-origin'});"
+            "  if(r.status===401){location.href='/login';return;}"
+            "  if(!r.ok){"
+            "   document.getElementById('ctmsg').textContent='下载失败 HTTP '+r.status;"
+            "   return;}"
+            "  const blob=await r.blob();"
+            "  let name='clock_trace.bin';"
+            "  const cd=r.headers.get('Content-Disposition')||'';"
+            "  const m=cd.match(/filename=\"([^\"]+)\"/);"
+            "  if(m)name=m[1];"
+            "  const a=document.createElement('a');"
+            "  a.href=URL.createObjectURL(blob);"
+            "  a.download=name; a.click();"
+            "  setTimeout(function(){URL.revokeObjectURL(a.href);},5000);"
+            "  document.getElementById('ctmsg').textContent='已保存 '+name+' · '+fmtBytes(blob.size);"
+            " }catch(e){document.getElementById('ctmsg').textContent=String(e);}"
+            " finally{ctBusy=false; await ctRefresh();}"
             "}"
             "ctRefresh(); setInterval(ctRefresh,2000);"
             "document.getElementById('apol').value='");

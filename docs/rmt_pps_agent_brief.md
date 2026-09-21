@@ -1,24 +1,17 @@
 # 工作分支说明（执行 / 辅助 AI）
 
-当前 **`main` = v1.1.39**，`GPS_PPS_RMT_EN=0`（RMT 板测已结案搁置）。
+**无进行中任务。** 上一件已结：
+
+→ v1.1.41 S3 OTA + `/cfg` 按钮 A–F **PASS** — [fw_flash_v1141_result_20260920.md](fw_flash_v1141_result_20260920.md)
+
+- 现网 `10.121.95.14`：`fwMark=v1.1.41`，LCK / NTP S1 / NVS 保留
+- 四键随 IDLE/REC/STOP；下载页不跳走，132 样本 `5576=32+132×42` `flags=DONE`
+- 任务书已完成，勿再刷：[fw_flash_v1141.md](fw_flash_v1141.md)
+
+更早：v1.1.40 OTA PASS — [fw_flash_v1140_result_20260920.md](fw_flash_v1140_result_20260920.md)
+
+## 背景入口
 
 - 总览：[CURRENT.md](CURRENT.md)
-- RMT 结案：[rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)
-- 时钟长测环：[clock_trace.md](clock_trace.md) · 板测 PASS：[clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md)
-- RAM 调试 log：[debug_log.md](debug_log.md)
-
-## 固件镜像（main）
-
-```text
-https://gh-proxy.com/https://raw.githubusercontent.com/luweixuancl/esp32-gnss-ntp/main/dist/firmware_esp32s3.bin
-```
-
-S3 app @ `0x10000`（已在 IDF5）。自 IDF4 须整片：见 [upgrade_idf5_from_1120.md](upgrade_idf5_from_1120.md)。
-
-## 勿再开 RMT EN=1 整机盲测
-
-需独立最小 sketch / GPIO 回环后再议。日常板测优先时钟环 CLI：
-
-```bash
-python3 tools/clock_trace_client.py --host <IP> --pass <PASS> capture --seconds 600 -o out.csv
-```
+- 时钟长测环：[clock_trace.md](clock_trace.md)
+- RMT 已结案，勿再开：[rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)

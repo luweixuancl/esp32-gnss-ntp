@@ -1,6 +1,6 @@
 # S3 特性深挖路线图（PPS 硬件捕获 / PSRAM 历史 / OTA / 外部时钟）
 
-> 状态（2026-09-19）：**`main` = v1.1.39**（`GPS_PPS_RMT_EN=0`）；RMT 板测结案 FAIL；Web OTA PASS；**时钟长测环板测 PASS**（二进制下载，设备端无 CSV）；ExtClock 待购件。  
+> 状态（2026-09-20）：本分支 **v1.1.41**（`GPS_PPS_RMT_EN=0`）；现网 S3 OTA PASS + `/cfg` 按钮 A–F PASS；RMT 结案 FAIL；ExtClock 待购件。  
 > 总览：[CURRENT.md](CURRENT.md)  
 > 相关：[esp32s3_devkitc1_hw.md](esp32s3_devkitc1_hw.md)、[idf5_adapt_20260919.md](idf5_adapt_20260919.md)、[clock_trace.md](clock_trace.md)
 
@@ -23,11 +23,13 @@
 - 生产路径：GPIO ISR + LocalClock（已验证 LCK / stratum 1）。  
 - 再开 EN 前：独立最小 sketch 或 GPIO 回环自测，勿在整机盲迭代。
 
-## 2. PSRAM 时钟长测环 —— **已实现并板测 PASS（v1.1.38；v1.1.39 仅二进制）**
+## 2. PSRAM 时钟长测环 —— **已实现并板测 PASS（v1.1.40 无参=全量）**
 
 - start/stop 状态机，**仅 Stopped 可拉**；下载期停 NTP。  
 - 板测：[clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md)（10 min、647 样本）。  
-- v1.1.39：设备端 **去掉 CSV**；CLI `tools/clock_trace_client.py` 本地转 CSV。  
+- v1.1.39：设备端 **去掉 CSV**；CLI 本地转 CSV。  
+- **v1.1.40**：无参 `GET /debug/clock/data` = 一次全量；现网 101 样本 DONE — [fw_flash_v1140_result_20260920.md](fw_flash_v1140_result_20260920.md)。  
+- **v1.1.41**：`/cfg` 四键随 IDLE/REC/STOP；现网 A–F PASS — [fw_flash_v1141_result_20260920.md](fw_flash_v1141_result_20260920.md)。  
 - 见 [clock_trace.md](clock_trace.md)。旧「通用 /history」仍取消。
 
 ## 3. OTA 双分区 —— **已实现；IDF5 自动往返 PASS（v1.1.36）**
