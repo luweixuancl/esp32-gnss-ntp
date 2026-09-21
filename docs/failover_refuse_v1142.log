@@ -1,0 +1,14 @@
+mode=failover holdoverSec=300 window=600s host=10.121.95.14
+[   0.02s] state -> LCK (ppsCount=335 fix=True sat=17 holdoverMs=0 q=16)
+[  29.08s] state -> UNS (ppsCount=363 fix=True sat=17 holdoverMs=0 q=4294967295)
+[UNS+2s   ] li=3 st=16 ref=INIT disp=65535.000s off=-3998956180089.31ms rtt=9.2ms
+[ALI      ] li=0 st=2  ref=
+&V disp=0.011s off=+16.59ms rtt=119.2ms
+>>> replug now (watch recovery, 240s window)
+[  67.08s] state -> ACQ (ppsCount=375 fix=False sat=0 holdoverMs=0 q=4294967295)
+[  80.18s] state -> LCK (ppsCount=384 fix=True sat=13 holdoverMs=0 q=16)
+[LCK+3s   ] li=0 st=1  ref=GPSS disp=0.016s off=-23.94ms rtt=5.8ms
+[ALI      ] li=0 st=2  ref=
+&V disp=0.011s off=+1.06ms rtt=92.8ms
+recovered 51.1s after UNS
+transitions: [(0.02, 'LCK'), (29.08, 'UNS'), (67.08, 'ACQ'), (80.18, 'LCK')]
