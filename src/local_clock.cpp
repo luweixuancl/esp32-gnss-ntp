@@ -75,21 +75,31 @@ void LocalClock::onPpsEdge(uint64_t edgeUs, uint32_t ppsCount) {
       const int64_t interval = static_cast<int64_t>(edgeUs - prev);
       const int64_t err = interval - 1000000LL;
       if (llabs(err) > CLK_PPS_INTERVAL_MAX_ERR_US) {
-        if (ppsBadStreak_ < 255) {
-          ppsBadStreak_++;
+        if (interval >= CLK_PPS_RESUME_GAP_US) {
+          // PPS stream restarted after a gap (module power cycle / re-plug).
+          // The stale baseline can never pass the ±5 ms gate again, which
+          // would reject every edge forever and deadlock ACQ — re-bootstrap.
+          edgeHead_ = 0;
+          edgeCount_ = 0;
+          ppsBadStreak_ = 0;
+        } else {
+          if (ppsBadStreak_ < 255) {
+            ppsBadStreak_++;
+          }
+          lastPpsCount_ = ppsCount;
+          ppsStable_ = (ppsBadStreak_ < CLK_PPS_UNSTABLE_COUNT) && (edgeCount_ >= 2);
+          if (!ppsStable_ &&
+              (state_ == ClockState::Locked || state_ == ClockState::Degraded ||
+               state_ == ClockState::Holdover)) {
+            Serial.printf("[clk] PPS glitch streak=%u → soft unsync\n",
+                          static_cast<unsigned>(ppsBadStreak_));
+            enterUnsynced();
+          }
+          return;
         }
-        lastPpsCount_ = ppsCount;
-        ppsStable_ = (ppsBadStreak_ < CLK_PPS_UNSTABLE_COUNT) && (edgeCount_ >= 2);
-        if (!ppsStable_ &&
-            (state_ == ClockState::Locked || state_ == ClockState::Degraded ||
-             state_ == ClockState::Holdover)) {
-          Serial.printf("[clk] PPS glitch streak=%u → soft unsync\n",
-                        static_cast<unsigned>(ppsBadStreak_));
-          enterUnsynced();
-        }
-        return;
+      } else {
+        ppsBadStreak_ = 0;
       }
-      ppsBadStreak_ = 0;
     }
   } else if (delta > 1) {
     // Missed ISR deliveries / queue overflow — interval sample is not 1s.
