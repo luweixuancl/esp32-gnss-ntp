@@ -1,10 +1,11 @@
 # 当前基线（与代码一致）
 
 > 更新日期：2026-09-21  
-> **本分支 `cursor/gps-failover-brief-a05e` = v1.1.42**（PPS 长间隙重引导）；**`main` 仍是 v1.1.39**（PR #11 合入后 tip 含 v1.1.41 文档，固件线以源码 `FW_MARK` 为准）  
-> **进行中**：v1.1.42 烧录 + Hold 5m 恢复复测 — [gps_failover_hold5m_result_20260921.md](gps_failover_hold5m_result_20260921.md)（项 1–5 PASS / 恢复 FAIL→已修）  
-> 现网 S3 仍为 **v1.1.41**（死锁未自愈，需 OTA）· OTA+按钮史档 — [fw_flash_v1141_result_20260920.md](fw_flash_v1141_result_20260920.md)  
-> 时钟长测板测 **PASS**（v1.1.38）— [clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md) · RMT 结案 FAIL — [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)
+> **`main` = v1.1.43**（守时档扩展 + HLD 时钟环墙钟补样；Hold 30m 精度现场 PASS）  
+> 守时精度 ≈ **1 ms / 30 min** — [holdover_precision_v1143_result_20260921.md](holdover_precision_v1143_result_20260921.md)  
+> PPS 断电恢复（v1.1.42）Hold 5m + Refuse **PASS** — [fw_flash_v1142_result_20260921.md](fw_flash_v1142_result_20260921.md)  
+> 现网 S3：`fwMark=v1.1.43` · Hold 30m · LCK / GPSS  
+> RMT 结案 FAIL — [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)
 
 本文是文档入口；**与代码冲突时以源码与本页为准**。
 
@@ -14,7 +15,7 @@
 |---|---|
 | Platform | pioarduino **55.03.311** = Arduino-ESP32 **3.3.11** / ESP-IDF **5.5.5** |
 | 入口 | `platformio.ini` → `[idf5]`；S3：`pio run -e esp32-s3` |
-| 产物 | `dist/` · 见 [dist/README.md](../dist/README.md) |
+| 产物 | `dist/` · 见 [dist/README.md](../dist/README.md) · Release **v1.1.43** |
 
 ## 功能现状
 
@@ -22,35 +23,29 @@
 |---|---|
 | GNSS + LocalClock + Stratum-1 NTP | ✅ GPIO PPS |
 | NMEA | ✅ **GGA + RMC + ZDA** + PCAS persist-skip |
-| Web OTA / S3 160 MHz + modem sleep | ✅ **v1.1.36 OTA 往返 PASS** |
+| Web OTA / S3 160 MHz + modem sleep | ✅ |
 | **RMT PPS** | ❌ 板测搁置（EN=0）— [CLOSED](rmt_pps_board_test_CLOSED_20260919.md) |
-| Web 调试 log | ✅ `GET /debug/log?pass=` — [debug_log.md](debug_log.md) |
-| 时钟长测环 | ✅ **v1.1.41** `/cfg` 按钮随状态机（现场 A–F PASS）— [clock_trace.md](clock_trace.md) · [验收](fw_flash_v1141_result_20260920.md) |
-| Hold 5m 失效链 | ⚠️ v1.1.41 现场：进 HLD/UNS **PASS**，恢复 **FAIL**（PPS 环死锁）→ **v1.1.42** 已修待刷 — [结果](gps_failover_hold5m_result_20260921.md) |
+| Web 调试 log | ✅ `GET /debug/log?pass=` — HLD 进度 30 s 一行（v1.1.43） |
+| 时钟长测环 | ✅ **v1.1.43** PPS 停转时墙钟 1 Hz 补样 — [clock_trace.md](clock_trace.md) |
+| GPS 异常守时档 | ✅ Refuse / 30s / 5m / **15m / 30m / 1h / 2h** · 30m 精度 PASS — [验收](holdover_precision_v1143_result_20260921.md) |
+| PPS 断电恢复 | ✅ v1.1.42 现场 PASS — [验收](fw_flash_v1142_result_20260921.md) |
 | 外置 RTC | `EXT_RTC_EN=0`，待购件 |
 
 ## 升级
 
 - 自 IDF4（≤ v1.1.21）：整片烧录 — [upgrade_idf5_from_1120.md](upgrade_idf5_from_1120.md)  
-- 已在 IDF5：可用 `firmware_esp32s3.bin` @ `0x10000` 升到 **v1.1.41**
+- 已在 IDF5：OTA `firmware_esp32s3.bin` @ `0x10000` 升到 **v1.1.43**
 
 ## 文档索引
 
 | 文档 | 用途 |
 |---|---|
-| [gps_failover_hold5m_result_20260921.md](gps_failover_hold5m_result_20260921.md) | Hold 5m 现场：1–5 PASS / 恢复 FAIL→v1.1.42 |
-| [gps_failover_hold5m_20260921.md](gps_failover_hold5m_20260921.md) | 任务书（Alpine / 无 ntpdate；复测仍用） |
-| [rmt_pps_agent_brief.md](rmt_pps_agent_brief.md) | 执行侧入口（待 v1.1.42 烧录复测） |
-| [fw_flash_v1141_result_20260920.md](fw_flash_v1141_result_20260920.md) | **v1.1.41 S3 OTA + `/cfg` 按钮 PASS** |
-| [fw_flash_v1141.md](fw_flash_v1141.md) | 辅助 AI 任务书（已完成） |
-| [fw_flash_v1140_result_20260920.md](fw_flash_v1140_result_20260920.md) | **v1.1.40 S3 OTA + 一键全量 PASS** |
-| [clock_trace_83min_20260920.md](clock_trace_83min_20260920.md) | 刷前 83 min 全量分析（v1.1.39，LCK 100%） |
-| [fw_flash_v1140.md](fw_flash_v1140.md) | v1.1.40 烧录任务书（已完成） |
-| [clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md) | **v1.1.38 时钟环板测 PASS** |
-| [clock_trace.md](clock_trace.md) | PSRAM 时钟长测环 API（v1.1.40 无参=全量） |
-| [ota_deploy_v1136_20260919.md](ota_deploy_v1136_20260919.md) | **v1.1.36 Web OTA PASS** |
+| [holdover_precision_v1143_result_20260921.md](holdover_precision_v1143_result_20260921.md) | **v1.1.43 Hold 30m 守时精度 PASS（≈1 ms/30 min）** |
+| [fw_flash_v1142_result_20260921.md](fw_flash_v1142_result_20260921.md) | **v1.1.42 Hold 5m + Refuse PASS** |
+| [rmt_pps_agent_brief.md](rmt_pps_agent_brief.md) | 执行侧入口（无进行中任务） |
+| [clock_trace.md](clock_trace.md) | PSRAM 时钟长测环 API |
+| [debug_log.md](debug_log.md) | RAM 调试日志 |
+| [gps_failover_hold5m_result_20260921.md](gps_failover_hold5m_result_20260921.md) | v1.1.41 恢复 FAIL 史档（已修） |
+| [fw_flash_v1141_result_20260920.md](fw_flash_v1141_result_20260920.md) | v1.1.41 OTA + `/cfg` 按钮 PASS |
 | [rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md) | RMT 板测结案 |
-| [debug_log.md](debug_log.md) | 免串口 RAM log |
-| [board_test_s3_idf5_20260919.md](board_test_s3_idf5_20260919.md) | S3 v1.1.28 冒烟 PASS |
-| [idf5_adapt_20260919.md](idf5_adapt_20260919.md) | 平台迁移 |
-| [s3_deep_dive_roadmap.md](s3_deep_dive_roadmap.md) | 后续项 |
+| [s3_deep_dive_roadmap.md](s3_deep_dive_roadmap.md) | 后续项（温补标定 / ExtClock） |

@@ -1,6 +1,7 @@
 # PPS 校准本地时钟与 GPS 交叉检核
 
-> **历史归档**：下文口径以当时固件为准。当前 `main` = **v1.1.39** / IDF5，见 [CURRENT.md](CURRENT.md)。
+> **历史归档 / 设计稿**：下文部分章节反映初版三档策略。当前固件 **v1.1.43** 已扩展为 Refuse / 30s / 5m / 15m / 30m / 1h / 2h，见 [CURRENT.md](CURRENT.md) · 精度验收 [holdover_precision_v1143_result_20260921.md](holdover_precision_v1143_result_20260921.md)。  
+> 当前 `main` = **v1.1.43** / IDF5。
 
 
 > 状态：已实现（含审核修复：Holdover 在 PPS 丢失时生效、WARN→Degraded 不重锚、策略缓存、PPS 原子拷贝、NTP LI/RefID 诚实化）  
@@ -181,7 +182,7 @@ uint16_t holdoverSec = 30;  // Refuse 时忽略；Short/Long 可覆盖预设
 
 **`Anomaly Mode`**
 
-- 旋转切换：`Refuse` / `Hold 30s` / `Hold 5m`（短文案适配 128 宽）
+- 旋转切换：`Refuse` / `Hold 30s` / `5m` / `15m` / `30m` / `1h` / `2h`（短文案见 `anomalyPolicyShortLabel`）
 - 短按：写入 NVS + `showMessage("Saved")`
 - 长按：返回
 
@@ -193,7 +194,7 @@ uint16_t holdoverSec = 30;  // Refuse 时忽略；Short/Long 可覆盖预设
 
 扩展 `/setup`（不仅 WiFi）：
 
-- 下拉框「GPS 异常策略」：Refuse / Holdover 30s / Holdover 5min
+- 下拉框「GPS 异常策略」：Refuse / 30s / 5m / 15m / 30m / 1h / 2h
 - `POST /save` JSON 增加 `anomalyPolicy`（及可选 `holdoverSec`）
 - 状态页「WiFi 配网」链可改为「设置」，STA 下也能改策略
 - `/status` JSON 增加只读字段：`anomalyPolicy`、`holdoverSec`；LocalClock 落地后另加 `clock.state`、`residualMs`、`freqPpm`

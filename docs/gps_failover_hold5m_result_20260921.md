@@ -42,22 +42,18 @@ notes: 用户整案复测时设备重启过一次；49492 样本 STOP 缓冲随�
   已先行归档 clock_trace_13h_20260920.md，无损失）
 ```
 
-## 根因（已在 v1.1.42 修复，commit `a2fcf55`）
+## 根因（成立；初版 `a2fcf55` 已加固，见修正计划）
 
 `LocalClock::onPpsEdge` 离群滤波死锁：PPS 中断 >5 ms 后，每条新边沿都与**停机前最后一条被接受边沿**比较，间隔恒为离群 → 全部丢弃且**基线永不前进** → `ppsBadStreak_≥3`、`ppsStable_=0` → anchor 引导分支永不执行 → 永久 ACQ。只有设备重启（清环）才能恢复。
 
 - 诊断指纹：`fresh=1 nmea=1 zda=1 rmc=1 pps +1/s` 全健康，唯 `anchor=0 stable=0` 恒驻
 - 为何史档未爆：OTA 重启走 `reset()` 清环；09-16 拔电测试时尚无此滤波（后为 RMT 双边沿缓解而加）——纯回归
-- 修复：间隔 ≥ `CLK_PPS_RESUME_GAP_US`（1.5 s）判为 **PPS 重启** → 重置边沿环 + badStreak 并接受该边沿；<1.5 s 双边沿毛刺维持原吸收路径
-- 宿主回归测试：`tools/local_clock_host_test/`（g++ stdlib 即可跑）：360 s 断电 → **+1 s anchor/stable 恢复、+3 s 重锁**；毛刺拒绝不回归
-
-## 审核备注（云端，2026-09-21）
-
-- CSV/log 与结论一致：`LCK→HLD@64s→UNS@364s（holdoverMs=300000）→ACQ@400s`；ACQ 段 `ppsCount` 652→847、`fix=True` 仍 `q=0xFFFFFFFF`，死锁指纹成立。
-- `onPpsEdge` 长间隙重引导与 `ppsFresh` 1.5 s 阈值对齐；`<1.5 s` 毛刺仍走原吸收路径。宿主回归已跑通（见下）。
-- 原提交的 `tools/local_clock_host_test` stubs 不完整（`#include "settings.h"` 打到真头文件），已补 `IPAddress.h`/`Preferences.h`/`String` 后 `ALL PASS`。
+- 修复：间隔 ≥ `CLK_PPS_RESUME_GAP_US`（1.5 s）判为 **PPS 重启**（与 delta 无关）→ 清环；若当时 LCK/DEG/HLD 则先 `enterUnsynced` 再接受边沿（禁止跨洞 UTC+1）。&lt;1.5 s 双边沿维持原吸收路径
+- 初版 `a2fcf55` 只在 `delta==1` 时清环、锁定态会误 +1 s；加固见 [gps_failover_fix_plan_v1142.md](gps_failover_fix_plan_v1142.md)
+- 宿主回归：`tools/local_clock_host_test/` — 360 s resume / HLD 内 resume / 2 s 空洞 / delta&gt;1 / 毛刺
 
 ## 遗留
 
-1. **v1.1.42 编译 + OTA 烧录**，重跑本失效链全链（须恢复到 LCK）+ Refuse 对照轮
-2. 现网在刷之前：v1.1.41 恢复手段仍只有整机重启（软重启不清环则依旧 ACQ）
+1. **待现网**：OTA v1.1.42 后重跑本失效链全链 + Refuse 对照 — [fw_flash_v1142.md](fw_flash_v1142.md)
+2. 现场「整机重启后依旧 ACQ」与「reset() 清环即恢复」矛盾，OTA 后若 GPS 已插上应自行 LCK；否则带 `/debug/log` 回来（可能有第二根因）
+3. v1.1.41 现网在复测前不要再拔模块电源（会再次卡死 ACQ）

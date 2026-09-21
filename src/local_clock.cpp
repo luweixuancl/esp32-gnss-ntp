@@ -68,21 +68,30 @@ void LocalClock::onPpsEdge(uint64_t edgeUs, uint32_t ppsCount) {
 
   // Outlier vs last *accepted* ring edge (double-edge / EMI glitch):
   // absorb the count, do not poison the ppm ring, do not walk UTC.
-  if (edgeCount_ > 0 && delta == 1) {
+  // Long gap (≥ CLK_PPS_RESUME_GAP_US) is a stream restart, not a glitch —
+  // checked before delta, because a power-cycled GNSS counter may look like
+  // delta==1 (software count continued) or delta>1 (count jumped).
+  if (edgeCount_ > 0) {
     const uint8_t prevIdx = static_cast<uint8_t>((edgeHead_ + kRing - 1) % kRing);
     const uint64_t prev = edges_[prevIdx];
     if (edgeUs > prev) {
       const int64_t interval = static_cast<int64_t>(edgeUs - prev);
-      const int64_t err = interval - 1000000LL;
-      if (llabs(err) > CLK_PPS_INTERVAL_MAX_ERR_US) {
-        if (interval >= CLK_PPS_RESUME_GAP_US) {
-          // PPS stream restarted after a gap (module power cycle / re-plug).
-          // The stale baseline can never pass the ±5 ms gate again, which
-          // would reject every edge forever and deadlock ACQ — re-bootstrap.
-          edgeHead_ = 0;
-          edgeCount_ = 0;
-          ppsBadStreak_ = 0;
-        } else {
+      if (interval >= CLK_PPS_RESUME_GAP_US) {
+        // Stale baseline can never pass the ±5 ms gate again; rejecting
+        // every later 1 Hz edge deadlocks ACQ (2026-09-21 field).
+        edgeHead_ = 0;
+        edgeCount_ = 0;
+        ppsBadStreak_ = 0;
+        if (state_ == ClockState::Locked || state_ == ClockState::Degraded ||
+            state_ == ClockState::Holdover) {
+          // Do not walk UTC by +1 s across a multi-second hole.
+          Serial.printf("[clk] PPS resume gap=%lld us → re-bootstrap\n",
+                        static_cast<long long>(interval));
+          enterUnsynced();
+        }
+      } else if (delta == 1) {
+        const int64_t err = interval - 1000000LL;
+        if (llabs(err) > CLK_PPS_INTERVAL_MAX_ERR_US) {
           if (ppsBadStreak_ < 255) {
             ppsBadStreak_++;
           }
@@ -97,8 +106,11 @@ void LocalClock::onPpsEdge(uint64_t edgeUs, uint32_t ppsCount) {
           }
           return;
         }
-      } else {
         ppsBadStreak_ = 0;
+      } else if (delta > 1) {
+        if (ppsBadStreak_ < 250) {
+          ppsBadStreak_ = static_cast<uint8_t>(ppsBadStreak_ + delta);
+        }
       }
     }
   } else if (delta > 1) {

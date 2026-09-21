@@ -1,5 +1,4 @@
 #pragma once
-// Minimal Arduino stubs for host-side LocalClock tests.
 #include <cstdint>
 #include <cstdio>
 #include <cmath>
@@ -12,26 +11,16 @@ struct SerialStub {
 };
 inline SerialStub Serial;
 
-using std::isfinite;
-
-// Enough of Arduino String for settings.h inline helpers.
-class String {
+class String : public std::string {
  public:
   String() = default;
-  String(const char* s) : s_(s ? s : "") {}
-  String(const std::string& s) : s_(s) {}
-  bool isEmpty() const { return s_.empty(); }
-  const char* c_str() const { return s_.c_str(); }
-  String& operator=(const char* s) {
-    s_ = s ? s : "";
-    return *this;
-  }
-
- private:
-  std::string s_;
+  String(const char* s) : std::string(s ? s : "") {}
+  bool isEmpty() const { return empty(); }
 };
 
 struct EspStub {
-  uint64_t getEfuseMac() const { return 0xC49E7E0733F4ULL; }
+  uint64_t getEfuseMac() const { return 0x9EC4ull; }
 };
 inline EspStub ESP;
+
+using std::isfinite;

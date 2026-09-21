@@ -936,6 +936,36 @@ void GpsService::loop(AnomalyPolicy policy, uint16_t holdoverSec) {
   publishStatus(work);
   clockTraceMaybeSample(work);
 
+  // State transitions + Holdover progress → RAM debug log (pull via /debug/log).
+  {
+    static ClockState lastLogged = ClockState::Acquiring;
+    static uint32_t lastHldLogMs = 0;
+    if (work.clockState != lastLogged) {
+      debugLogf("[clk] state %s→%s holdMs=%lu q=%lu ppm=%.2f sat=%u\n",
+                clockStateLabel(lastLogged), clockStateLabel(work.clockState),
+                static_cast<unsigned long>(work.holdoverMs),
+                static_cast<unsigned long>(work.qualityMs),
+                static_cast<double>(work.freqPpm), work.satellites);
+      lastLogged = work.clockState;
+      lastHldLogMs = millis();
+    }
+#if CLK_HOLDOVER_DEBUG_LOG_MS > 0
+    if (work.clockState == ClockState::Holdover) {
+      const uint32_t nowH = millis();
+      if (lastHldLogMs == 0 || (nowH - lastHldLogMs) >= CLK_HOLDOVER_DEBUG_LOG_MS) {
+        lastHldLogMs = nowH;
+        debugLogf("[clk] HLD age_s=%lu q=%lu ppm=%.3f tcorr=%.3f temp=%.1f holdSec=%u\n",
+                  static_cast<unsigned long>(work.holdoverMs / 1000u),
+                  static_cast<unsigned long>(work.qualityMs),
+                  static_cast<double>(work.freqPpm),
+                  static_cast<double>(work.tempCorrPpm),
+                  static_cast<double>(work.tempC),
+                  static_cast<unsigned>(holdoverSec));
+      }
+    }
+#endif
+  }
+
 #if GPS_LOCK_DIAG_MS > 0
   if (!work.timeValid) {
     static uint32_t lastDiagMs = 0;

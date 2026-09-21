@@ -1,7 +1,7 @@
 # S3 冒烟记录 — NTP 对时 + 13 min 稳态（v1.1.28）
 
 > **历史冒烟**（2026-09-19）· 固件 **v1.1.28** · 已合入  
-> 当前 tip **v1.1.39** — [CURRENT.md](CURRENT.md) · 汇总 [board_test_s3_idf5_20260919.md](board_test_s3_idf5_20260919.md)  
+> 当前 tip **v1.1.43** — [CURRENT.md](CURRENT.md) · 汇总 [board_test_s3_idf5_20260919.md](board_test_s3_idf5_20260919.md)  
 > 平台：pioarduino 55.03.311 · ESP32-S3 DevKitC-1 N16R8 · `192.168.1.24` / `H3C_LuxYang`
 
 ## 前置状态

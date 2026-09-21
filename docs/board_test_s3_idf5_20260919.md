@@ -3,7 +3,7 @@
 > 冒烟固件：**v1.1.28** · 整片 `merged_firmware_esp32s3_n16r8_0x0.bin`  
 > 平台：pioarduino 55.03.311（Arduino 3.3.11 / IDF 5.5.5）  
 > 设备：`192.168.1.24` · `H3C_LuxYang`  
-> 当前 tip：**v1.1.39** — [CURRENT.md](CURRENT.md)
+> 当前 tip：**v1.1.43** — [CURRENT.md](CURRENT.md)
 
 ## 升级路径
 
@@ -32,4 +32,4 @@
 | **v1.1.39** 去掉设备端 CSV 下载 | 仅二进制；CLI 转 CSV — [clock_trace.md](clock_trace.md) |
 | **v1.1.41** `/cfg` 按钮随状态机 | **PASS**（A–F）— [fw_flash_v1141_result_20260920.md](fw_flash_v1141_result_20260920.md) |
 
-生产形态：GPIO 授时 + Web OTA + 时钟迹环长测（无参全量，按钮跟状态）；外置 RTC 待购件。当前 tip **v1.1.41**。
+生产形态：GPIO 授时 + Web OTA + 时钟迹环长测（无参全量，按钮跟状态）；外置 RTC 待购件。当前 tip **v1.1.43**。

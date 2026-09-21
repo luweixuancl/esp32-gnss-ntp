@@ -1,0 +1,78 @@
+# debug_log fw=v1.1.43 used=5881 dropped=0 uptime_ms=2045905 heap=191132
+[clock-trace] START cap=86400 psram=1
+[clk] state LCK→HLD holdMs=0 q=117 ppm=-12.02 sat=14
+[clk] HLD age_s=30 q=118 ppm=-12.021 tcorr=-0.000 temp=42.8 holdSec=1800
+[clk] HLD age_s=60 q=120 ppm=-12.021 tcorr=-0.000 temp=42.8 holdSec=1800
+[clk] HLD age_s=90 q=121 ppm=-12.021 tcorr=-0.000 temp=42.8 holdSec=1800
+[clk] HLD age_s=120 q=123 ppm=-12.021 tcorr=-0.000 temp=42.8 holdSec=1800
+[clk] HLD age_s=150 q=124 ppm=-12.021 tcorr=-0.000 temp=42.8 holdSec=1800
+[clk] HLD age_s=180 q=126 ppm=-12.021 tcorr=-0.000 temp=42.8 holdSec=1800
+[clk] HLD age_s=210 q=127 ppm=-12.021 tcorr=-0.000 temp=42.8 holdSec=1800
+[clk] HLD age_s=240 q=129 ppm=-12.021 tcorr=-0.000 temp=42.8 holdSec=1800
+[clk] HLD age_s=270 q=130 ppm=-12.021 tcorr=-0.000 temp=42.8 holdSec=1800
+[clk] HLD age_s=300 q=132 ppm=-12.021 tcorr=-0.000 temp=42.8 holdSec=1800
+[clk] HLD age_s=330 q=133 ppm=-12.021 tcorr=-0.000 temp=42.8 holdSec=1800
+[clk] HLD age_s=360 q=135 ppm=-12.021 tcorr=-0.000 temp=42.8 holdSec=1800
+[clk] HLD age_s=390 q=136 ppm=-12.021 tcorr=-0.000 temp=42.8 holdSec=1800
+[clk] HLD age_s=420 q=138 ppm=-12.021 tcorr=-0.000 temp=42.8 holdSec=1800
+[clk] HLD age_s=450 q=139 ppm=-12.021 tcorr=-0.000 temp=42.8 holdSec=1800
+[clk] HLD age_s=480 q=141 ppm=-12.021 tcorr=0.140 temp=41.8 holdSec=1800
+[clk] HLD age_s=510 q=142 ppm=-12.021 tcorr=-0.000 temp=42.8 holdSec=1800
+[clk] HLD age_s=540 q=144 ppm=-12.021 tcorr=0.140 temp=41.8 holdSec=1800
+[clk] HLD age_s=570 q=145 ppm=-12.021 tcorr=0.140 temp=41.8 holdSec=1800
+[clk] HLD age_s=600 q=147 ppm=-12.021 tcorr=0.140 temp=41.8 holdSec=1800
+[clk] HLD age_s=630 q=148 ppm=-12.021 tcorr=0.140 temp=41.8 holdSec=1800
+[clk] HLD age_s=660 q=150 ppm=-12.021 tcorr=-0.000 temp=42.8 holdSec=1800
+[clk] HLD age_s=690 q=151 ppm=-12.021 tcorr=0.140 temp=41.8 holdSec=1800
+[clk] HLD age_s=720 q=153 ppm=-12.021 tcorr=0.140 temp=41.8 holdSec=1800
+[clk] HLD age_s=750 q=154 ppm=-12.021 tcorr=0.140 temp=41.8 holdSec=1800
+[clk] HLD age_s=780 q=156 ppm=-12.021 tcorr=-0.000 temp=42.8 holdSec=1800
+[clk] HLD age_s=810 q=157 ppm=-12.021 tcorr=0.140 temp=41.8 holdSec=1800
+[clk] HLD age_s=840 q=159 ppm=-12.021 tcorr=0.140 temp=41.8 holdSec=1800
+[clk] HLD age_s=870 q=160 ppm=-12.021 tcorr=0.140 temp=41.8 holdSec=1800
+[clk] HLD age_s=900 q=162 ppm=-12.021 tcorr=0.140 temp=41.8 holdSec=1800
+[clk] HLD age_s=930 q=163 ppm=-12.021 tcorr=0.140 temp=41.8 holdSec=1800
+[clk] HLD age_s=960 q=165 ppm=-12.021 tcorr=0.140 temp=41.8 holdSec=1800
+[clk] HLD age_s=990 q=166 ppm=-12.021 tcorr=0.280 temp=40.8 holdSec=1800
+[clk] HLD age_s=1020 q=168 ppm=-12.021 tcorr=0.140 temp=41.8 holdSec=1800
+[clk] HLD age_s=1050 q=169 ppm=-12.021 tcorr=0.280 temp=40.8 holdSec=1800
+[clk] HLD age_s=1080 q=171 ppm=-12.021 tcorr=0.140 temp=41.8 holdSec=1800
+[clk] HLD age_s=1110 q=172 ppm=-12.021 tcorr=0.280 temp=40.8 holdSec=1800
+[clk] HLD age_s=1140 q=174 ppm=-12.021 tcorr=0.280 temp=40.8 holdSec=1800
+[clk] HLD age_s=1170 q=175 ppm=-12.021 tcorr=0.140 temp=41.8 holdSec=1800
+[clk] HLD age_s=1200 q=177 ppm=-12.021 tcorr=0.280 temp=40.8 holdSec=1800
+[clk] HLD age_s=1230 q=178 ppm=-12.021 tcorr=0.280 temp=40.8 holdSec=1800
+[clk] HLD age_s=1260 q=180 ppm=-12.021 tcorr=0.280 temp=40.8 holdSec=1800
+[clk] HLD age_s=1290 q=181 ppm=-12.021 tcorr=0.280 temp=40.8 holdSec=1800
+[clk] HLD age_s=1320 q=183 ppm=-12.021 tcorr=0.280 temp=40.8 holdSec=1800
+[clk] HLD age_s=1350 q=184 ppm=-12.021 tcorr=0.280 temp=40.8 holdSec=1800
+[clk] HLD age_s=1380 q=186 ppm=-12.021 tcorr=0.420 temp=39.8 holdSec=1800
+[clk] HLD age_s=1410 q=187 ppm=-12.021 tcorr=0.140 temp=41.8 holdSec=1800
+[clk] HLD age_s=1440 q=189 ppm=-12.021 tcorr=0.280 temp=40.8 holdSec=1800
+[clk] HLD age_s=1470 q=190 ppm=-12.021 tcorr=0.280 temp=40.8 holdSec=1800
+[clk] HLD age_s=1500 q=192 ppm=-12.021 tcorr=0.280 temp=40.8 holdSec=1800
+[clk] HLD age_s=1530 q=193 ppm=-12.021 tcorr=0.140 temp=41.8 holdSec=1800
+[clk] HLD age_s=1560 q=195 ppm=-12.021 tcorr=0.140 temp=41.8 holdSec=1800
+[clk] HLD age_s=1590 q=196 ppm=-12.021 tcorr=0.280 temp=40.8 holdSec=1800
+[clk] HLD age_s=1620 q=198 ppm=-12.021 tcorr=0.280 temp=40.8 holdSec=1800
+[clk] HLD age_s=1650 q=199 ppm=-12.021 tcorr=0.140 temp=41.8 holdSec=1800
+[clk] HLD age_s=1680 q=201 ppm=-12.021 tcorr=0.280 temp=40.8 holdSec=1800
+[clk] HLD age_s=1710 q=202 ppm=-12.021 tcorr=-0.000 temp=42.8 holdSec=1800
+[clk] HLD age_s=1740 q=204 ppm=-12.021 tcorr=0.140 temp=41.8 holdSec=1800
+[clk] HLD age_s=1770 q=205 ppm=-12.021 tcorr=0.280 temp=40.8 holdSec=1800
+[clk] state HLD→UNS holdMs=0 q=4294967295 ppm=-12.02 sat=14
+[clk] wait tv=0 clk=UNS pps=148 fresh=0 nmea=0 zda=0 rmc=0 anchor=0 stable=1 r=0 commit=1789969445 age=1801263
+[clk] wait tv=0 clk=UNS pps=148 fresh=0 nmea=0 zda=0 rmc=0 anchor=0 stable=1 r=0 commit=1789969445 age=1806266
+[clk] wait tv=0 clk=UNS pps=148 fresh=0 nmea=0 zda=0 rmc=0 anchor=0 stable=1 r=0 commit=1789969445 age=1811266
+[clk] wait tv=0 clk=UNS pps=148 fresh=0 nmea=0 zda=0 rmc=0 anchor=0 stable=1 r=0 commit=1789969445 age=1816268
+[clk] wait tv=0 clk=UNS pps=148 fresh=0 nmea=0 zda=0 rmc=0 anchor=0 stable=1 r=0 commit=1789969445 age=1821269
+[clk] wait tv=0 clk=UNS pps=148 fresh=0 nmea=0 zda=0 rmc=0 anchor=0 stable=1 r=0 commit=1789969445 age=1826269
+[clk] wait tv=0 clk=UNS pps=155 fresh=1 nmea=0 zda=0 rmc=0 anchor=0 stable=0 r=0 commit=1789969445 age=1831272
+[clk] wait tv=0 clk=UNS pps=155 fresh=0 nmea=1 zda=0 rmc=1 anchor=0 stable=0 r=0 commit=1789971280 age=703
+[clk] state UNS→ACQ holdMs=0 q=4294967295 ppm=-12.02 sat=10
+[clk] wait tv=0 clk=ACQ pps=156 fresh=1 nmea=1 zda=1 rmc=1 anchor=0 stable=0 r=0 commit=1233555286 age=310
+[clk] state ACQ→LCK holdMs=0 q=16 ppm=-11.60 sat=11
+[clk] state LCK→ACQ holdMs=0 q=4294967295 ppm=-11.51 sat=11
+[clk] wait tv=0 clk=ACQ pps=167 fresh=1 nmea=1 zda=1 rmc=1 anchor=0 stable=1 r=2147483647 commit=1789971297 age=0
+[clk] state ACQ→LCK holdMs=0 q=16 ppm=-11.42 sat=12
+[clock-trace] STOP count=1962 dropped=0

@@ -1,0 +1,43 @@
+mode=failover holdoverSec=300 window=600s host=10.121.95.14
+[   0.02s] state -> LCK (ppsCount=84 fix=True sat=17 holdoverMs=0 q=16)
+[  25.19s] state -> HLD (ppsCount=107 fix=True sat=17 holdoverMs=960 q=116)
+[  29.08s] HLD age=  3.9s holdoverMs=4856.0 q=116 residual=0 ppsCount=107 sat=17 tempRefC=41.80
+[  44.24s] HLD age= 19.1s holdoverMs=20008.0 q=117 residual=0 ppsCount=107 sat=17 tempRefC=41.80
+[HLD+30s  ] li=0 st=1  ref=GPSS disp=0.117s off=-23.14ms rtt=7.8ms
+[ALI      ] li=0 st=3  ref=dkr disp=0.010s off=+7.80ms rtt=110.8ms
+[  59.19s] HLD age= 34.0s holdoverMs=34960.0 q=117 residual=0 ppsCount=107 sat=17 tempRefC=41.80
+[  74.14s] HLD age= 49.0s holdoverMs=49911.0 q=118 residual=0 ppsCount=107 sat=17 tempRefC=41.80
+[  89.09s] HLD age= 63.9s holdoverMs=64866.0 q=119 residual=0 ppsCount=107 sat=17 tempRefC=41.80
+[ 104.04s] HLD age= 78.9s holdoverMs=79816.0 q=119 residual=0 ppsCount=107 sat=17 tempRefC=41.80
+[ 119.19s] HLD age= 94.0s holdoverMs=94967.0 q=120 residual=0 ppsCount=107 sat=17 tempRefC=41.80
+[ 134.14s] HLD age=109.0s holdoverMs=109920.0 q=121 residual=0 ppsCount=107 sat=17 tempRefC=41.80
+[HLD+120s ] li=0 st=1  ref=GPSS disp=0.122s off=-24.61ms rtt=6.8ms
+[ALI      ] li=0 st=2  ref=
+&V disp=0.011s off=+4.86ms rtt=96.5ms
+[ 149.10s] HLD age=123.9s holdoverMs=124868.0 q=122 residual=0 ppsCount=107 sat=17 tempRefC=41.80
+[ 164.05s] HLD age=138.9s holdoverMs=139817.0 q=122 residual=0 ppsCount=107 sat=17 tempRefC=41.80
+[ 179.20s] HLD age=154.0s holdoverMs=154973.0 q=123 residual=0 ppsCount=107 sat=17 tempRefC=41.80
+[ 194.15s] HLD age=169.0s holdoverMs=169924.0 q=124 residual=0 ppsCount=107 sat=17 tempRefC=41.80
+[ 209.10s] HLD age=183.9s holdoverMs=184873.0 q=125 residual=0 ppsCount=107 sat=17 tempRefC=41.80
+[ 224.05s] HLD age=198.9s holdoverMs=199829.0 q=125 residual=0 ppsCount=107 sat=17 tempRefC=41.80
+[ 239.21s] HLD age=214.0s holdoverMs=214979.0 q=126 residual=0 ppsCount=107 sat=17 tempRefC=41.80
+[ 254.05s] HLD age=228.9s holdoverMs=229826.0 q=127 residual=0 ppsCount=107 sat=17 tempRefC=41.80
+[HLD+240s ] li=0 st=1  ref=GPSS disp=0.128s off=-21.90ms rtt=9.5ms
+[ALI      ] li=0 st=2  ref=
+&V disp=0.011s off=-11.96ms rtt=64.1ms
+[ 269.21s] HLD age=244.0s holdoverMs=244984.0 q=128 residual=0 ppsCount=107 sat=17 tempRefC=41.80
+[ 284.16s] HLD age=259.0s holdoverMs=259933.0 q=128 residual=0 ppsCount=107 sat=17 tempRefC=41.80
+[ 299.22s] HLD age=274.0s holdoverMs=274991.0 q=129 residual=0 ppsCount=107 sat=17 tempRefC=41.80
+[ 314.17s] HLD age=289.0s holdoverMs=289939.0 q=130 residual=0 ppsCount=107 sat=17 tempRefC=41.80
+[ 325.23s] state -> UNS (ppsCount=107 fix=False sat=17 holdoverMs=0 q=4294967295)
+[UNS+2s   ] li=3 st=16 ref=INIT disp=65535.000s off=-3998955878407.51ms rtt=5.9ms
+[ALI      ] li=0 st=2  ref=
+&V disp=0.011s off=+1.70ms rtt=97.9ms
+>>> replug now (watch recovery, 240s window)
+[ 376.22s] state -> ACQ (ppsCount=113 fix=True sat=12 holdoverMs=0 q=4294967295)
+[ 379.09s] state -> LCK (ppsCount=116 fix=True sat=14 holdoverMs=0 q=16)
+[LCK+3s   ] li=0 st=1  ref=GPSS disp=0.016s off=-24.10ms rtt=5.6ms
+[ALI      ] li=0 st=2  ref=
+&V disp=0.011s off=+3.18ms rtt=86.8ms
+recovered 53.9s after UNS
+transitions: [(0.02, 'LCK'), (25.19, 'HLD'), (325.23, 'UNS'), (376.22, 'ACQ'), (379.09, 'LCK')]

@@ -73,7 +73,8 @@ class LocalClock {
   void setAnchor(uint32_t utcSec, uint64_t edgeUs, uint32_t ppsCount);
   void enterHoldover();
   // Soft unsync: drop phase anchor but keep PPS edge ring / ppm so re-lock
-  // after a glitch burst does not cold-start the second scale.
+  // after a glitch burst does not cold-start the second scale. A long PPS
+  // gap is handled in onPpsEdge (wipe ring + this), not here.
   void enterUnsynced();
   void applyFail(AnomalyPolicy policy);
   void pushEdge(uint64_t edgeUs);

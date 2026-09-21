@@ -1,13 +1,16 @@
 #pragma once
 #include <cstdint>
 
-// Minimal IPv4 holder so include/settings.h compiles on host.
 class IPAddress {
  public:
-  IPAddress() : a_(0), b_(0), c_(0), d_(0) {}
-  IPAddress(uint8_t a, uint8_t b, uint8_t c, uint8_t d)
-      : a_(a), b_(b), c_(c), d_(d) {}
+  IPAddress() = default;
+  IPAddress(uint8_t a, uint8_t b, uint8_t c, uint8_t d) {
+    oct_[0] = a;
+    oct_[1] = b;
+    oct_[2] = c;
+    oct_[3] = d;
+  }
 
  private:
-  uint8_t a_, b_, c_, d_;
+  uint8_t oct_[4] = {};
 };
