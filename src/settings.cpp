@@ -68,7 +68,7 @@ AppSettings SettingsStore::load() const {
   s.timezoneHours = static_cast<int8_t>(prefs_.getInt("tz", 8));
 
   const uint8_t apol = static_cast<uint8_t>(prefs_.getUChar("apol", 0));
-  if (apol <= static_cast<uint8_t>(AnomalyPolicy::HoldoverLong)) {
+  if (apol < anomalyPolicyCount()) {
     s.anomalyPolicy = static_cast<AnomalyPolicy>(apol);
   } else {
     s.anomalyPolicy = AnomalyPolicy::Refuse;
@@ -81,8 +81,8 @@ AppSettings SettingsStore::load() const {
   if (s.holdoverSec < 10) {
     s.holdoverSec = 10;
   }
-  if (s.holdoverSec > 600) {
-    s.holdoverSec = 600;
+  if (s.holdoverSec > CLK_HOLDOVER_SEC_MAX) {
+    s.holdoverSec = CLK_HOLDOVER_SEC_MAX;
   }
   s.autoReconnect = prefs_.getBool("arec", true);
   s.apPassword = prefs_.getString("appw", "");

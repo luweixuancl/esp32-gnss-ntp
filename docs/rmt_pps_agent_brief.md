@@ -1,18 +1,24 @@
 # 工作分支说明（执行 / 辅助 AI）
 
-**无进行中任务。** 上一件已结：
+**进行中：** 守时精度长测（v1.1.43）
 
-→ v1.1.42 OTA + Hold 5m 全链 **PASS** + Refuse 对照 **PASS** — [fw_flash_v1142_result_20260921.md](fw_flash_v1142_result_20260921.md)
+→ 任务书：[holdover_precision_v1143.md](holdover_precision_v1143.md)  
+→ 新守时档：30s / 5m / **15m / 30m / 1h / 2h** + Refuse  
+→ 用 **时钟长测 (PSRAM)**（HLD 段墙钟 1 Hz 补样）+ **`/debug/log`**  
+→ 推荐主测 **Hold 30m**；结果写 `docs/holdover_precision_v1143_result_20260921.md`
 
-- 现网 `10.121.95.14`：`fwMark=v1.1.42`，Hold 5m，LCK / NTP S1 GPSS
-- ACQ→LCK **2.9 s**（修复 v1.1.41 断电恢复死锁）；Refuse：`LCK→UNS` 无 HLD
-- 任务书已完成，勿再刷：[fw_flash_v1142.md](fw_flash_v1142.md)
+| 项 | 值 |
+|---|---|
+| 现网 | `10.121.95.14` · 口令 `NTP-9EC4` |
+| 固件 | **刷 v1.1.43**（本分支） |
+| 策略 | `anomalyPolicy=4`（Hold 30m） |
+| 注入 | 拔 GPS **模块电源** |
 
-更早：v1.1.41 恢复 FAIL（已修）— [gps_failover_hold5m_result_20260921.md](gps_failover_hold5m_result_20260921.md)
+上一件已结：v1.1.42 Hold 5m + Refuse **PASS** — [fw_flash_v1142_result_20260921.md](fw_flash_v1142_result_20260921.md)
 
 ## 背景入口
 
 - 总览：[CURRENT.md](CURRENT.md)
-- 史档 Hold 全链：[pps_pull_test_20260916.md](pps_pull_test_20260916.md)
-- 宿主回归：`tools/local_clock_host_test/`（6 场景 `ALL PASS`）
+- 时钟长测：[clock_trace.md](clock_trace.md)
+- debug log：[debug_log.md](debug_log.md)
 - RMT 已结案，勿再开：[rmt_pps_board_test_CLOSED_20260919.md](rmt_pps_board_test_CLOSED_20260919.md)

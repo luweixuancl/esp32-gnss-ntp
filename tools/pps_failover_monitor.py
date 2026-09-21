@@ -74,8 +74,8 @@ def main() -> int:
                     help="seconds reserved for the physical pull (failover)")
     ap.add_argument("--recovery", type=int, default=240,
                     help="seconds to watch recovery after UNS")
-    ap.add_argument("--max-window", type=int, default=1200,
-                    help="hard cap on total monitoring seconds")
+    ap.add_argument("--max-window", type=int, default=14400,
+                    help="hard cap on total monitoring seconds (default 4h for long Hold)")
     ap.add_argument("--csv", default="", help="optional per-second CSV path")
     args = ap.parse_args()
 

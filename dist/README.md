@@ -9,21 +9,20 @@
 
 ## Current build
 
-- Mark: **v1.1.42**（PPS 流重启清环，修断电后 ACQ 死锁）— [`docs/gps_failover_fix_plan_v1142.md`](../docs/gps_failover_fix_plan_v1142.md)
-- 现网复测任务书 — [`docs/fw_flash_v1142.md`](../docs/fw_flash_v1142.md)
+- Mark: **v1.1.43**（守时档 15m/30m/1h/2h + HLD 时钟环 1 Hz 补样）— [`docs/holdover_precision_v1143.md`](../docs/holdover_precision_v1143.md)
 - `GPS_PPS_RMT_EN=0` — [`docs/rmt_pps_board_test_CLOSED_20260919.md`](../docs/rmt_pps_board_test_CLOSED_20260919.md)
 - Platform: pioarduino 55.03.311（Arduino 3.3.11 / IDF 5.5.5）
-- Branch: `cursor/pps-resume-deadlock-6c51`
+- Branch: `cursor/holdover-options-a05e`
 
 ## Verify
 
 ```text
-wc -c firmware_esp32s3.bin   # 1103104
+wc -c firmware_esp32s3.bin   # 1104096
 sha256sum -c SHA256SUMS
 ```
 
 ## China mirror
 
 ```text
-https://gh-proxy.com/https://raw.githubusercontent.com/luweixuancl/esp32-gnss-ntp/cursor/pps-resume-deadlock-6c51/dist/firmware_esp32s3.bin
+https://gh-proxy.com/https://raw.githubusercontent.com/luweixuancl/esp32-gnss-ntp/cursor/holdover-options-a05e/dist/firmware_esp32s3.bin
 ```

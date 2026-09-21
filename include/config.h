@@ -4,11 +4,11 @@
 // OLED mark is unambiguous after OTA / serial upgrade.
 #define FW_VER_MAJOR         1
 #define FW_VER_MINOR         1
-#define FW_VER_PATCH         42
-// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.42").
-#define FW_MARK              "v1.1.42"
+#define FW_VER_PATCH         43
+// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.43").
+#define FW_MARK              "v1.1.43"
 // Full string for /status, /cfg, serial, OTA pages.
-#define FW_VERSION           "1.1.42"
+#define FW_VERSION           "1.1.43"
 // Reject obviously truncated OTA payloads before activating the slot.
 #define OTA_MIN_IMAGE_BYTES      (200 * 1024)
 // After a pending-verify OTA boot, wait until tasks are alive this long before
@@ -224,7 +224,17 @@
 #define CLK_PPS_UNSTABLE_COUNT        3   // consecutive outliers → soft unsync
 #define CLK_HOLDOVER_SHORT_SEC       30
 #define CLK_HOLDOVER_LONG_SEC       300
+#define CLK_HOLDOVER_15M_SEC        900
+#define CLK_HOLDOVER_30M_SEC       1800
+#define CLK_HOLDOVER_1H_SEC        3600
+#define CLK_HOLDOVER_2H_SEC        7200
+// NVS / UI clamp for ahold (uint16); covers longest preset (2 h).
+#define CLK_HOLDOVER_SEC_MAX       CLK_HOLDOVER_2H_SEC
 #define CLK_PPS_EDGE_RING            16
+// Periodic Holdover progress lines into RAM debug log (ms). 0 = off.
+#ifndef CLK_HOLDOVER_DEBUG_LOG_MS
+#define CLK_HOLDOVER_DEBUG_LOG_MS  30000
+#endif
 #define CLK_PPM_EMA_ALPHA          0.2f
 // Average this many 1s PPS intervals before EMA (needs span+1 edges).
 #define CLK_PPM_SPAN_SEC              8
@@ -301,9 +311,9 @@
 // Extra uncertainty booked when entering / while in holdover (ms).
 #define CLK_HOLDOVER_ENTRY_MS       100
 // Safety exit when already-degraded residual + growth exceeds this. Primary
-// holdover limit is still holdoverSec (30/300); at 50 ppm × 300 s growth is
-// only ~15 ms, so this mainly catches high residual on entry.
-#define CLK_HOLDOVER_MAX_QUALITY_MS 500
+// holdover limit is still holdoverSec. At 50 ppm floor, 2 h growth ≈ 360 ms;
+// keep headroom above the longest preset so quality does not trip first.
+#define CLK_HOLDOVER_MAX_QUALITY_MS 2000
 // Task panic (LED stale) for this long → soft restart.
 #define LED_TASK_PANIC_RESTART_MS 15000
 // Restart if free heap stays below this (fragmentation / leak).

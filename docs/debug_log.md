@@ -1,7 +1,7 @@
 # RAM 调试日志（免串口拉 boot/RMT）
 
-> 固件 **v1.1.34+**（当前 tip v1.1.39）· `DEBUG_LOG_EN=1`（默认）· 环缓 **32 KB**  
-> 总览：[CURRENT.md](CURRENT.md)
+> 固件 **v1.1.34+**（当前 tip **v1.1.43**）· `DEBUG_LOG_EN=1`（默认）· 环缓 **32 KB**  
+> 总览：[CURRENT.md](CURRENT.md) · 守时精度长测：[holdover_precision_v1143.md](holdover_precision_v1143.md)
 
 上电早期关键行（`[pps-rmt]` / `[gps]` / `[wifi-evt]` / boot）在写 Serial 的同时写入 RAM 环形缓冲。STA 入网后用 HTTP 拉取，无需一直挂 USB 串口。
 

@@ -870,10 +870,16 @@ void WebPortal::handleSetup() {
               "<p id='rmsg'></p></div>");
   }
   body += F("<div class='card'><h2 style='font-size:1rem;margin:0 0 8px'>GPS 异常策略</h2>"
+            "<p style='color:#64748b;font-size:.85rem'>守时档用于 GPS 失效后继续授时的时长。"
+            "测外推精度建议 ≥15 min，并开「时钟长测」录 HLD 段（断电后按 1 Hz 墙钟补样）。</p>"
             "<select id='apol'>"
             "<option value='0'>立即拒绝授时 (Refuse)</option>"
-            "<option value='1'>短时守时 Holdover 30s</option>"
-            "<option value='2'>长时守时 Holdover 5min</option>"
+            "<option value='1'>守时 30 秒</option>"
+            "<option value='2'>守时 5 分钟</option>"
+            "<option value='3'>守时 15 分钟</option>"
+            "<option value='4'>守时 30 分钟</option>"
+            "<option value='5'>守时 1 小时</option>"
+            "<option value='6'>守时 2 小时</option>"
             "</select>"
             "<button type='button' onclick='savePolicy()'>保存策略</button>"
             "<p id='pmsg'></p></div>");
@@ -1338,7 +1344,7 @@ void WebPortal::handleSave() {
   bool savedPolicy = false;
   if (!doc["anomalyPolicy"].isNull()) {
     const int v = doc["anomalyPolicy"].as<int>();
-    if (v >= 0 && v <= static_cast<int>(AnomalyPolicy::HoldoverLong)) {
+    if (v >= 0 && v < static_cast<int>(anomalyPolicyCount())) {
       AppSettings s;
       if (settingsCopy(pdMS_TO_TICKS(200), &s)) {
         s.anomalyPolicy = static_cast<AnomalyPolicy>(v);
@@ -1349,7 +1355,7 @@ void WebPortal::handleSave() {
         if (!doc["holdoverSec"].isNull()) {
           uint16_t hs = doc["holdoverSec"].as<uint16_t>();
           if (hs < 10) hs = 10;
-          if (hs > 600) hs = 600;
+          if (hs > CLK_HOLDOVER_SEC_MAX) hs = CLK_HOLDOVER_SEC_MAX;
           s.holdoverSec = hs;
         }
         if (settingsCommit(pdMS_TO_TICKS(200), s)) {

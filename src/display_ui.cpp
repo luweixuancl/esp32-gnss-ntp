@@ -1016,10 +1016,11 @@ void DisplayUi::handleAnomaly(int8_t rot, bool click, bool longPress) {
   }
   if (rot != 0) {
     int v = static_cast<int>(editPolicy_) + (rot > 0 ? 1 : -1);
+    const int last = static_cast<int>(anomalyPolicyCount()) - 1;
     if (v < 0) {
-      v = static_cast<int>(AnomalyPolicy::HoldoverLong);
+      v = last;
     }
-    if (v > static_cast<int>(AnomalyPolicy::HoldoverLong)) {
+    if (v > last) {
       v = 0;
     }
     editPolicy_ = static_cast<AnomalyPolicy>(v);

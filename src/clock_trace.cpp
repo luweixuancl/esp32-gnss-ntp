@@ -23,6 +23,7 @@ uint32_t gNextSeq = 0;
 uint32_t gStartedMs = 0;
 uint32_t gStoppedMs = 0;
 uint32_t gLastPps = 0xFFFFFFFFu;
+uint32_t gLastSampleMs = 0;
 ClockTraceState gState = ClockTraceState::Idle;
 bool gPsram = false;
 portMUX_TYPE gMux = portMUX_INITIALIZER_UNLOCKED;
@@ -70,6 +71,7 @@ void freeBufUnlocked() {
   gStartedMs = 0;
   gStoppedMs = 0;
   gLastPps = 0xFFFFFFFFu;
+  gLastSampleMs = 0;
   gPsram = false;
   gState = ClockTraceState::Idle;
 }
@@ -134,6 +136,7 @@ bool clockTraceStart(char* err, size_t errCap) {
   gDropped = 0;
   gNextSeq = 0;
   gLastPps = 0xFFFFFFFFu;
+  gLastSampleMs = 0;
   portEXIT_CRITICAL(&gMux);
   debugLogf("[clock-trace] START cap=%u psram=%d", static_cast<unsigned>(CLOCK_TRACE_CAP),
             psram ? 1 : 0);
@@ -209,13 +212,22 @@ void clockTraceMaybeSample(const GpsStatus& st) {
   if (gState != ClockTraceState::Recording) {
     return;
   }
-  // One sample per PPS edge (natural ~1 Hz). Skip duplicate counts.
-  if (st.ppsCount == 0 || st.ppsCount == gLastPps) {
+  const uint32_t nowMs = millis();
+  // Prefer one sample per PPS edge (~1 Hz while locked). When PPS stalls
+  // (Holdover / module power-pull), keep a 1 Hz wall-clock cadence so the ring
+  // still captures holdoverMs / qualityMs / extrapolated utcEpoch.
+  bool take = false;
+  if (st.ppsCount != 0 && st.ppsCount != gLastPps) {
+    take = true;
+  } else if (gLastSampleMs == 0 || (nowMs - gLastSampleMs) >= 1000u) {
+    take = true;
+  }
+  if (!take) {
     return;
   }
 
   ClockTraceSample s{};
-  s.uptimeMs = millis();
+  s.uptimeMs = nowMs;
   s.utcEpoch = st.utcEpoch;
   s.ppsCount = st.ppsCount;
   s.residualMs = st.residualMs;
@@ -244,6 +256,7 @@ void clockTraceMaybeSample(const GpsStatus& st) {
     return;
   }
   gLastPps = st.ppsCount;
+  gLastSampleMs = nowMs;
   s.seq = gNextSeq;
   pushUnlocked(s);
   portEXIT_CRITICAL(&gMux);

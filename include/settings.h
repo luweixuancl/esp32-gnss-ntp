@@ -6,10 +6,18 @@
 #include "config.h"
 
 enum class AnomalyPolicy : uint8_t {
-  Refuse = 0,         // immediately unsync
-  HoldoverShort = 1,  // short local holdover
-  HoldoverLong = 2,   // longer local holdover
+  Refuse = 0,          // immediately unsync
+  HoldoverShort = 1,   // 30 s
+  HoldoverLong = 2,    // 5 min (legacy name kept for NVS apol=2)
+  Holdover15m = 3,
+  Holdover30m = 4,
+  Holdover1h = 5,
+  Holdover2h = 6,
 };
+
+inline constexpr uint8_t anomalyPolicyCount() {
+  return static_cast<uint8_t>(AnomalyPolicy::Holdover2h) + 1u;
+}
 
 inline uint16_t anomalyPolicyDefaultHoldoverSec(AnomalyPolicy p) {
   switch (p) {
@@ -17,6 +25,14 @@ inline uint16_t anomalyPolicyDefaultHoldoverSec(AnomalyPolicy p) {
       return CLK_HOLDOVER_SHORT_SEC;
     case AnomalyPolicy::HoldoverLong:
       return CLK_HOLDOVER_LONG_SEC;
+    case AnomalyPolicy::Holdover15m:
+      return CLK_HOLDOVER_15M_SEC;
+    case AnomalyPolicy::Holdover30m:
+      return CLK_HOLDOVER_30M_SEC;
+    case AnomalyPolicy::Holdover1h:
+      return CLK_HOLDOVER_1H_SEC;
+    case AnomalyPolicy::Holdover2h:
+      return CLK_HOLDOVER_2H_SEC;
     case AnomalyPolicy::Refuse:
     default:
       return 0;
@@ -29,6 +45,14 @@ inline const char* anomalyPolicyShortLabel(AnomalyPolicy p) {
       return "H30";
     case AnomalyPolicy::HoldoverLong:
       return "H5m";
+    case AnomalyPolicy::Holdover15m:
+      return "H15";
+    case AnomalyPolicy::Holdover30m:
+      return "H30m";
+    case AnomalyPolicy::Holdover1h:
+      return "H1h";
+    case AnomalyPolicy::Holdover2h:
+      return "H2h";
     case AnomalyPolicy::Refuse:
     default:
       return "REF";
@@ -41,6 +65,14 @@ inline const char* anomalyPolicyMenuLabel(AnomalyPolicy p) {
       return "Hold 30s";
     case AnomalyPolicy::HoldoverLong:
       return "Hold 5m";
+    case AnomalyPolicy::Holdover15m:
+      return "Hold 15m";
+    case AnomalyPolicy::Holdover30m:
+      return "Hold 30m";
+    case AnomalyPolicy::Holdover1h:
+      return "Hold 1h";
+    case AnomalyPolicy::Holdover2h:
+      return "Hold 2h";
     case AnomalyPolicy::Refuse:
     default:
       return "Refuse";
