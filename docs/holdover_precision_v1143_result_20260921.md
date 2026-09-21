@@ -11,7 +11,7 @@ fwMark: v1.1.43
 anomalyPolicy: 4（Hold 30m）
 holdoverSec: 1800
 inject: module_vcc_pull
-trace_hld_samples: 1799（1 Hz 全覆盖，utc 步进 0 异常，dropped=0）
+trace_hld_samples: 1799（1 Hz 全覆盖，utc 每秒 +1、无步进异常，dropped=0）
 trace_hld_holdoverMs_first/last: 501 / 1799280
 debug_log_has_HLD_lines: yes（LCK→HLD + 30s 进度行 ×60 + HLD→UNS→ACQ→LCK）
 baseline_ntp_off: ≈-24 ms（本会话恢复后复测 -17.9/-17.2 ms，宿主手机钟漂混入）
@@ -34,7 +34,9 @@ notes: [LCK+3s] 单笔 off=-5.6e11 ms 为监测器重锁瞬间解析伪差（设
 | NTP 检查点斜率（含宿主钟漂） | +0.9~2.7 µs/s（污染口径，仅作上界） |
 | HLD q（dispersion）爬升 | 117 → 206 ms，**斜率恰为 50 ppm 地板**（0.049 ms/s，诚实且保守两量级） |
 
-**结论**：30 min 外推真实漂移 **≈1 ms（0.035 ms/min）**，与「freqPpm EMA 误差 ±0.1–0.3 ppm + 温漂 −0.13 ppm/°C × ΔT」的物理预期吻合（本次 HLD 期 temp 恒 42.8 °C、tcorr=0，温漂贡献小）。5 min 短窗测不出斜率的问题被 30m 档解决——斜率已冒出噪声底。
+**结论**：30 min 外推真实漂移 **≈1 ms（0.035 ms/min）**，与「freqPpm EMA 误差 ±0.1–0.3 ppm + 温漂 −0.13 ppm/°C × ΔT」的物理预期吻合（本次 HLD 期 die temp 约 40–43 °C 小幅波动、`tcorr` 最大约 0.4 ppm；EMA `freqPpm` 冻结在 −12.0211）。5 min 短窗测不出斜率的问题被 30m 档解决——斜率已冒出噪声底。
+
+> **云端复核（2026-09-21）**：mon/trace/debug 三路一致 — HLD 时长 1800.02 s、q 斜率 0.0495 ms/s（=50 ppm 地板）、墙钟补样 1799、恢复 ACQ→LCK 2.9 s。监测侧曾有约 473 s `/status` 空隙（Termux WiFi），不影响设备侧采样。LCK+3s 巨大 offset 与报告所述解析伪差一致，不以之为精度口径。
 
 ## 验收清单（任务书 §6）
 
