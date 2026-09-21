@@ -1,14 +1,18 @@
 # LocalClock host test (no hardware)
 
-Regression test for the PPS-restart deadlock (2026-09-21 field bug): after a
-GPS module power gap, the PPS outlier filter compared every new edge against
-the stale pre-gap baseline and rejected forever -> stuck in ACQ, NTP refused.
+Regression for the PPS-restart deadlock (2026-09-21 field bug): after a GPS
+module power gap, the outlier filter compared every new edge against the stale
+pre-gap baseline and rejected forever → stuck in ACQ, NTP refused.
 
-Run (any host with g++; stdlib only):
+`#include "settings.h"` resolves to `include/settings.h` (quote-include of the
+header's own directory). Stubs only need to satisfy that file's Arduino-side
+deps (`Arduino.h`, `IPAddress.h`, `Preferences.h`, `esp_timer.h`).
 
-    g++ -std=c++17 -Wall \
-        -I stubs -I ../../include \
-        ../../src/local_clock.cpp test_local_clock.cpp -o t && ./t
+```bash
+cd tools/local_clock_host_test
+g++ -std=c++17 -Wall -Wextra \
+    -I stubs -I ../../include \
+    ../../src/local_clock.cpp test_local_clock.cpp -o t && ./t
+```
 
-stubs/ must contain Arduino.h, esp_timer.h, settings.h (copy from a prior
-sandbox or regenerate; keep them in sync with include/ when interfaces move).
+Expect `ALL PASS` (bootstrap lock, 360 s gap → re-anchor/+3 s LCK, glitch absorb).

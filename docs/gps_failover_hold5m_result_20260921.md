@@ -51,7 +51,13 @@ notes: 用户整案复测时设备重启过一次；49492 样本 STOP 缓冲随�
 - 修复：间隔 ≥ `CLK_PPS_RESUME_GAP_US`（1.5 s）判为 **PPS 重启** → 重置边沿环 + badStreak 并接受该边沿；<1.5 s 双边沿毛刺维持原吸收路径
 - 宿主回归测试：`tools/local_clock_host_test/`（g++ stdlib 即可跑）：360 s 断电 → **+1 s anchor/stable 恢复、+3 s 重锁**；毛刺拒绝不回归
 
+## 审核备注（云端，2026-09-21）
+
+- CSV/log 与结论一致：`LCK→HLD@64s→UNS@364s（holdoverMs=300000）→ACQ@400s`；ACQ 段 `ppsCount` 652→847、`fix=True` 仍 `q=0xFFFFFFFF`，死锁指纹成立。
+- `onPpsEdge` 长间隙重引导与 `ppsFresh` 1.5 s 阈值对齐；`<1.5 s` 毛刺仍走原吸收路径。宿主回归已跑通（见下）。
+- 原提交的 `tools/local_clock_host_test` stubs 不完整（`#include "settings.h"` 打到真头文件），已补 `IPAddress.h`/`Preferences.h`/`String` 后 `ALL PASS`。
+
 ## 遗留
 
-1. v1.1.42 编译 + 烧录（编译侧），烧后重跑本失效链全链 + Refuse 对照轮
-2. 现网设备在 v1.1.41 下恢复手段仅剩整机重启（临时）
+1. **v1.1.42 编译 + OTA 烧录**，重跑本失效链全链（须恢复到 LCK）+ Refuse 对照轮
+2. 现网在刷之前：v1.1.41 恢复手段仍只有整机重启（软重启不清环则依旧 ACQ）
