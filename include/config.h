@@ -4,11 +4,11 @@
 // OLED mark is unambiguous after OTA / serial upgrade.
 #define FW_VER_MAJOR         1
 #define FW_VER_MINOR         1
-#define FW_VER_PATCH         41
-// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.41").
-#define FW_MARK              "v1.1.41"
+#define FW_VER_PATCH         42
+// Human mark on OLED home + boot splash (easy to eyeball: "v1.1.42").
+#define FW_MARK              "v1.1.42"
 // Full string for /status, /cfg, serial, OTA pages.
-#define FW_VERSION           "1.1.41"
+#define FW_VERSION           "1.1.42"
 // Reject obviously truncated OTA payloads before activating the slot.
 #define OTA_MIN_IMAGE_BYTES      (200 * 1024)
 // After a pending-verify OTA boot, wait until tasks are alive this long before
@@ -216,6 +216,7 @@
 #define CLK_RESIDUAL_RELOCK_MS       30
 #define CLK_RELOCK_COUNT              3
 #define CLK_PPS_INTERVAL_MAX_ERR_US 5000  // outlier vs last accepted edge → drop edge
+#define CLK_PPS_RESUME_GAP_US      1500000  // PPS gap ≥ this = stream restart → re-bootstrap ring
 #define CLK_PPS_UNSTABLE_COUNT        3   // consecutive outliers → soft unsync
 #define CLK_HOLDOVER_SHORT_SEC       30
 #define CLK_HOLDOVER_LONG_SEC       300
