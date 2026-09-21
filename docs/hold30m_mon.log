@@ -1,0 +1,142 @@
+mode=failover holdoverSec=1800 window=2160s host=10.121.95.14
+[   0.03s] state -> LCK (ppsCount=55 fix=True sat=14 holdoverMs=0 q=17)
+[  94.21s] state -> HLD (ppsCount=148 fix=True sat=14 holdoverMs=421 q=117)
+[ 104.05s] HLD age=  9.8s holdoverMs=10256.0 q=117 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 119.02s] HLD age= 24.8s holdoverMs=25229.0 q=118 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 134.15s] HLD age= 39.9s holdoverMs=40355.0 q=119 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 149.10s] HLD age= 54.9s holdoverMs=55314.0 q=119 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 164.05s] HLD age= 69.8s holdoverMs=70255.0 q=120 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 179.03s] HLD age= 84.8s holdoverMs=85236.0 q=121 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 194.16s] HLD age=100.0s holdoverMs=100363.0 q=122 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 209.21s] HLD age=115.0s holdoverMs=115415.0 q=122 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 224.06s] HLD age=129.9s holdoverMs=130265.0 q=123 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 239.11s] HLD age=144.9s holdoverMs=145316.0 q=124 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 254.06s] HLD age=159.9s holdoverMs=160271.0 q=125 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 269.12s] HLD age=174.9s holdoverMs=175323.0 q=125 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[HLD+180s ] li=0 st=1  ref=GPSS disp=0.126s off=-21.23ms rtt=12.1ms
+[ALI      ] li=0 st=2  ref=
+&V disp=0.011s off=-8.21ms rtt=80.5ms
+[ 284.06s] HLD age=189.9s holdoverMs=190270.0 q=126 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 299.23s] HLD age=205.0s holdoverMs=205433.0 q=127 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 314.17s] HLD age=220.0s holdoverMs=220382.0 q=128 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 329.12s] HLD age=234.9s holdoverMs=235327.0 q=128 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 344.07s] HLD age=249.9s holdoverMs=250274.0 q=129 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 359.23s] HLD age=265.0s holdoverMs=265437.0 q=130 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 374.17s] HLD age=280.0s holdoverMs=280381.0 q=131 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 389.13s] HLD age=294.9s holdoverMs=295331.0 q=131 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 404.42s] HLD age=310.2s holdoverMs=310624.0 q=132 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 419.23s] HLD age=325.0s holdoverMs=325440.0 q=133 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 434.19s] HLD age=340.0s holdoverMs=340392.0 q=134 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 449.14s] HLD age=354.9s holdoverMs=355347.0 q=134 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 464.09s] HLD age=369.9s holdoverMs=370291.0 q=135 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 479.25s] HLD age=385.0s holdoverMs=385456.0 q=136 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 494.20s] HLD age=400.0s holdoverMs=400401.0 q=137 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 509.14s] HLD age=414.9s holdoverMs=415346.0 q=137 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 524.10s] HLD age=429.9s holdoverMs=430302.0 q=138 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 539.04s] HLD age=444.8s holdoverMs=445248.0 q=139 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 554.21s] HLD age=460.0s holdoverMs=460411.0 q=140 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 569.15s] HLD age=474.9s holdoverMs=475351.0 q=140 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 584.11s] HLD age=489.9s holdoverMs=490309.0 q=141 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 599.05s] HLD age=504.8s holdoverMs=505251.0 q=142 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 614.21s] HLD age=520.0s holdoverMs=520409.0 q=143 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 629.15s] HLD age=534.9s holdoverMs=535359.0 q=143 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 644.11s] HLD age=549.9s holdoverMs=550320.0 q=144 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 659.16s] HLD age=564.9s holdoverMs=565363.0 q=145 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 674.11s] HLD age=579.9s holdoverMs=580313.0 q=146 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 689.07s] HLD age=594.9s holdoverMs=595272.0 q=146 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 704.12s] HLD age=609.9s holdoverMs=610322.0 q=147 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 719.07s] HLD age=624.9s holdoverMs=625273.0 q=148 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 734.23s] HLD age=640.0s holdoverMs=640436.0 q=149 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 749.17s] HLD age=655.0s holdoverMs=655371.0 q=149 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 764.23s] HLD age=670.0s holdoverMs=670428.0 q=150 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 779.18s] HLD age=685.0s holdoverMs=685382.0 q=151 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 794.13s] HLD age=699.9s holdoverMs=700326.0 q=152 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 809.18s] HLD age=715.0s holdoverMs=715385.0 q=152 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[HLD+720s ] li=0 st=1  ref=GPSS disp=0.153s off=-20.74ms rtt=7.6ms
+[ALI      ] li=0 st=3  ref=dkr disp=0.010s off=-2.50ms rtt=75.0ms
+[ 824.23s] HLD age=730.0s holdoverMs=730435.0 q=153 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 839.08s] HLD age=744.9s holdoverMs=745283.0 q=154 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 854.24s] HLD age=760.0s holdoverMs=760436.0 q=155 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 869.08s] HLD age=774.9s holdoverMs=775286.0 q=155 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 884.24s] HLD age=790.0s holdoverMs=790444.0 q=156 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 899.09s] HLD age=804.9s holdoverMs=805296.0 q=157 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 914.05s] HLD age=819.8s holdoverMs=820246.0 q=158 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 929.21s] HLD age=835.0s holdoverMs=835398.0 q=158 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 944.04s] HLD age=849.8s holdoverMs=850243.0 q=159 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 959.20s] HLD age=865.0s holdoverMs=865396.0 q=160 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 974.15s] HLD age=879.9s holdoverMs=880348.0 q=161 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[ 989.20s] HLD age=895.0s holdoverMs=895401.0 q=161 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1004.16s] HLD age=909.9s holdoverMs=910358.0 q=162 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1479.91s] HLD age=1385.7s holdoverMs=1386101.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1480.27s] HLD age=1386.1s holdoverMs=1386463.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1480.65s] HLD age=1386.4s holdoverMs=1386849.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1481.02s] HLD age=1386.8s holdoverMs=1387216.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1481.39s] HLD age=1387.2s holdoverMs=1387590.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1481.77s] HLD age=1387.6s holdoverMs=1387966.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1482.16s] HLD age=1387.9s holdoverMs=1388356.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1482.53s] HLD age=1388.3s holdoverMs=1388725.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1482.90s] HLD age=1388.7s holdoverMs=1389096.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1483.29s] HLD age=1389.1s holdoverMs=1389481.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1483.65s] HLD age=1389.4s holdoverMs=1389843.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1484.04s] HLD age=1389.8s holdoverMs=1390231.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1484.40s] HLD age=1390.2s holdoverMs=1390598.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1484.80s] HLD age=1390.6s holdoverMs=1390993.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1485.18s] HLD age=1391.0s holdoverMs=1391374.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1485.57s] HLD age=1391.4s holdoverMs=1391759.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1485.95s] HLD age=1391.7s holdoverMs=1392146.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1486.31s] HLD age=1392.1s holdoverMs=1392505.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1486.69s] HLD age=1392.5s holdoverMs=1392884.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1487.06s] HLD age=1392.9s holdoverMs=1393260.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1487.43s] HLD age=1393.2s holdoverMs=1393630.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1487.80s] HLD age=1393.6s holdoverMs=1393993.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1488.15s] HLD age=1393.9s holdoverMs=1394351.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1488.54s] HLD age=1394.3s holdoverMs=1394739.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1488.91s] HLD age=1394.7s holdoverMs=1395099.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1489.28s] HLD age=1395.1s holdoverMs=1395471.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1489.64s] HLD age=1395.4s holdoverMs=1395839.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1490.02s] HLD age=1395.8s holdoverMs=1396217.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1490.40s] HLD age=1396.2s holdoverMs=1396597.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1490.78s] HLD age=1396.6s holdoverMs=1396982.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1491.17s] HLD age=1397.0s holdoverMs=1397361.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1491.53s] HLD age=1397.3s holdoverMs=1397727.0 q=186 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1499.06s] HLD age=1404.9s holdoverMs=1405254.0 q=187 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1514.21s] HLD age=1420.0s holdoverMs=1420409.0 q=188 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1529.16s] HLD age=1435.0s holdoverMs=1435357.0 q=188 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[HLD+1440s] li=0 st=1  ref=GPSS disp=0.189s off=-18.79ms rtt=8.5ms
+[ALI      ] li=0 st=3  ref=dkr disp=0.010s off=-5.20ms rtt=70.8ms
+[1544.12s] HLD age=1449.9s holdoverMs=1450317.0 q=189 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1559.17s] HLD age=1465.0s holdoverMs=1465364.0 q=190 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1574.12s] HLD age=1479.9s holdoverMs=1480316.0 q=191 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1589.17s] HLD age=1495.0s holdoverMs=1495364.0 q=191 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1604.23s] HLD age=1510.0s holdoverMs=1510420.0 q=192 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1619.08s] HLD age=1524.9s holdoverMs=1525270.0 q=193 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1634.23s] HLD age=1540.0s holdoverMs=1540420.0 q=194 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1649.18s] HLD age=1555.0s holdoverMs=1555371.0 q=194 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1664.13s] HLD age=1569.9s holdoverMs=1570325.0 q=195 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1679.09s] HLD age=1584.9s holdoverMs=1585277.0 q=196 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1694.24s] HLD age=1600.0s holdoverMs=1600430.0 q=197 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1709.19s] HLD age=1615.0s holdoverMs=1615384.0 q=197 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1724.15s] HLD age=1629.9s holdoverMs=1630342.0 q=198 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1739.19s] HLD age=1645.0s holdoverMs=1645382.0 q=199 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1754.14s] HLD age=1659.9s holdoverMs=1660332.0 q=200 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1769.09s] HLD age=1674.9s holdoverMs=1675283.0 q=200 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1784.04s] HLD age=1689.8s holdoverMs=1690238.0 q=201 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1799.02s] HLD age=1704.8s holdoverMs=1705214.0 q=202 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1814.15s] HLD age=1719.9s holdoverMs=1720340.0 q=203 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1829.10s] HLD age=1734.9s holdoverMs=1735290.0 q=203 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1844.05s] HLD age=1749.8s holdoverMs=1750239.0 q=204 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1859.20s] HLD age=1765.0s holdoverMs=1765396.0 q=205 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1874.15s] HLD age=1779.9s holdoverMs=1780346.0 q=206 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1889.10s] HLD age=1794.9s holdoverMs=1795297.0 q=206 residual=0 ppsCount=148 sat=14 tempRefC=42.80
+[1894.23s] state -> UNS (ppsCount=148 fix=False sat=14 holdoverMs=0 q=4294967295)
+[UNS+2s   ] li=3 st=16 ref=INIT disp=65535.000s off=-3998960049949.51ms rtt=13.0ms
+[ALI      ] li=0 st=2  ref=
+&V disp=0.011s off=+8.03ms rtt=89.7ms
+>>> replug now (watch recovery, 300s window)
+[1934.06s] state -> ACQ (ppsCount=156 fix=True sat=11 holdoverMs=0 q=4294967295)
+[1937.13s] state -> LCK (ppsCount=159 fix=True sat=11 holdoverMs=0 q=16)
+[LCK+3s   ] li=0 st=1  ref=GPSS disp=0.016s off=-556416000020.90ms rtt=10.4ms
+[ALI      ] li=0 st=2  ref=
+&V disp=0.011s off=-9.47ms rtt=68.0ms
+recovered 42.9s after UNS
+transitions: [(0.03, 'LCK'), (94.21, 'HLD'), (1894.23, 'UNS'), (1934.06, 'ACQ'), (1937.13, 'LCK')]
