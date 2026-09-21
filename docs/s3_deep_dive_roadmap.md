@@ -1,20 +1,21 @@
 # S3 特性深挖路线图（PPS 硬件捕获 / PSRAM 历史 / OTA / 外部时钟）
 
-> 状态（2026-09-20）：本分支 **v1.1.41**（`GPS_PPS_RMT_EN=0`）；现网 S3 OTA PASS + `/cfg` 按钮 A–F PASS；RMT 结案 FAIL；ExtClock 待购件。  
+> 状态（2026-09-21）：**`main` = v1.1.43**（`GPS_PPS_RMT_EN=0`）；Hold 30m 守时精度 PASS（≈1 ms/30 min）；PPS 断电恢复 PASS；ExtClock 待购件。  
 > 总览：[CURRENT.md](CURRENT.md)  
-> 相关：[esp32s3_devkitc1_hw.md](esp32s3_devkitc1_hw.md)、[idf5_adapt_20260919.md](idf5_adapt_20260919.md)、[clock_trace.md](clock_trace.md)
+> 相关：[esp32s3_devkitc1_hw.md](esp32s3_devkitc1_hw.md)、[idf5_adapt_20260919.md](idf5_adapt_20260919.md)、[clock_trace.md](clock_trace.md)、[holdover_precision_v1143_result_20260921.md](holdover_precision_v1143_result_20260921.md)
 
-## 0. 现状基线（v1.1.39）
+## 0. 现状基线（v1.1.43）
 
 | S3 特性 | 现状 |
 |---|---|
 | 双核 LX7 | ✅ `task-time` 独占 core 1；默认运行 **160 MHz**（可编回 240） |
 | 16MB QIO flash | ✅ `default_16MB`；Web OTA 写下一 app 槽 |
-| 8MB OPI PSRAM | ✅ 时钟长测环（`CLOCK_TRACE`，见 [clock_trace.md](clock_trace.md)） |
-| 温度传感器 | ✅ `temperatureRead()`（偶发首读失败有 lazy retry） |
+| 8MB OPI PSRAM | ✅ 时钟长测环（含 **HLD 墙钟 1 Hz 补样**） |
+| 温度传感器 | ✅ `temperatureRead()`；温补默认 Off（k=0，待标定） |
 | RMT | RGB 用 TX；**PPS RX 代码保留，`GPS_PPS_RMT_EN=0`（板测搁置）** |
 | UART | 调试 + GNSS；第 3 路闲置 |
 | USB-OTG | 不用（`CDC_ON_BOOT=0`，走 UART 座） |
+| 守时档 | ✅ Refuse / 30s / 5m / 15m / 30m / 1h / 2h |
 
 ## 1. RMT RX 硬件捕获 PPS —— **板测搁置（EN=0）**
 
@@ -23,14 +24,15 @@
 - 生产路径：GPIO ISR + LocalClock（已验证 LCK / stratum 1）。  
 - 再开 EN 前：独立最小 sketch 或 GPIO 回环自测，勿在整机盲迭代。
 
-## 2. PSRAM 时钟长测环 —— **已实现并板测 PASS（v1.1.40 无参=全量）**
+## 2. PSRAM 时钟长测环 —— **已实现并板测 PASS**
 
 - start/stop 状态机，**仅 Stopped 可拉**；下载期停 NTP。  
 - 板测：[clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md)（10 min、647 样本）。  
 - v1.1.39：设备端 **去掉 CSV**；CLI 本地转 CSV。  
-- **v1.1.40**：无参 `GET /debug/clock/data` = 一次全量；现网 101 样本 DONE — [fw_flash_v1140_result_20260920.md](fw_flash_v1140_result_20260920.md)。  
-- **v1.1.41**：`/cfg` 四键随 IDLE/REC/STOP；现网 A–F PASS — [fw_flash_v1141_result_20260920.md](fw_flash_v1141_result_20260920.md)。  
-- 见 [clock_trace.md](clock_trace.md)。旧「通用 /history」仍取消。
+- **v1.1.40**：无参 `GET /debug/clock/data` = 一次全量 — [fw_flash_v1140_result_20260920.md](fw_flash_v1140_result_20260920.md)。  
+- **v1.1.41**：`/cfg` 四键随 IDLE/REC/STOP — [fw_flash_v1141_result_20260920.md](fw_flash_v1141_result_20260920.md)。  
+- **v1.1.43**：PPS 停转 / Holdover 时 **墙钟 1 Hz 补样**（守时精度长测可用）— [holdover_precision_v1143_result_20260921.md](holdover_precision_v1143_result_20260921.md)。  
+- 见 [clock_trace.md](clock_trace.md)。
 
 ## 3. OTA 双分区 —— **已实现；IDF5 自动往返 PASS（v1.1.36）**
 
@@ -39,14 +41,22 @@
 - **v1.1.35→36 自动部署 PASS** — [ota_deploy_v1136_20260919.md](ota_deploy_v1136_20260919.md)。  
 - **自 IDF4 首迁须整片烧录**（见 [upgrade_idf5_from_1120.md](upgrade_idf5_from_1120.md)）。
 
-## 4. 外部高品质时钟 —— **接口已落地，待购件**
+## 4. 守时 / 失效链 —— **现场验收 PASS（v1.1.42–43）**
+
+- v1.1.42：PPS 长间隙重引导，修断电后 ACQ 死锁；Hold 5m + Refuse PASS。  
+- v1.1.43：Hold 30m 外推 **≈1 ms / 30 min**；色散按 50 ppm 地板诚实爬升。  
+- 后续可优化：温补标定、`ExtClock` TCXO。
+
+## 5. 外部高品质时钟 —— **接口已落地，待购件**
 
 - 见 [ext_clock_design.md](ext_clock_design.md)；默认 `EXT_RTC_EN=0`。
 
-## 5. 明确不做
+## 6. 明确不做
 
 NTS / 加密 NTP、触摸 / LCD、802.11mc。
 
-## 6. 排序备忘
+## 7. 排序备忘
 
-**① ExtClock 购件开 EN**（RMT 搁置；OTA / IDF5 / 降功耗 / 时钟环已完成）
+1. 温补现场标定（`tcmp`/`tcpc`）  
+2. 外置 DS3231 / TCXO 接线验收  
+3. （可选）更长 Hold 精度对照（1h/2h）用第二台 GNSS 作真值  

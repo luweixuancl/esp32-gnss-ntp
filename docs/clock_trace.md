@@ -5,8 +5,7 @@
 > **板测 PASS**（10 min / 647 样本）— [clock_trace_boardtest_20260919.md](clock_trace_boardtest_20260919.md)  
 > **v1.1.40 现场一键全量 PASS**（101 样本）— [fw_flash_v1140_result_20260920.md](fw_flash_v1140_result_20260920.md)  
 > **v1.1.41 `/cfg` 按钮随状态机 PASS**（A–F）— [fw_flash_v1141_result_20260920.md](fw_flash_v1141_result_20260920.md)  
-> 守时精度长测任务书 — [holdover_precision_v1143.md](holdover_precision_v1143.md)  
-> 12.65 h 只存第 1 页事故分析：[clock_trace_analysis_20260920.md](clock_trace_analysis_20260920.md) · 83 min 全量：[clock_trace_83min_20260920.md](clock_trace_83min_20260920.md)  
+> **v1.1.43**：PPS 停转 / Holdover 时墙钟 1 Hz 补样 — 守时精度验收 [holdover_precision_v1143_result_20260921.md](holdover_precision_v1143_result_20260921.md)  
 > 总览：[CURRENT.md](CURRENT.md) · 客户端：[`tools/clock_trace_client.py`](../tools/clock_trace_client.py)
 
 ## 为什么

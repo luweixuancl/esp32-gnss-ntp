@@ -1,6 +1,6 @@
 # /status 秒间隔监测：freqPpm 稳定性与温补机制实测
 
-> **历史归档**：下文口径以当时固件为准。当前 `main` = **v1.1.39** / IDF5，见 [CURRENT.md](CURRENT.md)。
+> **历史归档**：下文口径以当时固件为准。当前 `main` = **v1.1.43** / IDF5，见 [CURRENT.md](CURRENT.md)。
 
 
 > 状态：已完成（纯只读监测，未改任何代码）
